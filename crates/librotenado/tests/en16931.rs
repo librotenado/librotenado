@@ -255,44 +255,69 @@ mod writing {
         en16931::read(xml.as_bytes(), &CurrencyTable::v0_1()).unwrap()
     }
 
-    /// Writing and reading again keeps every term of the model, in both syntaxes and across them.
+    /// Every test invoice of the XRechnung test suite: its name and what it translates to.
+    fn every_test_invoice() -> Vec<(String, TranslatedInvoice)> {
+        let dir = format!("{}/tests/data/en16931", env!("CARGO_MANIFEST_DIR"));
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|n| n.starts_with('0') && n.ends_with(".xml"))
+            .collect();
+        names.sort();
+        names.into_iter().map(|name| (name.clone(), read(&name))).collect()
+    }
+
+    /// Writing and reading again keeps every term of the model, in both syntaxes and across them, for every test
+    /// invoice of the XRechnung test suite.
     #[test]
     fn written_invoices_read_back_the_same() {
         let currencies = CurrencyTable::v0_1();
-        let mut written = 0;
-        for name in [
-            "01.01a-INVOICE_ubl.xml",
-            "01.01a-INVOICE_uncefact.xml",
-            "01.21a-INVOICE_ubl.xml",
-            "01.21a-INVOICE_uncefact.xml",
-            "03.01a-INVOICE_ubl.xml",
-            "03.01a-INVOICE_uncefact.xml",
-            "03.06a-INVOICE_ubl.xml",
-        ] {
-            let original = read(name);
-            if let Err(error) = en16931::check_xrechnung(&original) {
-                println!("{name}: {error}");
-                continue;
-            }
+        let invoices = every_test_invoice();
+        assert!(invoices.len() > 70);
+        for (name, original) in invoices {
+            en16931::check_xrechnung(&original).unwrap_or_else(|e| panic!("{name}: {e}"));
             let ubl = en16931::write_ubl(&original, &currencies).unwrap();
-            let cii = en16931::write_cii(&original, &currencies).unwrap();
+            let cii = match en16931::write_cii(&original, &currencies) {
+                Ok(cii) => Some(cii),
+                // CII carries one preceding invoice only.
+                Err(en16931::WriteError::Syntax("BG-3")) if original.invoice.preceding.len() > 1 => None,
+                Err(error) => panic!("{name}: {error}"),
+            };
             // Written files go where LIBROTENADO_EXPORT asks, to check them with other tools.
             if let Ok(dir) = std::env::var("LIBROTENADO_EXPORT") {
                 std::fs::write(format!("{dir}/{name}.ubl.xml"), &ubl).unwrap();
-                std::fs::write(format!("{dir}/{name}.cii.xml"), &cii).unwrap();
+                if let Some(cii) = &cii {
+                    std::fs::write(format!("{dir}/{name}.cii.xml"), cii).unwrap();
+                }
             }
-            for xml in [ubl, cii] {
+            for xml in std::iter::once(ubl).chain(cii) {
                 let back = again(&xml);
                 assert_eq!(
                     (&back.number, back.date, back.kind),
                     (&original.number, original.date, original.kind),
                     "{name}"
                 );
-                assert_eq!(back.invoice, original.invoice, "{name}\n{xml}");
+                assert_eq!(back.invoice, original.invoice, "{name}");
+                assert_eq!(back.files, original.files, "{name}");
             }
-            written += 1;
         }
-        assert!(written >= 5, "most test invoices carry all terms XRechnung requires");
+    }
+
+    /// The model keeps the terms of EN 16931 beyond those XRechnung requires.
+    #[test]
+    fn all_terms_are_kept() {
+        let invoice = read("01.01_comprehensive_test_ubl.xml");
+        let data = &invoice.invoice;
+        assert!(!data.notes.is_empty() && !data.preceding.is_empty() && !data.attachments.is_empty());
+        assert!(data.payee.is_some() && data.tax_representative.is_some() && data.delivery.is_some());
+        assert!(data.period.is_some() && !data.allowances.is_empty() && !data.charges.is_empty());
+        let references = data.references.as_ref().unwrap();
+        assert!(references.order.is_some() && references.contract.is_some() && references.project.is_some());
+        let file = data.attachments.iter().find_map(|a| a.file.as_ref()).unwrap();
+        assert!(file.is(&invoice.files[&file.hash]), "the attached file is kept by its hash");
+        let line = &data.lines[0];
+        assert!(line.seller_item.is_some() && line.period.is_some());
+        assert_eq!(read("01.01_comprehensive_test_uncefact.xml").invoice.notes, data.notes);
     }
 
     #[test]

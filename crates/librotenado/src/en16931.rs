@@ -4,9 +4,15 @@
 
 use roxmltree::{Document as Xml, Node};
 
+use std::collections::BTreeMap;
+
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+
 use crate::{
-    Country, Currency, CurrencyTable, Date, Decimal, DirectDebit, DocumentKind, Endpoint, InvoiceContact, InvoiceData,
-    InvoiceLine, InvoiceParty, InvoiceTotals, Money, VatBreakdown, VatCategory,
+    AllowanceCharge, Classification, ContentHash, Country, CreditTransfer, Currency, CurrencyTable, Date, Decimal,
+    Delivery, DirectDebit, DocumentKind, Endpoint, Identifier, InvoiceContact, InvoiceData, InvoiceLine, InvoiceNote,
+    InvoiceParty, InvoiceReferences, InvoiceTotals, ItemAttribute, Money, Original, Payment, PaymentCard, Period,
+    PostalAddress, PrecedingInvoice, SupportingDocument, VatBreakdown, VatCategory,
 };
 
 const UBL_INVOICE: &str = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
@@ -27,6 +33,8 @@ pub struct TranslatedInvoice {
     pub date: Date,
     /// The data of the invoice.
     pub invoice: InvoiceData,
+    /// The bytes of the files attached to it (BT-125), by their hash – stored like originals, outside the events.
+    pub files: BTreeMap<ContentHash, Vec<u8>>,
 }
 
 /// Why an electronic invoice cannot be translated.
@@ -190,8 +198,120 @@ fn currency(code: &str, currencies: &CurrencyTable) -> Result<(Currency, u32)> {
     Ok((currency, decimals))
 }
 
-fn kind(type_code: &str) -> DocumentKind {
-    if type_code == "381" { DocumentKind::CreditNote } else { DocumentKind::Invoice }
+/// An identifier from an element with an optional scheme attribute.
+fn identifier(node: Option<Node>, scheme: &str) -> Option<Identifier> {
+    let node = node?;
+    let id = node.text().map(str::trim).filter(|t| !t.is_empty())?.to_owned();
+    Some(Identifier { id, scheme: node.attribute(scheme).map(str::to_owned) })
+}
+
+/// The kind of a document from its type code (BT-3) and the type code the model keeps: none for `380` and `381`.
+fn kind(type_code: &str, credit_note: bool) -> (DocumentKind, Option<String>) {
+    let kind = if credit_note || type_code == "381" { DocumentKind::CreditNote } else { DocumentKind::Invoice };
+    let kept = (!matches!(type_code, "380" | "381")).then(|| type_code.to_owned());
+    (kind, kept)
+}
+
+/// A note as UBL writes it: its subject code between `#` before the text (Peppol BIS Billing 3.0).
+fn ubl_note(text: String) -> InvoiceNote {
+    if let Some(rest) = text.strip_prefix('#')
+        && let Some((subject, note)) = rest.split_once('#')
+        && !subject.is_empty()
+        && subject.bytes().all(|b| b.is_ascii_uppercase())
+    {
+        return InvoiceNote { subject: Some(subject.to_owned()), text: note.to_owned() };
+    }
+    InvoiceNote { subject: None, text }
+}
+
+/// The code of the date VAT becomes chargeable (BT-8) in UNTDID 2005, from UNTDID 2475 as CII writes it.
+fn tax_point_from_cii(code: &str) -> String {
+    match code {
+        "5" => "3",
+        "29" => "35",
+        "72" => "432",
+        other => other,
+    }
+    .to_owned()
+}
+
+fn tax_point_to_cii(code: &str) -> &str {
+    match code {
+        "3" => "5",
+        "35" => "29",
+        "432" => "72",
+        other => other,
+    }
+}
+
+/// The file attached as base64, with its media type and name.
+fn attachment(node: Option<Node>, files: &mut BTreeMap<ContentHash, Vec<u8>>) -> Result<Option<Original>> {
+    let Some(node) = node else { return Ok(None) };
+    let encoded: String = node.text().unwrap_or_default().chars().filter(|c| !c.is_whitespace()).collect();
+    let bytes = BASE64
+        .decode(&encoded)
+        .map_err(|_| TranslationError::Invalid { term: "BT-125", value: encoded.chars().take(32).collect() })?;
+    let mut original = Original::of(&bytes, node.attribute("mimeCode").unwrap_or("application/octet-stream"));
+    original.name = node.attribute("filename").map(str::to_owned);
+    files.insert(original.hash, bytes);
+    Ok(Some(original))
+}
+
+fn references_or_none(references: InvoiceReferences) -> Option<InvoiceReferences> {
+    (references != InvoiceReferences::default()).then_some(references)
+}
+
+fn period(start: Option<Date>, end: Option<Date>) -> Option<Period> {
+    (start.is_some() || end.is_some()).then_some(Period { start, end })
+}
+
+/// A postal address in UBL.
+fn ubl_address(node: Option<Node>, term: &'static str) -> Result<Option<PostalAddress>> {
+    let Some(a) = node else { return Ok(None) };
+    let lines = [text(a, &["StreetName"]), text(a, &["AdditionalStreetName"]), text(a, &["AddressLine", "Line"])];
+    Ok(Some(PostalAddress {
+        lines: lines.into_iter().flatten().collect(),
+        city: text(a, &["CityName"]),
+        postcode: text(a, &["PostalZone"]),
+        subdivision: text(a, &["CountrySubentity"]),
+        country: country(text(a, &["Country", "IdentificationCode"])).ok_or(TranslationError::Missing(term))?,
+    }))
+}
+
+/// A party in UBL: the seller, buyer, payee or tax representative.
+fn ubl_party(party: Node, terms: [&'static str; 2]) -> Result<InvoiceParty> {
+    let tax_id = |vat: bool| {
+        all(party, "PartyTaxScheme")
+            .find(|s| (text(*s, &["TaxScheme", "ID"]).as_deref() == Some("VAT")) == vat)
+            .and_then(|s| text(s, &["CompanyID"]))
+    };
+    let registered = text(party, &["PartyLegalEntity", "RegistrationName"]);
+    let trading = text(party, &["PartyName", "Name"]);
+    let (name, trading_name) = match registered {
+        Some(name) => (name, trading),
+        None => (trading.ok_or(TranslationError::Missing(terms[0]))?, None),
+    };
+    let contact = at(party, &["Contact"]).map(|c| InvoiceContact {
+        name: text(c, &["Name"]),
+        phone: text(c, &["Telephone"]),
+        email: text(c, &["ElectronicMail"]),
+    });
+    Ok(InvoiceParty {
+        name,
+        trading_name,
+        identifiers: all(party, "PartyIdentification")
+            .filter_map(|i| identifier(at(i, &["ID"]), "schemeID"))
+            .filter(|i| i.scheme.as_deref() != Some("SEPA"))
+            .collect(),
+        registration: identifier(at(party, &["PartyLegalEntity", "CompanyID"]), "schemeID"),
+        vat_id: tax_id(true),
+        tax_number: tax_id(false),
+        legal_info: text(party, &["PartyLegalEntity", "CompanyLegalForm"]),
+        address: ubl_address(at(party, &["PostalAddress"]), terms[1])?,
+        contact,
+        endpoint: endpoint(at(party, &["EndpointID"])),
+        party: None,
+    })
 }
 
 fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
@@ -202,41 +322,63 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
     let optional = |node: Node, path: &[&str], term| -> Result<Option<Money>> {
         text(node, path).map(|value| money(&value, &currency, decimals, term)).transpose()
     };
-    let party = |path: &str| -> Result<InvoiceParty> {
-        let party = at(root, &[path, "Party"]).ok_or(TranslationError::Missing("BG-4/BG-7"))?;
-        let tax_id = |vat: bool| {
-            all(party, "PartyTaxScheme")
-                .find(|s| (text(*s, &["TaxScheme", "ID"]).as_deref() == Some("VAT")) == vat)
-                .and_then(|s| text(s, &["CompanyID"]))
+    let optional_date = |node: Node, path: &[&str], term| -> Result<Option<Date>> {
+        text(node, path).map(|d| date(&d, term)).transpose()
+    };
+    let decimal_at = |node: Node, path: &[&str], term| -> Result<Option<Decimal>> {
+        text(node, path).map(|d| decimal(&d, term)).transpose()
+    };
+    let allowance_charge = |node: Node, document: bool| -> Result<(bool, AllowanceCharge)> {
+        let charge = text(node, &["ChargeIndicator"]).as_deref() == Some("true");
+        let category = match text(node, &["TaxCategory", "ID"]) {
+            Some(code) if document => Some(category(&code, "BT-95")?),
+            _ => None,
         };
-        let name = text(party, &["PartyLegalEntity", "RegistrationName"])
-            .or_else(|| text(party, &["PartyName", "Name"]))
-            .ok_or(TranslationError::Missing("BT-27/BT-44"))?;
-        let contact = at(party, &["Contact"]).map(|c| InvoiceContact {
-            name: text(c, &["Name"]),
-            phone: text(c, &["Telephone"]),
-            email: text(c, &["ElectronicMail"]),
-        });
-        Ok(InvoiceParty {
-            name,
-            vat_id: tax_id(true),
-            tax_number: tax_id(false),
-            street: text(party, &["PostalAddress", "StreetName"]),
-            postcode: text(party, &["PostalAddress", "PostalZone"]),
-            city: text(party, &["PostalAddress", "CityName"]),
-            country: country(text(party, &["PostalAddress", "Country", "IdentificationCode"])),
-            contact,
-            endpoint: endpoint(at(party, &["EndpointID"])),
-            party: None,
-        })
+        Ok((
+            charge,
+            AllowanceCharge {
+                amount: amount(node, &["Amount"], "BT-92")?,
+                base: optional(node, &["BaseAmount"], "BT-93")?,
+                percent: decimal_at(node, &["MultiplierFactorNumeric"], "BT-94")?,
+                category,
+                rate: match category {
+                    Some(c) => rate(text(node, &["TaxCategory", "Percent"]), c, "BT-96")?,
+                    None => None,
+                },
+                reason: text(node, &["AllowanceChargeReason"]),
+                reason_code: text(node, &["AllowanceChargeReasonCode"]),
+            },
+        ))
+    };
+    let split = |items: Vec<(bool, AllowanceCharge)>| -> (Vec<AllowanceCharge>, Vec<AllowanceCharge>) {
+        let (charges, allowances): (Vec<_>, Vec<_>) = items.into_iter().partition(|(charge, _)| *charge);
+        (allowances.into_iter().map(|(_, a)| a).collect(), charges.into_iter().map(|(_, c)| c).collect())
     };
     let type_code = text(root, &[if credit_note { "CreditNoteTypeCode" } else { "InvoiceTypeCode" }])
         .ok_or(TranslationError::Missing("BT-3"))?;
+    let (kind, type_code) = kind(&type_code, credit_note);
     let due = text(root, &["DueDate"]).or_else(|| text(root, &["PaymentMeans", "PaymentDueDate"]));
-    let tax_total = all(root, "TaxTotal")
-        .find(|t| at(*t, &["TaxAmount"]).and_then(|a| a.attribute("currencyID")) == Some(currency.as_str()))
-        .ok_or(TranslationError::Missing("BT-110"))?;
-    let taxes = all(tax_total, "TaxSubtotal")
+    let tax_totals: Vec<Node> = all(root, "TaxTotal").collect();
+    let tax_total = tax_totals
+        .iter()
+        .copied()
+        .find(|t| at(*t, &["TaxAmount"]).and_then(|a| a.attribute("currencyID")) == Some(currency.as_str()));
+    let tax_accounting = match text(root, &["TaxCurrencyCode"]).filter(|c| c != currency.as_str()) {
+        Some(code) => {
+            let (tax_currency, tax_decimals) = self::currency(&code, currencies)?;
+            tax_totals
+                .iter()
+                .filter_map(|t| at(*t, &["TaxAmount"]))
+                .find(|a| a.attribute("currencyID") == Some(code.as_str()))
+                .and_then(|a| a.text())
+                .map(|value| money(value.trim(), &tax_currency, tax_decimals, "BT-111"))
+                .transpose()?
+        }
+        None => None,
+    };
+    let taxes = tax_total
+        .into_iter()
+        .flat_map(|t| all(t, "TaxSubtotal"))
         .map(|sub| {
             let category = category(&required(sub, &["TaxCategory", "ID"], "BT-118")?, "BT-118")?;
             Ok(VatBreakdown {
@@ -245,66 +387,265 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
                 base: amount(sub, &["TaxableAmount"], "BT-116")?,
                 tax: amount(sub, &["TaxAmount"], "BT-117")?,
                 exemption: text(sub, &["TaxCategory", "TaxExemptionReason"]),
+                exemption_code: text(sub, &["TaxCategory", "TaxExemptionReasonCode"]),
             })
         })
         .collect::<Result<Vec<_>>>()?;
     let line_name = if credit_note { "CreditNoteLine" } else { "InvoiceLine" };
     let lines = all(root, line_name)
         .map(|line| {
-            let category = category(&required(line, &["Item", "ClassifiedTaxCategory", "ID"], "BT-151")?, "BT-151")?;
+            let item = at(line, &["Item"]).ok_or(TranslationError::Missing("BG-31"))?;
+            let category = category(&required(item, &["ClassifiedTaxCategory", "ID"], "BT-151")?, "BT-151")?;
             let quantity = at(line, &[if credit_note { "CreditedQuantity" } else { "InvoicedQuantity" }]);
+            let price = at(line, &["Price"]);
+            let price_allowance = price.and_then(|p| at(p, &["AllowanceCharge"]));
+            let (allowances, charges) =
+                split(all(line, "AllowanceCharge").map(|a| allowance_charge(a, false)).collect::<Result<Vec<_>>>()?);
             Ok(InvoiceLine {
                 id: text(line, &["ID"]),
-                name: required(line, &["Item", "Name"], "BT-153")?,
+                note: text(line, &["Note"]),
+                object: all(line, "DocumentReference")
+                    .find(|d| text(*d, &["DocumentTypeCode"]).as_deref() == Some("130"))
+                    .and_then(|d| identifier(at(d, &["ID"]), "schemeID")),
+                order_line: text(line, &["OrderLineReference", "LineID"]),
+                accounting: text(line, &["AccountingCost"]),
+                period: at(line, &["InvoicePeriod"])
+                    .map(|p| -> Result<_> {
+                        Ok(period(
+                            optional_date(p, &["StartDate"], "BT-134")?,
+                            optional_date(p, &["EndDate"], "BT-135")?,
+                        ))
+                    })
+                    .transpose()?
+                    .flatten(),
+                name: required(item, &["Name"], "BT-153")?,
+                description: text(item, &["Description"]),
+                seller_item: text(item, &["SellersItemIdentification", "ID"]),
+                buyer_item: text(item, &["BuyersItemIdentification", "ID"]),
+                standard_item: identifier(at(item, &["StandardItemIdentification", "ID"]), "schemeID"),
+                classifications: all(item, "CommodityClassification")
+                    .filter_map(|c| at(c, &["ItemClassificationCode"]))
+                    .filter_map(|c| {
+                        Some(Classification {
+                            code: c.text()?.trim().to_owned(),
+                            list: c.attribute("listID")?.to_owned(),
+                            version: c.attribute("listVersionID").map(str::to_owned),
+                        })
+                    })
+                    .collect(),
+                origin: country(text(item, &["OriginCountry", "IdentificationCode"])),
+                attributes: all(item, "AdditionalItemProperty")
+                    .filter_map(|p| Some(ItemAttribute { name: text(p, &["Name"])?, value: text(p, &["Value"])? }))
+                    .collect(),
                 quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
                 unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
-                price: text(line, &["Price", "PriceAmount"]).map(|p| decimal(&p, "BT-146")).transpose()?,
+                price: price.map(|p| decimal_at(p, &["PriceAmount"], "BT-146")).transpose()?.flatten(),
+                price_quantity: price.map(|p| decimal_at(p, &["BaseQuantity"], "BT-149")).transpose()?.flatten(),
+                gross_price: price_allowance.map(|a| decimal_at(a, &["BaseAmount"], "BT-148")).transpose()?.flatten(),
+                price_discount: price_allowance.map(|a| decimal_at(a, &["Amount"], "BT-147")).transpose()?.flatten(),
+                allowances,
+                charges,
                 net: amount(line, &["LineExtensionAmount"], "BT-131")?,
                 category,
-                rate: rate(text(line, &["Item", "ClassifiedTaxCategory", "Percent"]), category, "BT-152")?,
+                rate: rate(text(item, &["ClassifiedTaxCategory", "Percent"]), category, "BT-152")?,
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    let (allowances, charges) =
+        split(all(root, "AllowanceCharge").map(|a| allowance_charge(a, true)).collect::<Result<Vec<_>>>()?);
+    let mut files = BTreeMap::new();
+    let mut attachments = Vec::new();
+    let mut object = None;
+    let mut project = text(root, &["ProjectReference", "ID"]);
+    for reference in all(root, "AdditionalDocumentReference") {
+        match text(reference, &["DocumentTypeCode"]).as_deref() {
+            Some("130") => object = identifier(at(reference, &["ID"]), "schemeID"),
+            Some("50") if credit_note => project = text(reference, &["ID"]),
+            _ => attachments.push(SupportingDocument {
+                reference: required(reference, &["ID"], "BT-122")?,
+                description: text(reference, &["DocumentDescription"]),
+                uri: text(reference, &["Attachment", "ExternalReference", "URI"]),
+                file: attachment(at(reference, &["Attachment", "EmbeddedDocumentBinaryObject"]), &mut files)?,
+            }),
+        }
+    }
+    let order = text(root, &["OrderReference", "ID"]);
+    let sales_order = text(root, &["OrderReference", "SalesOrderID"]);
+    let references = InvoiceReferences {
+        project,
+        contract: text(root, &["ContractDocumentReference", "ID"]),
+        order: order.filter(|o| !(o == "NA" && sales_order.is_some())),
+        sales_order,
+        receiving_advice: text(root, &["ReceiptDocumentReference", "ID"]),
+        despatch_advice: text(root, &["DespatchDocumentReference", "ID"]),
+        tender: text(root, &["OriginatorDocumentReference", "ID"]),
+        object,
+        accounting: text(root, &["AccountingCost"]),
+    };
+    let means: Vec<Node> = all(root, "PaymentMeans").collect();
+    let payment = means
+        .first()
+        .map(|first| -> Result<Payment> {
+            let first = *first;
+            Ok(Payment {
+                means: required(first, &["PaymentMeansCode"], "BT-81")?,
+                means_text: at(first, &["PaymentMeansCode"]).and_then(|c| c.attribute("name")).map(str::to_owned),
+                remittance: text(first, &["PaymentID"]),
+                transfers: means
+                    .iter()
+                    .filter_map(|m| at(*m, &["PayeeFinancialAccount"]))
+                    .filter_map(|a| {
+                        Some(CreditTransfer {
+                            account: text(a, &["ID"])?,
+                            name: text(a, &["Name"]),
+                            provider: text(a, &["FinancialInstitutionBranch", "ID"]),
+                        })
+                    })
+                    .collect(),
+                card: at(first, &["CardAccount"]).and_then(|c| {
+                    Some(PaymentCard {
+                        number: text(c, &["PrimaryAccountNumberID"])?,
+                        holder: text(c, &["HolderName"]),
+                    })
+                }),
+                direct_debit: text(first, &["PaymentMandate", "ID"]).map(|mandate| DirectDebit {
+                    mandate,
+                    creditor: at(root, &["AccountingSupplierParty", "Party"])
+                        .into_iter()
+                        .flat_map(|p| all(p, "PartyIdentification"))
+                        .filter_map(|i| at(i, &["ID"]))
+                        .find(|id| id.attribute("schemeID") == Some("SEPA"))
+                        .and_then(|id| id.text())
+                        .map(|t| t.trim().to_owned())
+                        .unwrap_or_default(),
+                    debited: text(first, &["PaymentMandate", "PayerFinancialAccount", "ID"]).unwrap_or_default(),
+                }),
+            })
+        })
+        .transpose()?;
+    let delivery = at(root, &["Delivery"]);
+    let delivery_place = delivery.and_then(|d| {
+        let location = at(d, &["DeliveryLocation"]);
+        let place = Delivery {
+            name: text(d, &["DeliveryParty", "PartyName", "Name"]),
+            location: identifier(location.and_then(|l| at(l, &["ID"])), "schemeID"),
+            address: location.and_then(|l| at(l, &["Address"])).and_then(|a| ubl_address(Some(a), "BT-80").ok()?),
+        };
+        (place.name.is_some() || place.location.is_some() || place.address.is_some()).then_some(place)
+    });
+    let invoice_period = at(root, &["InvoicePeriod"]);
     let totals = at(root, &["LegalMonetaryTotal"]).ok_or(TranslationError::Missing("BG-22"))?;
+    let seller = at(root, &["AccountingSupplierParty", "Party"]).ok_or(TranslationError::Missing("BG-4"))?;
+    let buyer = at(root, &["AccountingCustomerParty", "Party"]).ok_or(TranslationError::Missing("BG-7"))?;
     Ok(TranslatedInvoice {
         format: "en16931-ubl",
-        kind: if credit_note { DocumentKind::CreditNote } else { kind(&type_code) },
+        kind,
         number: required(root, &["ID"], "BT-1")?,
         date: date(&required(root, &["IssueDate"], "BT-2")?, "BT-2")?,
         invoice: InvoiceData {
+            type_code,
             currency: currency.clone(),
-            seller: party("AccountingSupplierParty")?,
-            buyer: party("AccountingCustomerParty")?,
-            due_date: due.map(|d| date(&d, "BT-9")).transpose()?,
-            delivery_date: text(root, &["Delivery", "ActualDeliveryDate"]).map(|d| date(&d, "BT-72")).transpose()?,
+            notes: all(root, "Note").filter_map(|n| n.text()).map(|t| ubl_note(t.trim().to_owned())).collect(),
+            seller: ubl_party(seller, ["BT-27", "BT-40"])?,
+            buyer: ubl_party(buyer, ["BT-44", "BT-55"])?,
+            payee: at(root, &["PayeeParty"]).map(|p| ubl_party(p, ["BT-59", "BT-40"])).transpose()?,
+            tax_representative: at(root, &["TaxRepresentativeParty"])
+                .map(|p| ubl_party(p, ["BT-62", "BT-69"]))
+                .transpose()?,
             buyer_reference: text(root, &["BuyerReference"]),
-            payment_means: text(root, &["PaymentMeans", "PaymentMeansCode"]),
-            iban: text(root, &["PaymentMeans", "PayeeFinancialAccount", "ID"]),
-            direct_debit: text(root, &["PaymentMeans", "PaymentMandate", "ID"]).map(|mandate| DirectDebit {
-                mandate,
-                creditor: at(root, &["AccountingSupplierParty", "Party"])
-                    .into_iter()
-                    .flat_map(|p| all(p, "PartyIdentification"))
-                    .filter_map(|i| at(i, &["ID"]))
-                    .find(|id| id.attribute("schemeID") == Some("SEPA"))
-                    .and_then(|id| id.text())
-                    .map(|t| t.trim().to_owned())
-                    .unwrap_or_default(),
-                debited: text(root, &["PaymentMeans", "PaymentMandate", "PayerFinancialAccount", "ID"])
-                    .unwrap_or_default(),
-            }),
+            references: references_or_none(references),
+            preceding: all(root, "BillingReference")
+                .filter_map(|b| at(b, &["InvoiceDocumentReference"]))
+                .map(|r| {
+                    Ok(PrecedingInvoice {
+                        number: required(r, &["ID"], "BT-25")?,
+                        date: optional_date(r, &["IssueDate"], "BT-26")?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            delivery_date: delivery.map(|d| optional_date(d, &["ActualDeliveryDate"], "BT-72")).transpose()?.flatten(),
+            period: invoice_period
+                .map(|p| -> Result<_> {
+                    Ok(period(optional_date(p, &["StartDate"], "BT-73")?, optional_date(p, &["EndDate"], "BT-74")?))
+                })
+                .transpose()?
+                .flatten(),
+            delivery: delivery_place,
+            tax_point_date: optional_date(root, &["TaxPointDate"], "BT-7")?,
+            tax_point_code: invoice_period.and_then(|p| text(p, &["DescriptionCode"])),
+            due_date: due.map(|d| date(&d, "BT-9")).transpose()?,
             payment_terms: text(root, &["PaymentTerms", "Note"]),
+            payment,
+            allowances,
+            charges,
             taxes,
+            attachments,
             lines,
             totals: InvoiceTotals {
                 net: amount(totals, &["TaxExclusiveAmount"], "BT-109")?,
-                tax: amount(tax_total, &["TaxAmount"], "BT-110")?,
+                tax: match tax_total {
+                    Some(t) => amount(t, &["TaxAmount"], "BT-110")?,
+                    None => Money::new(0, currency.clone()).ok_or(TranslationError::Missing("BT-110"))?,
+                },
+                tax_accounting,
                 gross: amount(totals, &["TaxInclusiveAmount"], "BT-112")?,
                 prepaid: optional(totals, &["PrepaidAmount"], "BT-113")?,
                 rounding: optional(totals, &["PayableRoundingAmount"], "BT-114")?,
                 due: amount(totals, &["PayableAmount"], "BT-115")?,
             },
         },
+        files,
+    })
+}
+
+/// A postal address in CII.
+fn cii_address(node: Option<Node>, term: &'static str) -> Result<Option<PostalAddress>> {
+    let Some(a) = node else { return Ok(None) };
+    let lines = [text(a, &["LineOne"]), text(a, &["LineTwo"]), text(a, &["LineThree"])];
+    Ok(Some(PostalAddress {
+        lines: lines.into_iter().flatten().collect(),
+        city: text(a, &["CityName"]),
+        postcode: text(a, &["PostcodeCode"]),
+        subdivision: text(a, &["CountrySubDivisionName"]),
+        country: country(text(a, &["CountryID"])).ok_or(TranslationError::Missing(term))?,
+    }))
+}
+
+/// The identifiers of a party in CII: `ID` without a scheme, `GlobalID` with one.
+fn cii_identifiers(party: Node) -> Vec<Identifier> {
+    party
+        .children()
+        .filter(|c| c.is_element() && matches!(c.tag_name().name(), "ID" | "GlobalID"))
+        .filter_map(|c| identifier(Some(c), "schemeID"))
+        .collect()
+}
+
+/// A party in CII: the seller, buyer, payee or tax representative.
+fn cii_party(party: Node, terms: [&'static str; 2]) -> Result<InvoiceParty> {
+    let registration = |schemes: &[&str]| {
+        all(party, "SpecifiedTaxRegistration")
+            .filter_map(|r| at(r, &["ID"]))
+            .find(|id| id.attribute("schemeID").is_some_and(|s| schemes.contains(&s)))
+            .and_then(|id| id.text())
+            .map(|t| t.trim().to_owned())
+    };
+    let contact = at(party, &["DefinedTradeContact"]).map(|c| InvoiceContact {
+        name: text(c, &["PersonName"]).or_else(|| text(c, &["DepartmentName"])),
+        phone: text(c, &["TelephoneUniversalCommunication", "CompleteNumber"]),
+        email: text(c, &["EmailURIUniversalCommunication", "URIID"]),
+    });
+    Ok(InvoiceParty {
+        name: required(party, &["Name"], terms[0])?,
+        trading_name: text(party, &["SpecifiedLegalOrganization", "TradingBusinessName"]),
+        identifiers: cii_identifiers(party),
+        registration: identifier(at(party, &["SpecifiedLegalOrganization", "ID"]), "schemeID"),
+        vat_id: registration(&["VA", "VAT"]),
+        tax_number: registration(&["FC"]),
+        legal_info: text(party, &["Description"]),
+        address: cii_address(at(party, &["PostalTradeAddress"]), terms[1])?,
+        contact,
+        endpoint: endpoint(at(party, &["URIUniversalCommunication", "URIID"])),
+        party: None,
     })
 }
 
@@ -312,6 +653,7 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
     let document = at(root, &["ExchangedDocument"]).ok_or(TranslationError::Missing("BT-1"))?;
     let transaction = at(root, &["SupplyChainTradeTransaction"]).ok_or(TranslationError::Syntax)?;
     let agreement = at(transaction, &["ApplicableHeaderTradeAgreement"]).ok_or(TranslationError::Missing("BG-4"))?;
+    let delivery = at(transaction, &["ApplicableHeaderTradeDelivery"]);
     let settlement = at(transaction, &["ApplicableHeaderTradeSettlement"]).ok_or(TranslationError::Missing("BG-22"))?;
     let (currency, decimals) = currency(&required(settlement, &["InvoiceCurrencyCode"], "BT-5")?, currencies)?;
     let amount = |node: Node, path: &[&str], term| -> Result<Money> {
@@ -320,36 +662,47 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
     let optional = |node: Node, path: &[&str], term| -> Result<Option<Money>> {
         text(node, path).map(|value| money(&value, &currency, decimals, term)).transpose()
     };
-    let party = |name: &str| -> Result<InvoiceParty> {
-        let party = at(agreement, &[name]).ok_or(TranslationError::Missing("BG-4/BG-7"))?;
-        let registration = |schemes: &[&str]| {
-            all(party, "SpecifiedTaxRegistration")
-                .filter_map(|r| at(r, &["ID"]))
-                .find(|id| id.attribute("schemeID").is_some_and(|s| schemes.contains(&s)))
-                .and_then(|id| id.text())
-                .map(|t| t.trim().to_owned())
-        };
-        let contact = at(party, &["DefinedTradeContact"]).map(|c| InvoiceContact {
-            name: text(c, &["PersonName"]).or_else(|| text(c, &["DepartmentName"])),
-            phone: text(c, &["TelephoneUniversalCommunication", "CompleteNumber"]),
-            email: text(c, &["EmailURIUniversalCommunication", "URIID"]),
-        });
-        Ok(InvoiceParty {
-            name: required(party, &["Name"], "BT-27/BT-44")?,
-            vat_id: registration(&["VA", "VAT"]),
-            tax_number: registration(&["FC"]),
-            street: text(party, &["PostalTradeAddress", "LineOne"]),
-            postcode: text(party, &["PostalTradeAddress", "PostcodeCode"]),
-            city: text(party, &["PostalTradeAddress", "CityName"]),
-            country: country(text(party, &["PostalTradeAddress", "CountryID"])),
-            contact,
-            endpoint: endpoint(at(party, &["URIUniversalCommunication", "URIID"])),
-            party: None,
-        })
-    };
     let date_time = |node: Node, path: &[&str], term| -> Result<Option<Date>> {
         text(node, path).map(|d| date(&d, term)).transpose()
     };
+    let decimal_at = |node: Node, path: &[&str], term| -> Result<Option<Decimal>> {
+        text(node, path).map(|d| decimal(&d, term)).transpose()
+    };
+    let billing_period = |node: Node, terms: [&'static str; 2]| -> Result<Option<Period>> {
+        let Some(p) = at(node, &["BillingSpecifiedPeriod"]) else { return Ok(None) };
+        Ok(period(
+            date_time(p, &["StartDateTime", "DateTimeString"], terms[0])?,
+            date_time(p, &["EndDateTime", "DateTimeString"], terms[1])?,
+        ))
+    };
+    let allowances_charges = |node: Node, document: bool| -> Result<(Vec<AllowanceCharge>, Vec<AllowanceCharge>)> {
+        let (mut allowances, mut charges) = (Vec::new(), Vec::new());
+        for a in all(node, "SpecifiedTradeAllowanceCharge") {
+            let category = match text(a, &["CategoryTradeTax", "CategoryCode"]) {
+                Some(code) if document => Some(category(&code, "BT-95")?),
+                _ => None,
+            };
+            let item = AllowanceCharge {
+                amount: amount(a, &["ActualAmount"], "BT-92")?,
+                base: optional(a, &["BasisAmount"], "BT-93")?,
+                percent: decimal_at(a, &["CalculationPercent"], "BT-94")?,
+                category,
+                rate: match category {
+                    Some(c) => rate(text(a, &["CategoryTradeTax", "RateApplicablePercent"]), c, "BT-96")?,
+                    None => None,
+                },
+                reason: text(a, &["Reason"]),
+                reason_code: text(a, &["ReasonCode"]),
+            };
+            if text(a, &["ChargeIndicator", "Indicator"]).as_deref() == Some("true") {
+                charges.push(item);
+            } else {
+                allowances.push(item);
+            }
+        }
+        Ok((allowances, charges))
+    };
+    let (kind, type_code) = kind(&required(document, &["TypeCode"], "BT-3")?, false);
     let taxes = all(settlement, "ApplicableTradeTax")
         .map(|tax| {
             let category = category(&required(tax, &["CategoryCode"], "BT-118")?, "BT-118")?;
@@ -359,32 +712,80 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
                 base: amount(tax, &["BasisAmount"], "BT-116")?,
                 tax: amount(tax, &["CalculatedAmount"], "BT-117")?,
                 exemption: text(tax, &["ExemptionReason"]),
+                exemption_code: text(tax, &["ExemptionReasonCode"]),
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    let first_tax = at(settlement, &["ApplicableTradeTax"]);
     let lines = all(transaction, "IncludedSupplyChainTradeLineItem")
         .map(|line| {
-            let tax = at(line, &["SpecifiedLineTradeSettlement", "ApplicableTradeTax"]);
+            let product = at(line, &["SpecifiedTradeProduct"]).ok_or(TranslationError::Missing("BG-31"))?;
+            let line_agreement = at(line, &["SpecifiedLineTradeAgreement"]);
+            let line_settlement =
+                at(line, &["SpecifiedLineTradeSettlement"]).ok_or(TranslationError::Missing("BG-30"))?;
+            let tax = at(line_settlement, &["ApplicableTradeTax"]);
             let category = category(
                 &tax.and_then(|t| text(t, &["CategoryCode"])).ok_or(TranslationError::Missing("BT-151"))?,
                 "BT-151",
             )?;
             let quantity = at(line, &["SpecifiedLineTradeDelivery", "BilledQuantity"]);
+            let net_price = line_agreement.and_then(|a| at(a, &["NetPriceProductTradePrice"]));
+            let gross_price = line_agreement.and_then(|a| at(a, &["GrossPriceProductTradePrice"]));
+            let (allowances, charges) = allowances_charges(line_settlement, false)?;
             Ok(InvoiceLine {
                 id: text(line, &["AssociatedDocumentLineDocument", "LineID"]),
-                name: required(line, &["SpecifiedTradeProduct", "Name"], "BT-153")?,
+                note: text(line, &["AssociatedDocumentLineDocument", "IncludedNote", "Content"]),
+                object: all(line_settlement, "AdditionalReferencedDocument")
+                    .find(|d| text(*d, &["TypeCode"]).as_deref() == Some("130"))
+                    .and_then(|d| {
+                        let mut id = identifier(at(d, &["IssuerAssignedID"]), "schemeID")?;
+                        id.scheme = text(d, &["ReferenceTypeCode"]);
+                        Some(id)
+                    }),
+                order_line: line_agreement.and_then(|a| text(a, &["BuyerOrderReferencedDocument", "LineID"])),
+                accounting: text(line_settlement, &["ReceivableSpecifiedTradeAccountingAccount", "ID"]),
+                period: billing_period(line_settlement, ["BT-134", "BT-135"])?,
+                name: required(product, &["Name"], "BT-153")?,
+                description: text(product, &["Description"]),
+                seller_item: text(product, &["SellerAssignedID"]),
+                buyer_item: text(product, &["BuyerAssignedID"]),
+                standard_item: identifier(at(product, &["GlobalID"]), "schemeID"),
+                classifications: all(product, "DesignatedProductClassification")
+                    .filter_map(|c| at(c, &["ClassCode"]))
+                    .filter_map(|c| {
+                        Some(Classification {
+                            code: c.text()?.trim().to_owned(),
+                            list: c.attribute("listID")?.to_owned(),
+                            version: c.attribute("listVersionID").map(str::to_owned),
+                        })
+                    })
+                    .collect(),
+                origin: country(text(product, &["OriginTradeCountry", "ID"])),
+                attributes: all(product, "ApplicableProductCharacteristic")
+                    .filter_map(|p| {
+                        Some(ItemAttribute { name: text(p, &["Description"])?, value: text(p, &["Value"])? })
+                    })
+                    .collect(),
                 quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
                 unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
-                price: text(line, &["SpecifiedLineTradeAgreement", "NetPriceProductTradePrice", "ChargeAmount"])
-                    .map(|p| decimal(&p, "BT-146"))
+                price: net_price.map(|p| decimal_at(p, &["ChargeAmount"], "BT-146")).transpose()?.flatten(),
+                price_quantity: net_price
+                    .and_then(|p| at(p, &["BasisQuantity"]))
+                    .or_else(|| gross_price.and_then(|p| at(p, &["BasisQuantity"])))
+                    .and_then(|q| q.text())
+                    .map(|q| decimal(q.trim(), "BT-149"))
                     .transpose()?,
+                gross_price: gross_price.map(|p| decimal_at(p, &["ChargeAmount"], "BT-148")).transpose()?.flatten(),
+                price_discount: gross_price
+                    .and_then(|p| at(p, &["AppliedTradeAllowanceCharge"]))
+                    .map(|a| decimal_at(a, &["ActualAmount"], "BT-147"))
+                    .transpose()?
+                    .flatten(),
+                allowances,
+                charges,
                 net: amount(
-                    line,
-                    &[
-                        "SpecifiedLineTradeSettlement",
-                        "SpecifiedTradeSettlementLineMonetarySummation",
-                        "LineTotalAmount",
-                    ],
+                    line_settlement,
+                    &["SpecifiedTradeSettlementLineMonetarySummation", "LineTotalAmount"],
                     "BT-131",
                 )?,
                 category,
@@ -392,63 +793,158 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    let (allowances, charges) = allowances_charges(settlement, true)?;
     let totals = at(settlement, &["SpecifiedTradeSettlementHeaderMonetarySummation"])
         .ok_or(TranslationError::Missing("BG-22"))?;
     let tax_total = all(totals, "TaxTotalAmount")
         .find(|t| t.attribute("currencyID").is_none_or(|c| c == currency.as_str()))
-        .and_then(|t| t.text())
-        .ok_or(TranslationError::Missing("BT-110"))?;
-    let means = at(settlement, &["SpecifiedTradeSettlementPaymentMeans", "PayeePartyCreditorFinancialAccount"]);
+        .and_then(|t| t.text());
+    let tax_accounting = match text(settlement, &["TaxCurrencyCode"]).filter(|c| c != currency.as_str()) {
+        Some(code) => {
+            let (tax_currency, tax_decimals) = self::currency(&code, currencies)?;
+            all(totals, "TaxTotalAmount")
+                .find(|t| t.attribute("currencyID") == Some(code.as_str()))
+                .and_then(|t| t.text())
+                .map(|value| money(value.trim(), &tax_currency, tax_decimals, "BT-111"))
+                .transpose()?
+        }
+        None => None,
+    };
+    let mut files = BTreeMap::new();
+    let mut attachments = Vec::new();
+    let (mut tender, mut object) = (None, None);
+    for reference in all(agreement, "AdditionalReferencedDocument") {
+        match text(reference, &["TypeCode"]).as_deref() {
+            Some("50") => tender = text(reference, &["IssuerAssignedID"]),
+            Some("130") => {
+                object = text(reference, &["IssuerAssignedID"])
+                    .map(|id| Identifier { id, scheme: text(reference, &["ReferenceTypeCode"]) })
+            }
+            _ => attachments.push(SupportingDocument {
+                reference: required(reference, &["IssuerAssignedID"], "BT-122")?,
+                description: text(reference, &["Name"]),
+                uri: text(reference, &["URIID"]),
+                file: attachment(at(reference, &["AttachmentBinaryObject"]), &mut files)?,
+            }),
+        }
+    }
+    let references = InvoiceReferences {
+        project: text(agreement, &["SpecifiedProcuringProject", "ID"]),
+        contract: text(agreement, &["ContractReferencedDocument", "IssuerAssignedID"]),
+        order: text(agreement, &["BuyerOrderReferencedDocument", "IssuerAssignedID"]),
+        sales_order: text(agreement, &["SellerOrderReferencedDocument", "IssuerAssignedID"]),
+        receiving_advice: delivery.and_then(|d| text(d, &["ReceivingAdviceReferencedDocument", "IssuerAssignedID"])),
+        despatch_advice: delivery.and_then(|d| text(d, &["DespatchAdviceReferencedDocument", "IssuerAssignedID"])),
+        tender,
+        object,
+        accounting: text(settlement, &["ReceivableSpecifiedTradeAccountingAccount", "ID"]),
+    };
+    let means: Vec<Node> = all(settlement, "SpecifiedTradeSettlementPaymentMeans").collect();
+    let terms = at(settlement, &["SpecifiedTradePaymentTerms"]);
+    let payment = means
+        .first()
+        .map(|first| -> Result<Payment> {
+            let first = *first;
+            Ok(Payment {
+                means: required(first, &["TypeCode"], "BT-81")?,
+                means_text: text(first, &["Information"]),
+                remittance: text(settlement, &["PaymentReference"]),
+                transfers: means
+                    .iter()
+                    .filter_map(|m| {
+                        let account = at(*m, &["PayeePartyCreditorFinancialAccount"])?;
+                        Some(CreditTransfer {
+                            account: text(account, &["IBANID"]).or_else(|| text(account, &["ProprietaryID"]))?,
+                            name: text(account, &["AccountName"]),
+                            provider: text(*m, &["PayeeSpecifiedCreditorFinancialInstitution", "BICID"]),
+                        })
+                    })
+                    .collect(),
+                card: at(first, &["ApplicableTradeSettlementFinancialCard"]).and_then(|c| {
+                    Some(PaymentCard { number: text(c, &["ID"])?, holder: text(c, &["CardholderName"]) })
+                }),
+                direct_debit: terms.and_then(|t| text(t, &["DirectDebitMandateID"])).map(|mandate| DirectDebit {
+                    mandate,
+                    creditor: text(settlement, &["CreditorReferenceID"]).unwrap_or_default(),
+                    debited: text(first, &["PayerPartyDebtorFinancialAccount", "IBANID"]).unwrap_or_default(),
+                }),
+            })
+        })
+        .transpose()?;
+    let ship_to = delivery.and_then(|d| at(d, &["ShipToTradeParty"]));
+    let delivery_place = ship_to
+        .map(|s| -> Result<Delivery> {
+            Ok(Delivery {
+                name: text(s, &["Name"]),
+                location: cii_identifiers(s).into_iter().next(),
+                address: cii_address(at(s, &["PostalTradeAddress"]), "BT-80")?,
+            })
+        })
+        .transpose()?;
+    let seller = at(agreement, &["SellerTradeParty"]).ok_or(TranslationError::Missing("BG-4"))?;
+    let buyer = at(agreement, &["BuyerTradeParty"]).ok_or(TranslationError::Missing("BG-7"))?;
     Ok(TranslatedInvoice {
         format: "en16931-cii",
-        kind: kind(&required(document, &["TypeCode"], "BT-3")?),
+        kind,
         number: required(document, &["ID"], "BT-1")?,
         date: date(&required(document, &["IssueDateTime", "DateTimeString"], "BT-2")?, "BT-2")?,
         invoice: InvoiceData {
+            type_code,
             currency: currency.clone(),
-            seller: party("SellerTradeParty")?,
-            buyer: party("BuyerTradeParty")?,
-            due_date: date_time(
-                settlement,
-                &["SpecifiedTradePaymentTerms", "DueDateDateTime", "DateTimeString"],
-                "BT-9",
-            )?,
-            delivery_date: date_time(
-                transaction,
-                &[
-                    "ApplicableHeaderTradeDelivery",
-                    "ActualDeliverySupplyChainEvent",
-                    "OccurrenceDateTime",
-                    "DateTimeString",
-                ],
-                "BT-72",
-            )?,
+            notes: all(document, "IncludedNote")
+                .filter_map(|n| Some(InvoiceNote { subject: text(n, &["SubjectCode"]), text: text(n, &["Content"])? }))
+                .collect(),
+            seller: cii_party(seller, ["BT-27", "BT-40"])?,
+            buyer: cii_party(buyer, ["BT-44", "BT-55"])?,
+            payee: at(settlement, &["PayeeTradeParty"]).map(|p| cii_party(p, ["BT-59", "BT-40"])).transpose()?,
+            tax_representative: at(agreement, &["SellerTaxRepresentativeTradeParty"])
+                .map(|p| cii_party(p, ["BT-62", "BT-69"]))
+                .transpose()?,
             buyer_reference: text(agreement, &["BuyerReference"]),
-            payment_means: text(settlement, &["SpecifiedTradeSettlementPaymentMeans", "TypeCode"]),
-            iban: means.and_then(|m| text(m, &["IBANID"]).or_else(|| text(m, &["ProprietaryID"]))),
-            direct_debit: text(settlement, &["SpecifiedTradePaymentTerms", "DirectDebitMandateID"]).map(|mandate| {
-                DirectDebit {
-                    mandate,
-                    creditor: text(settlement, &["CreditorReferenceID"]).unwrap_or_default(),
-                    debited: text(
-                        settlement,
-                        &["SpecifiedTradeSettlementPaymentMeans", "PayerPartyDebtorFinancialAccount", "IBANID"],
-                    )
-                    .unwrap_or_default(),
-                }
-            }),
-            payment_terms: text(settlement, &["SpecifiedTradePaymentTerms", "Description"]),
+            references: references_or_none(references),
+            preceding: all(settlement, "InvoiceReferencedDocument")
+                .map(|r| {
+                    Ok(PrecedingInvoice {
+                        number: required(r, &["IssuerAssignedID"], "BT-25")?,
+                        date: date_time(r, &["FormattedIssueDateTime", "DateTimeString"], "BT-26")?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            delivery_date: delivery
+                .map(|d| {
+                    date_time(d, &["ActualDeliverySupplyChainEvent", "OccurrenceDateTime", "DateTimeString"], "BT-72")
+                })
+                .transpose()?
+                .flatten(),
+            period: billing_period(settlement, ["BT-73", "BT-74"])?,
+            delivery: delivery_place,
+            tax_point_date: first_tax
+                .map(|t| date_time(t, &["TaxPointDate", "DateString"], "BT-7"))
+                .transpose()?
+                .flatten(),
+            tax_point_code: first_tax.and_then(|t| text(t, &["DueDateTypeCode"])).map(|c| tax_point_from_cii(&c)),
+            due_date: terms
+                .map(|t| date_time(t, &["DueDateDateTime", "DateTimeString"], "BT-9"))
+                .transpose()?
+                .flatten(),
+            payment_terms: terms.and_then(|t| text(t, &["Description"])),
+            payment,
+            allowances,
+            charges,
             taxes,
+            attachments,
             lines,
             totals: InvoiceTotals {
                 net: amount(totals, &["TaxBasisTotalAmount"], "BT-109")?,
-                tax: money(tax_total.trim(), &currency, decimals, "BT-110")?,
+                tax: money(tax_total.map_or("0", str::trim), &currency, decimals, "BT-110")?,
+                tax_accounting,
                 gross: amount(totals, &["GrandTotalAmount"], "BT-112")?,
                 prepaid: optional(totals, &["TotalPrepaidAmount"], "BT-113")?,
                 rounding: optional(totals, &["RoundingAmount"], "BT-114")?,
                 due: amount(totals, &["DuePayableAmount"], "BT-115")?,
             },
         },
+        files,
     })
 }
 
@@ -456,6 +952,8 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
 pub const XRECHNUNG: &str = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
 /// The business process (BT-23) of Peppol BIS Billing 3.0, which XRechnung uses.
 const PROCESS: &str = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+/// The types of invoice XRechnung 3.0 allows (BR-DE-17).
+const XRECHNUNG_TYPES: [&str; 8] = ["326", "380", "384", "389", "381", "875", "876", "877"];
 
 /// Why an invoice cannot be written as XRechnung.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -463,20 +961,43 @@ pub enum WriteError {
     /// Terms XRechnung requires are missing, by their identifiers.
     #[error("missing for XRechnung: {}", .0.join(", "))]
     Missing(Vec<&'static str>),
-    /// The lines do not add up to the net total: allowances and charges on the document are not supported yet.
-    #[error("the lines do not add up to the net total")]
+    /// The net total is not the sum of the lines less the allowances plus the charges on the invoice.
+    #[error("the net total is not the lines less allowances plus charges")]
     Lines,
     /// The amount due is not the gross amount less prepaid amounts plus rounding.
     #[error("the amount due is not gross less prepaid plus rounding")]
     Totals,
+    /// A type of invoice XRechnung does not allow.
+    #[error("XRechnung does not allow the type of invoice {0}")]
+    Type(String),
+    /// A term repeated more often than the syntax carries it: CII D16B has one preceding invoice (BG-3).
+    #[error("the syntax carries {0} only once")]
+    Syntax(&'static str),
     /// A currency the currency table does not divide by decimals.
     #[error("currency {0} is not in the currency table")]
     Currency(String),
+    /// The bytes of an attached file are not among the invoice's files.
+    #[error("the bytes of the attached file {0} are missing")]
+    File(String),
 }
 
-/// Checks that an invoice carries what XRechnung 3.0 requires beyond EN 16931 and the model's own terms.
+/// The type code of an invoice (BT-3).
+fn type_code(invoice: &TranslatedInvoice) -> &str {
+    match (&invoice.invoice.type_code, invoice.kind) {
+        (Some(code), _) => code,
+        (None, DocumentKind::CreditNote) => "381",
+        (None, _) => "380",
+    }
+}
+
+/// Checks that an invoice carries what XRechnung 3.0 requires beyond EN 16931 and the model's own terms, and that
+/// its totals agree.
 pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), WriteError> {
     let data = &invoice.invoice;
+    let code = type_code(invoice);
+    if !XRECHNUNG_TYPES.contains(&code) {
+        return Err(WriteError::Type(code.to_owned()));
+    }
     let mut missing = Vec::new();
     let mut need = |present: bool, term: &'static str| {
         if !present {
@@ -485,29 +1006,46 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
     };
     let (seller, buyer) = (&data.seller, &data.buyer);
     need(data.buyer_reference.is_some(), "BT-10");
-    need(data.payment_means.is_some(), "BT-81");
-    need(seller.street.is_some(), "BT-35");
-    need(seller.city.is_some(), "BT-37");
-    need(seller.postcode.is_some(), "BT-38");
-    need(seller.country.is_some(), "BT-40");
+    need(data.payment.is_some(), "BG-16");
+    need(seller.address.is_some(), "BG-5");
+    need(seller.address.as_ref().is_some_and(|a| a.city.is_some()), "BT-37");
+    need(seller.address.as_ref().is_some_and(|a| a.postcode.is_some()), "BT-38");
     let contact = seller.contact.as_ref();
     need(contact.is_some_and(|c| c.name.is_some()), "BT-41");
     need(contact.is_some_and(|c| c.phone.is_some()), "BT-42");
     need(contact.is_some_and(|c| c.email.is_some()), "BT-43");
-    need(seller.vat_id.is_some() || seller.tax_number.is_some(), "BT-31/BT-32");
+    need(
+        !seller.identifiers.is_empty() || seller.registration.is_some() || seller.vat_id.is_some(),
+        "BT-29/BT-30/BT-31",
+    );
+    let taxed = data.taxes.iter().any(|t| t.category != VatCategory::NotSubject);
+    let representative_vat = data.tax_representative.as_ref().is_some_and(|r| r.vat_id.is_some());
+    need(!taxed || seller.vat_id.is_some() || seller.tax_number.is_some() || representative_vat, "BT-31/BT-32");
     need(seller.endpoint.is_some(), "BT-34");
     need(buyer.endpoint.is_some(), "BT-49");
-    need(buyer.city.is_some(), "BT-52");
-    need(buyer.postcode.is_some(), "BT-53");
-    need(buyer.country.is_some(), "BT-55");
-    if matches!(data.payment_means.as_deref(), Some("30" | "58")) {
-        need(data.iban.is_some(), "BT-84");
+    need(buyer.address.is_some(), "BG-8");
+    need(buyer.address.as_ref().is_some_and(|a| a.city.is_some()), "BT-52");
+    need(buyer.address.as_ref().is_some_and(|a| a.postcode.is_some()), "BT-53");
+    if let Some(address) = data.delivery.as_ref().and_then(|d| d.address.as_ref()) {
+        need(address.city.is_some(), "BT-77");
+        need(address.postcode.is_some(), "BT-78");
     }
-    if data.payment_means.as_deref() == Some("59") {
-        let debit = data.direct_debit.as_ref();
-        need(debit.is_some_and(|d| !d.mandate.is_empty()), "BT-89");
-        need(debit.is_some_and(|d| !d.creditor.is_empty()), "BT-90");
-        need(debit.is_some_and(|d| !d.debited.is_empty()), "BT-91");
+    if let Some(payment) = &data.payment {
+        match payment.means.as_str() {
+            "30" | "58" => need(!payment.transfers.is_empty(), "BG-17"),
+            "48" | "54" | "55" => need(payment.card.is_some(), "BG-18"),
+            "59" => {
+                let debit = payment.direct_debit.as_ref();
+                need(debit.is_some_and(|d| !d.mandate.is_empty()), "BT-89");
+                need(debit.is_some_and(|d| !d.creditor.is_empty()), "BT-90");
+                need(debit.is_some_and(|d| !d.debited.is_empty()), "BT-91");
+            }
+            _ => {}
+        }
+    }
+    for allowance in data.allowances.iter().chain(&data.charges) {
+        need(allowance.category.is_some(), "BT-95/BT-102");
+        need(allowance.reason.is_some() || allowance.reason_code.is_some(), "BT-97/BT-104");
     }
     need(!data.lines.is_empty(), "BG-25");
     for line in &data.lines {
@@ -515,17 +1053,33 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
         need(line.quantity.is_some(), "BT-129");
         need(line.unit.is_some(), "BT-130");
         need(line.price.is_some(), "BT-146");
+        for allowance in line.allowances.iter().chain(&line.charges) {
+            need(allowance.reason.is_some() || allowance.reason_code.is_some(), "BT-139/BT-144");
+        }
     }
     for tax in &data.taxes {
-        let exempt = !matches!(tax.category, VatCategory::Standard | VatCategory::ZeroRated);
-        need(!exempt || tax.exemption.is_some(), "BT-120");
+        let stated = !matches!(
+            tax.category,
+            VatCategory::Standard | VatCategory::ZeroRated | VatCategory::CanaryIslands | VatCategory::CeutaMelilla
+        );
+        need(!stated || tax.exemption.is_some() || tax.exemption_code.is_some(), "BT-120/BT-121");
     }
+    for file in data.attachments.iter().filter_map(|a| a.file.as_ref()) {
+        need(file.name.is_some(), "BT-125");
+    }
+    missing.sort_unstable();
     missing.dedup();
     if !missing.is_empty() {
         return Err(WriteError::Missing(missing));
     }
+    for file in data.attachments.iter().filter_map(|a| a.file.as_ref()) {
+        if !invoice.files.get(&file.hash).is_some_and(|bytes| file.is(bytes)) {
+            return Err(WriteError::File(file.hash.to_string()));
+        }
+    }
+    let sum = |items: &[AllowanceCharge]| items.iter().map(|a| a.amount.base_units()).sum::<i128>();
     let lines: i128 = data.lines.iter().map(|l| l.net.base_units()).sum();
-    if lines != data.totals.net.base_units() {
+    if lines - sum(&data.allowances) + sum(&data.charges) != data.totals.net.base_units() {
         return Err(WriteError::Lines);
     }
     let totals = &data.totals;
@@ -565,6 +1119,19 @@ impl Writer {
         if let Some(value) = value {
             self.leaf(tag, "", value);
         }
+    }
+
+    /// An element holding one element: `<a><b>value</b></a>`.
+    fn wrapped(&mut self, outer: &str, tag: &str, attributes: &str, value: &str) {
+        self.open(outer, "");
+        self.leaf(tag, attributes, value);
+        self.close(outer);
+    }
+
+    /// An identifier with its scheme, if it has one, in the attribute named.
+    fn identifier(&mut self, tag: &str, scheme: &str, id: &Identifier) {
+        let attributes = id.scheme.as_deref().map(|s| attribute(scheme, s)).unwrap_or_default();
+        self.leaf(tag, &attributes, &id.id);
     }
 }
 
@@ -612,8 +1179,19 @@ fn written_rate(category: VatCategory, rate: Option<Decimal>) -> Option<String> 
     }
 }
 
-fn type_code(kind: DocumentKind) -> &'static str {
-    if kind == DocumentKind::CreditNote { "381" } else { "380" }
+/// The rate of a VAT breakdown, which XRechnung requires also where the category has none (BR-DE-14): 0 there.
+fn breakdown_rate(rate: Option<Decimal>) -> String {
+    rate.map_or_else(|| "0".to_owned(), |r| r.to_string())
+}
+
+/// The terms of payment as written: XRechnung ends every structured line such as `#SKONTO#…#` with a line break
+/// (BR-DE-18), which reading trims.
+fn written_terms(terms: &str) -> String {
+    if terms.lines().last().is_some_and(|l| l.starts_with('#') && l.ends_with('#')) {
+        format!("{terms}\n")
+    } else {
+        terms.to_owned()
+    }
 }
 
 fn iso(date: Date) -> String {
@@ -624,20 +1202,125 @@ fn compact(date: Date) -> String {
     date.to_string().replace('-', "")
 }
 
+/// The decimals of the invoice's currency.
+fn decimals_of(currency: &Currency, currencies: &CurrencyTable) -> std::result::Result<u32, WriteError> {
+    currencies.get(currency).and_then(|d| d.decimals()).ok_or_else(|| WriteError::Currency(currency.to_string()))
+}
+
+/// Whether an account is written as an IBAN: two letters, two digits, then letters and digits.
+fn is_iban(account: &str) -> bool {
+    let bytes = account.as_bytes();
+    bytes.len() > 4
+        && bytes[..2].iter().all(u8::is_ascii_uppercase)
+        && bytes[2..4].iter().all(u8::is_ascii_digit)
+        && bytes[4..].iter().all(u8::is_ascii_alphanumeric)
+}
+
+/// The role a party has on an invoice, which decides how UBL writes its name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Role {
+    Seller,
+    Buyer,
+    Payee,
+    TaxRepresentative,
+}
+
+fn write_ubl_address(x: &mut Writer, tag: &str, address: &PostalAddress) {
+    x.open(tag, "");
+    x.some("cbc:StreetName", address.lines.first().map(String::as_str));
+    x.some("cbc:AdditionalStreetName", address.lines.get(1).map(String::as_str));
+    x.some("cbc:CityName", address.city.as_deref());
+    x.some("cbc:PostalZone", address.postcode.as_deref());
+    x.some("cbc:CountrySubentity", address.subdivision.as_deref());
+    if let Some(line) = address.lines.get(2) {
+        x.wrapped("cac:AddressLine", "cbc:Line", "", line);
+    }
+    x.wrapped("cac:Country", "cbc:IdentificationCode", "", address.country.as_str());
+    x.close(tag);
+}
+
+fn write_ubl_party(x: &mut Writer, party: &InvoiceParty, role: Role, creditor: Option<&str>) {
+    let legal = matches!(role, Role::Seller | Role::Buyer);
+    if let Some(endpoint) = &party.endpoint {
+        x.leaf("cbc:EndpointID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
+    }
+    for id in &party.identifiers {
+        x.open("cac:PartyIdentification", "");
+        x.identifier("cbc:ID", "schemeID", id);
+        x.close("cac:PartyIdentification");
+    }
+    if let Some(creditor) = creditor {
+        x.wrapped("cac:PartyIdentification", "cbc:ID", &attribute("schemeID", "SEPA"), creditor);
+    }
+    match (legal, &party.trading_name) {
+        (true, Some(trading)) => x.wrapped("cac:PartyName", "cbc:Name", "", trading),
+        (true, None) => {}
+        (false, _) => x.wrapped("cac:PartyName", "cbc:Name", "", &party.name),
+    }
+    if let Some(address) = &party.address {
+        write_ubl_address(x, "cac:PostalAddress", address);
+    }
+    for (id, scheme) in [(&party.vat_id, "VAT"), (&party.tax_number, "FC")] {
+        if let Some(id) = id {
+            x.open("cac:PartyTaxScheme", "");
+            x.leaf("cbc:CompanyID", "", id);
+            x.wrapped("cac:TaxScheme", "cbc:ID", "", scheme);
+            x.close("cac:PartyTaxScheme");
+        }
+    }
+    if legal || party.registration.is_some() {
+        x.open("cac:PartyLegalEntity", "");
+        if legal {
+            x.leaf("cbc:RegistrationName", "", &party.name);
+        }
+        if let Some(registration) = &party.registration {
+            x.identifier("cbc:CompanyID", "schemeID", registration);
+        }
+        x.some("cbc:CompanyLegalForm", party.legal_info.as_deref());
+        x.close("cac:PartyLegalEntity");
+    }
+    if let Some(contact) = &party.contact {
+        x.open("cac:Contact", "");
+        x.some("cbc:Name", contact.name.as_deref());
+        x.some("cbc:Telephone", contact.phone.as_deref());
+        x.some("cbc:ElectronicMail", contact.email.as_deref());
+        x.close("cac:Contact");
+    }
+}
+
+fn write_ubl_allowance_charge(x: &mut Writer, item: &AllowanceCharge, charge: bool, amount: &dyn Fn(&Money) -> String) {
+    let currency = attribute("currencyID", item.amount.currency().as_str());
+    x.open("cac:AllowanceCharge", "");
+    x.leaf("cbc:ChargeIndicator", "", if charge { "true" } else { "false" });
+    x.some("cbc:AllowanceChargeReasonCode", item.reason_code.as_deref());
+    x.some("cbc:AllowanceChargeReason", item.reason.as_deref());
+    x.some("cbc:MultiplierFactorNumeric", item.percent.map(|p| p.to_string()).as_deref());
+    x.leaf("cbc:Amount", &currency, &amount(&item.amount));
+    if let Some(base) = &item.base {
+        x.leaf("cbc:BaseAmount", &currency, &amount(base));
+    }
+    if let Some(category) = item.category {
+        x.open("cac:TaxCategory", "");
+        x.leaf("cbc:ID", "", category_code(category));
+        x.some("cbc:Percent", written_rate(category, item.rate).as_deref());
+        x.wrapped("cac:TaxScheme", "cbc:ID", "", "VAT");
+        x.close("cac:TaxCategory");
+    }
+    x.close("cac:AllowanceCharge");
+}
+
 /// Writes an invoice or credit note as XRechnung 3.0 in the UBL syntax.
 pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
     check_xrechnung(invoice)?;
     let data = &invoice.invoice;
     let code = data.currency.as_str();
-    let decimals = currencies
-        .get(&data.currency)
-        .and_then(|d| d.decimals())
-        .ok_or_else(|| WriteError::Currency(code.to_owned()))?;
+    let decimals = decimals_of(&data.currency, currencies)?;
     let amount = |m: &Money| written(m, decimals);
     let currency = attribute("currencyID", code);
     let credit_note = invoice.kind == DocumentKind::CreditNote;
     let root = if credit_note { "ubl:CreditNote" } else { "ubl:Invoice" };
     let namespace = if credit_note { UBL_CREDIT_NOTE } else { UBL_INVOICE };
+    let references = data.references.clone().unwrap_or_default();
     let mut x = Writer::new();
     x.open(
         root,
@@ -652,86 +1335,196 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     x.leaf("cbc:ProfileID", "", PROCESS);
     x.leaf("cbc:ID", "", &invoice.number);
     x.leaf("cbc:IssueDate", "", &iso(invoice.date));
-    if !credit_note && let Some(due) = data.due_date {
-        x.leaf("cbc:DueDate", "", &iso(due));
+    if credit_note {
+        x.some("cbc:TaxPointDate", data.tax_point_date.map(iso).as_deref());
+        x.leaf("cbc:CreditNoteTypeCode", "", type_code(invoice));
+    } else {
+        x.some("cbc:DueDate", data.due_date.map(iso).as_deref());
+        x.leaf("cbc:InvoiceTypeCode", "", type_code(invoice));
     }
-    x.leaf(if credit_note { "cbc:CreditNoteTypeCode" } else { "cbc:InvoiceTypeCode" }, "", type_code(invoice.kind));
+    for note in &data.notes {
+        let text = match &note.subject {
+            Some(subject) => format!("#{subject}#{}", note.text),
+            None => note.text.clone(),
+        };
+        x.leaf("cbc:Note", "", &text);
+    }
+    if !credit_note {
+        x.some("cbc:TaxPointDate", data.tax_point_date.map(iso).as_deref());
+    }
     x.leaf("cbc:DocumentCurrencyCode", "", code);
+    if let Some(tax) = &data.totals.tax_accounting {
+        x.leaf("cbc:TaxCurrencyCode", "", tax.currency().as_str());
+    }
+    x.some("cbc:AccountingCost", references.accounting.as_deref());
     x.some("cbc:BuyerReference", data.buyer_reference.as_deref());
-    for (tag, party) in [("cac:AccountingSupplierParty", &data.seller), ("cac:AccountingCustomerParty", &data.buyer)] {
+    if data.period.is_some() || data.tax_point_code.is_some() {
+        let period = data.period.as_ref();
+        x.open("cac:InvoicePeriod", "");
+        x.some("cbc:StartDate", period.and_then(|p| p.start).map(iso).as_deref());
+        x.some("cbc:EndDate", period.and_then(|p| p.end).map(iso).as_deref());
+        x.some("cbc:DescriptionCode", data.tax_point_code.as_deref());
+        x.close("cac:InvoicePeriod");
+    }
+    if references.order.is_some() || references.sales_order.is_some() {
+        x.open("cac:OrderReference", "");
+        x.leaf("cbc:ID", "", references.order.as_deref().unwrap_or("NA"));
+        x.some("cbc:SalesOrderID", references.sales_order.as_deref());
+        x.close("cac:OrderReference");
+    }
+    for preceding in &data.preceding {
+        x.open("cac:BillingReference", "");
+        x.open("cac:InvoiceDocumentReference", "");
+        x.leaf("cbc:ID", "", &preceding.number);
+        x.some("cbc:IssueDate", preceding.date.map(iso).as_deref());
+        x.close("cac:InvoiceDocumentReference");
+        x.close("cac:BillingReference");
+    }
+    if let Some(despatch) = &references.despatch_advice {
+        x.wrapped("cac:DespatchDocumentReference", "cbc:ID", "", despatch);
+    }
+    if let Some(receipt) = &references.receiving_advice {
+        x.wrapped("cac:ReceiptDocumentReference", "cbc:ID", "", receipt);
+    }
+    let originator = |x: &mut Writer| {
+        if let Some(tender) = &references.tender {
+            x.wrapped("cac:OriginatorDocumentReference", "cbc:ID", "", tender);
+        }
+    };
+    if !credit_note {
+        originator(&mut x);
+    }
+    if let Some(contract) = &references.contract {
+        x.wrapped("cac:ContractDocumentReference", "cbc:ID", "", contract);
+    }
+    for document in &data.attachments {
+        x.open("cac:AdditionalDocumentReference", "");
+        x.leaf("cbc:ID", "", &document.reference);
+        x.some("cbc:DocumentDescription", document.description.as_deref());
+        if document.file.is_some() || document.uri.is_some() {
+            x.open("cac:Attachment", "");
+            if let Some(file) = &document.file {
+                let bytes = invoice.files.get(&file.hash).map(|b| BASE64.encode(b)).unwrap_or_default();
+                let attributes = format!(
+                    "{}{}",
+                    attribute("mimeCode", &file.media_type),
+                    attribute("filename", file.name.as_deref().unwrap_or_default())
+                );
+                x.leaf("cbc:EmbeddedDocumentBinaryObject", &attributes, &bytes);
+            }
+            if let Some(uri) = &document.uri {
+                x.wrapped("cac:ExternalReference", "cbc:URI", "", uri);
+            }
+            x.close("cac:Attachment");
+        }
+        x.close("cac:AdditionalDocumentReference");
+    }
+    if let Some(object) = &references.object {
+        x.open("cac:AdditionalDocumentReference", "");
+        x.identifier("cbc:ID", "schemeID", object);
+        x.leaf("cbc:DocumentTypeCode", "", "130");
+        x.close("cac:AdditionalDocumentReference");
+    }
+    if credit_note {
+        if let Some(project) = &references.project {
+            x.open("cac:AdditionalDocumentReference", "");
+            x.leaf("cbc:ID", "", project);
+            x.leaf("cbc:DocumentTypeCode", "", "50");
+            x.close("cac:AdditionalDocumentReference");
+        }
+        originator(&mut x);
+    } else if let Some(project) = &references.project {
+        x.wrapped("cac:ProjectReference", "cbc:ID", "", project);
+    }
+    let payment = data.payment.as_ref();
+    let creditor = payment.and_then(|p| p.direct_debit.as_ref()).map(|d| d.creditor.as_str());
+    for (tag, party, role) in [
+        ("cac:AccountingSupplierParty", &data.seller, Role::Seller),
+        ("cac:AccountingCustomerParty", &data.buyer, Role::Buyer),
+    ] {
         x.open(tag, "");
         x.open("cac:Party", "");
-        if let Some(endpoint) = &party.endpoint {
-            x.leaf("cbc:EndpointID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
-        }
-        if tag == "cac:AccountingSupplierParty"
-            && let Some(debit) = &data.direct_debit
-        {
-            x.open("cac:PartyIdentification", "");
-            x.leaf("cbc:ID", &attribute("schemeID", "SEPA"), &debit.creditor);
-            x.close("cac:PartyIdentification");
-        }
-        x.open("cac:PostalAddress", "");
-        x.some("cbc:StreetName", party.street.as_deref());
-        x.some("cbc:CityName", party.city.as_deref());
-        x.some("cbc:PostalZone", party.postcode.as_deref());
-        x.open("cac:Country", "");
-        x.some("cbc:IdentificationCode", party.country.as_ref().map(Country::as_str));
-        x.close("cac:Country");
-        x.close("cac:PostalAddress");
-        for (id, scheme) in [(&party.vat_id, "VAT"), (&party.tax_number, "FC")] {
-            if let Some(id) = id {
-                x.open("cac:PartyTaxScheme", "");
-                x.leaf("cbc:CompanyID", "", id);
-                x.open("cac:TaxScheme", "");
-                x.leaf("cbc:ID", "", scheme);
-                x.close("cac:TaxScheme");
-                x.close("cac:PartyTaxScheme");
-            }
-        }
-        x.open("cac:PartyLegalEntity", "");
-        x.leaf("cbc:RegistrationName", "", &party.name);
-        x.close("cac:PartyLegalEntity");
-        if let Some(contact) = &party.contact {
-            x.open("cac:Contact", "");
-            x.some("cbc:Name", contact.name.as_deref());
-            x.some("cbc:Telephone", contact.phone.as_deref());
-            x.some("cbc:ElectronicMail", contact.email.as_deref());
-            x.close("cac:Contact");
-        }
+        write_ubl_party(&mut x, party, role, if role == Role::Seller { creditor } else { None });
         x.close("cac:Party");
         x.close(tag);
     }
-    if let Some(delivery) = data.delivery_date {
+    if let Some(payee) = &data.payee {
+        x.open("cac:PayeeParty", "");
+        write_ubl_party(&mut x, payee, Role::Payee, None);
+        x.close("cac:PayeeParty");
+    }
+    if let Some(representative) = &data.tax_representative {
+        x.open("cac:TaxRepresentativeParty", "");
+        write_ubl_party(&mut x, representative, Role::TaxRepresentative, None);
+        x.close("cac:TaxRepresentativeParty");
+    }
+    if data.delivery_date.is_some() || data.delivery.is_some() {
         x.open("cac:Delivery", "");
-        x.leaf("cbc:ActualDeliveryDate", "", &iso(delivery));
+        x.some("cbc:ActualDeliveryDate", data.delivery_date.map(iso).as_deref());
+        if let Some(delivery) = &data.delivery {
+            if delivery.location.is_some() || delivery.address.is_some() {
+                x.open("cac:DeliveryLocation", "");
+                if let Some(location) = &delivery.location {
+                    x.identifier("cbc:ID", "schemeID", location);
+                }
+                if let Some(address) = &delivery.address {
+                    write_ubl_address(&mut x, "cac:Address", address);
+                }
+                x.close("cac:DeliveryLocation");
+            }
+            if let Some(name) = &delivery.name {
+                x.open("cac:DeliveryParty", "");
+                x.wrapped("cac:PartyName", "cbc:Name", "", name);
+                x.close("cac:DeliveryParty");
+            }
+        }
         x.close("cac:Delivery");
     }
-    if let Some(means) = &data.payment_means {
-        x.open("cac:PaymentMeans", "");
-        x.leaf("cbc:PaymentMeansCode", "", means);
-        if credit_note && let Some(due) = data.due_date {
-            x.leaf("cbc:PaymentDueDate", "", &iso(due));
+    if let Some(payment) = payment {
+        // One payment means per account to transfer to, at least one.
+        let accounts: Vec<Option<&CreditTransfer>> =
+            if payment.transfers.is_empty() { vec![None] } else { payment.transfers.iter().map(Some).collect() };
+        for (index, transfer) in accounts.into_iter().enumerate() {
+            let first = index == 0;
+            x.open("cac:PaymentMeans", "");
+            let name = payment.means_text.as_deref().filter(|_| first).map(|n| attribute("name", n));
+            x.leaf("cbc:PaymentMeansCode", &name.unwrap_or_default(), &payment.means);
+            if credit_note && first {
+                x.some("cbc:PaymentDueDate", data.due_date.map(iso).as_deref());
+            }
+            x.some("cbc:PaymentID", payment.remittance.as_deref().filter(|_| first));
+            if let Some(card) = payment.card.as_ref().filter(|_| first) {
+                x.open("cac:CardAccount", "");
+                x.leaf("cbc:PrimaryAccountNumberID", "", &card.number);
+                x.leaf("cbc:NetworkID", "", "NA");
+                x.some("cbc:HolderName", card.holder.as_deref());
+                x.close("cac:CardAccount");
+            }
+            if let Some(transfer) = transfer {
+                x.open("cac:PayeeFinancialAccount", "");
+                x.leaf("cbc:ID", "", &transfer.account);
+                x.some("cbc:Name", transfer.name.as_deref());
+                if let Some(provider) = &transfer.provider {
+                    x.wrapped("cac:FinancialInstitutionBranch", "cbc:ID", "", provider);
+                }
+                x.close("cac:PayeeFinancialAccount");
+            }
+            if let Some(debit) = payment.direct_debit.as_ref().filter(|_| first) {
+                x.open("cac:PaymentMandate", "");
+                x.leaf("cbc:ID", "", &debit.mandate);
+                x.wrapped("cac:PayerFinancialAccount", "cbc:ID", "", &debit.debited);
+                x.close("cac:PaymentMandate");
+            }
+            x.close("cac:PaymentMeans");
         }
-        if let Some(iban) = &data.iban {
-            x.open("cac:PayeeFinancialAccount", "");
-            x.leaf("cbc:ID", "", iban);
-            x.close("cac:PayeeFinancialAccount");
-        }
-        if let Some(debit) = &data.direct_debit {
-            x.open("cac:PaymentMandate", "");
-            x.leaf("cbc:ID", "", &debit.mandate);
-            x.open("cac:PayerFinancialAccount", "");
-            x.leaf("cbc:ID", "", &debit.debited);
-            x.close("cac:PayerFinancialAccount");
-            x.close("cac:PaymentMandate");
-        }
-        x.close("cac:PaymentMeans");
     }
     if let Some(terms) = &data.payment_terms {
-        x.open("cac:PaymentTerms", "");
-        x.leaf("cbc:Note", "", terms);
-        x.close("cac:PaymentTerms");
+        x.wrapped("cac:PaymentTerms", "cbc:Note", "", &written_terms(terms));
+    }
+    for (items, charge) in [(&data.allowances, false), (&data.charges, true)] {
+        for item in items {
+            write_ubl_allowance_charge(&mut x, item, charge, &amount);
+        }
     }
     x.open("cac:TaxTotal", "");
     x.leaf("cbc:TaxAmount", &currency, &amount(&data.totals.tax));
@@ -741,19 +1534,36 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
         x.leaf("cbc:TaxAmount", &currency, &amount(&tax.tax));
         x.open("cac:TaxCategory", "");
         x.leaf("cbc:ID", "", category_code(tax.category));
-        x.some("cbc:Percent", written_rate(tax.category, tax.rate).as_deref());
+        x.leaf("cbc:Percent", "", &breakdown_rate(tax.rate));
+        x.some("cbc:TaxExemptionReasonCode", tax.exemption_code.as_deref());
         x.some("cbc:TaxExemptionReason", tax.exemption.as_deref());
-        x.open("cac:TaxScheme", "");
-        x.leaf("cbc:ID", "", "VAT");
-        x.close("cac:TaxScheme");
+        x.wrapped("cac:TaxScheme", "cbc:ID", "", "VAT");
         x.close("cac:TaxCategory");
         x.close("cac:TaxSubtotal");
     }
     x.close("cac:TaxTotal");
+    if let Some(tax) = &data.totals.tax_accounting {
+        let tax_decimals = decimals_of(tax.currency(), currencies)?;
+        x.open("cac:TaxTotal", "");
+        x.leaf("cbc:TaxAmount", &attribute("currencyID", tax.currency().as_str()), &written(tax, tax_decimals));
+        x.close("cac:TaxTotal");
+    }
+    let sum = |items: &[AllowanceCharge]| {
+        Money::new(items.iter().map(|a| a.amount.base_units()).sum(), data.currency.clone())
+            .ok_or_else(|| WriteError::Currency(code.to_owned()))
+    };
+    let lines = Money::new(data.lines.iter().map(|l| l.net.base_units()).sum(), data.currency.clone())
+        .ok_or_else(|| WriteError::Currency(code.to_owned()))?;
     x.open("cac:LegalMonetaryTotal", "");
-    x.leaf("cbc:LineExtensionAmount", &currency, &amount(&data.totals.net));
+    x.leaf("cbc:LineExtensionAmount", &currency, &amount(&lines));
     x.leaf("cbc:TaxExclusiveAmount", &currency, &amount(&data.totals.net));
     x.leaf("cbc:TaxInclusiveAmount", &currency, &amount(&data.totals.gross));
+    if !data.allowances.is_empty() {
+        x.leaf("cbc:AllowanceTotalAmount", &currency, &amount(&sum(&data.allowances)?));
+    }
+    if !data.charges.is_empty() {
+        x.leaf("cbc:ChargeTotalAmount", &currency, &amount(&sum(&data.charges)?));
+    }
     if let Some(prepaid) = &data.totals.prepaid {
         x.leaf("cbc:PrepaidAmount", &currency, &amount(prepaid));
     }
@@ -770,21 +1580,81 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     for line in &data.lines {
         x.open(line_tag, "");
         x.some("cbc:ID", line.id.as_deref());
+        x.some("cbc:Note", line.note.as_deref());
         let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
         x.leaf(quantity_tag, &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
         x.leaf("cbc:LineExtensionAmount", &currency, &amount(&line.net));
+        x.some("cbc:AccountingCost", line.accounting.as_deref());
+        if let Some(period) = &line.period {
+            x.open("cac:InvoicePeriod", "");
+            x.some("cbc:StartDate", period.start.map(iso).as_deref());
+            x.some("cbc:EndDate", period.end.map(iso).as_deref());
+            x.close("cac:InvoicePeriod");
+        }
+        if let Some(order_line) = &line.order_line {
+            x.wrapped("cac:OrderLineReference", "cbc:LineID", "", order_line);
+        }
+        if let Some(object) = &line.object {
+            x.open("cac:DocumentReference", "");
+            x.identifier("cbc:ID", "schemeID", object);
+            x.leaf("cbc:DocumentTypeCode", "", "130");
+            x.close("cac:DocumentReference");
+        }
+        for (items, charge) in [(&line.allowances, false), (&line.charges, true)] {
+            for item in items {
+                write_ubl_allowance_charge(&mut x, item, charge, &amount);
+            }
+        }
         x.open("cac:Item", "");
+        x.some("cbc:Description", line.description.as_deref());
         x.leaf("cbc:Name", "", &line.name);
+        if let Some(id) = &line.buyer_item {
+            x.wrapped("cac:BuyersItemIdentification", "cbc:ID", "", id);
+        }
+        if let Some(id) = &line.seller_item {
+            x.wrapped("cac:SellersItemIdentification", "cbc:ID", "", id);
+        }
+        if let Some(id) = &line.standard_item {
+            x.open("cac:StandardItemIdentification", "");
+            x.identifier("cbc:ID", "schemeID", id);
+            x.close("cac:StandardItemIdentification");
+        }
+        if let Some(origin) = &line.origin {
+            x.wrapped("cac:OriginCountry", "cbc:IdentificationCode", "", origin.as_str());
+        }
+        for class in &line.classifications {
+            let mut attributes = attribute("listID", &class.list);
+            if let Some(version) = &class.version {
+                attributes.push_str(&attribute("listVersionID", version));
+            }
+            x.wrapped("cac:CommodityClassification", "cbc:ItemClassificationCode", &attributes, &class.code);
+        }
         x.open("cac:ClassifiedTaxCategory", "");
         x.leaf("cbc:ID", "", category_code(line.category));
         x.some("cbc:Percent", written_rate(line.category, line.rate).as_deref());
-        x.open("cac:TaxScheme", "");
-        x.leaf("cbc:ID", "", "VAT");
-        x.close("cac:TaxScheme");
+        x.wrapped("cac:TaxScheme", "cbc:ID", "", "VAT");
         x.close("cac:ClassifiedTaxCategory");
+        for property in &line.attributes {
+            x.open("cac:AdditionalItemProperty", "");
+            x.leaf("cbc:Name", "", &property.name);
+            x.leaf("cbc:Value", "", &property.value);
+            x.close("cac:AdditionalItemProperty");
+        }
         x.close("cac:Item");
         x.open("cac:Price", "");
         x.leaf("cbc:PriceAmount", &currency, &line.price.map(|p| p.to_string()).unwrap_or_default());
+        if let Some(quantity) = line.price_quantity {
+            x.leaf("cbc:BaseQuantity", &unit, &quantity.to_string());
+        }
+        if line.gross_price.is_some() || line.price_discount.is_some() {
+            x.open("cac:AllowanceCharge", "");
+            x.leaf("cbc:ChargeIndicator", "", "false");
+            x.leaf("cbc:Amount", &currency, &line.price_discount.map_or_else(|| "0".to_owned(), |d| d.to_string()));
+            if let Some(gross) = line.gross_price {
+                x.leaf("cbc:BaseAmount", &currency, &gross.to_string());
+            }
+            x.close("cac:AllowanceCharge");
+        }
         x.close("cac:Price");
         x.close(line_tag);
     }
@@ -792,17 +1662,111 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     Ok(x.out)
 }
 
+fn write_cii_address(x: &mut Writer, address: &PostalAddress) {
+    x.open("ram:PostalTradeAddress", "");
+    x.some("ram:PostcodeCode", address.postcode.as_deref());
+    for (tag, line) in ["ram:LineOne", "ram:LineTwo", "ram:LineThree"].iter().zip(&address.lines) {
+        x.leaf(tag, "", line);
+    }
+    x.some("ram:CityName", address.city.as_deref());
+    x.leaf("ram:CountryID", "", address.country.as_str());
+    x.some("ram:CountrySubDivisionName", address.subdivision.as_deref());
+    x.close("ram:PostalTradeAddress");
+}
+
+fn write_cii_identifiers(x: &mut Writer, identifiers: &[Identifier]) {
+    for id in identifiers.iter().filter(|i| i.scheme.is_none()) {
+        x.leaf("ram:ID", "", &id.id);
+    }
+    for id in identifiers.iter().filter(|i| i.scheme.is_some()) {
+        x.identifier("ram:GlobalID", "schemeID", id);
+    }
+}
+
+fn write_cii_party(x: &mut Writer, tag: &str, party: &InvoiceParty) {
+    x.open(tag, "");
+    write_cii_identifiers(x, &party.identifiers);
+    x.leaf("ram:Name", "", &party.name);
+    x.some("ram:Description", party.legal_info.as_deref());
+    if party.registration.is_some() || party.trading_name.is_some() {
+        x.open("ram:SpecifiedLegalOrganization", "");
+        if let Some(registration) = &party.registration {
+            x.identifier("ram:ID", "schemeID", registration);
+        }
+        x.some("ram:TradingBusinessName", party.trading_name.as_deref());
+        x.close("ram:SpecifiedLegalOrganization");
+    }
+    if let Some(contact) = &party.contact {
+        x.open("ram:DefinedTradeContact", "");
+        x.some("ram:PersonName", contact.name.as_deref());
+        if let Some(phone) = &contact.phone {
+            x.wrapped("ram:TelephoneUniversalCommunication", "ram:CompleteNumber", "", phone);
+        }
+        if let Some(email) = &contact.email {
+            x.wrapped("ram:EmailURIUniversalCommunication", "ram:URIID", "", email);
+        }
+        x.close("ram:DefinedTradeContact");
+    }
+    if let Some(address) = &party.address {
+        write_cii_address(x, address);
+    }
+    if let Some(endpoint) = &party.endpoint {
+        x.wrapped(
+            "ram:URIUniversalCommunication",
+            "ram:URIID",
+            &attribute("schemeID", &endpoint.scheme),
+            &endpoint.address,
+        );
+    }
+    for (id, scheme) in [(&party.tax_number, "FC"), (&party.vat_id, "VA")] {
+        if let Some(id) = id {
+            x.wrapped("ram:SpecifiedTaxRegistration", "ram:ID", &attribute("schemeID", scheme), id);
+        }
+    }
+    x.close(tag);
+}
+
+fn write_cii_allowance_charge(x: &mut Writer, item: &AllowanceCharge, charge: bool, amount: &dyn Fn(&Money) -> String) {
+    x.open("ram:SpecifiedTradeAllowanceCharge", "");
+    x.wrapped("ram:ChargeIndicator", "udt:Indicator", "", if charge { "true" } else { "false" });
+    x.some("ram:CalculationPercent", item.percent.map(|p| p.to_string()).as_deref());
+    x.some("ram:BasisAmount", item.base.as_ref().map(amount).as_deref());
+    x.leaf("ram:ActualAmount", "", &amount(&item.amount));
+    x.some("ram:ReasonCode", item.reason_code.as_deref());
+    x.some("ram:Reason", item.reason.as_deref());
+    if let Some(category) = item.category {
+        x.open("ram:CategoryTradeTax", "");
+        x.leaf("ram:TypeCode", "", "VAT");
+        x.leaf("ram:CategoryCode", "", category_code(category));
+        x.some("ram:RateApplicablePercent", written_rate(category, item.rate).as_deref());
+        x.close("ram:CategoryTradeTax");
+    }
+    x.close("ram:SpecifiedTradeAllowanceCharge");
+}
+
+fn write_cii_period(x: &mut Writer, period: &Period) {
+    x.open("ram:BillingSpecifiedPeriod", "");
+    for (tag, day) in [("ram:StartDateTime", period.start), ("ram:EndDateTime", period.end)] {
+        if let Some(day) = day {
+            x.wrapped(tag, "udt:DateTimeString", &attribute("format", "102"), &compact(day));
+        }
+    }
+    x.close("ram:BillingSpecifiedPeriod");
+}
+
 /// Writes an invoice or credit note as XRechnung 3.0 in the UN/CEFACT CII syntax – also the XML a ZUGFeRD or
 /// Factur-X PDF carries in its profile XRECHNUNG.
 pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
     check_xrechnung(invoice)?;
     let data = &invoice.invoice;
+    if data.preceding.len() > 1 {
+        return Err(WriteError::Syntax("BG-3"));
+    }
     let code = data.currency.as_str();
-    let decimals = currencies
-        .get(&data.currency)
-        .and_then(|d| d.decimals())
-        .ok_or_else(|| WriteError::Currency(code.to_owned()))?;
+    let decimals = decimals_of(&data.currency, currencies)?;
     let amount = |m: &Money| written(m, decimals);
+    let references = data.references.clone().unwrap_or_default();
+    let date_102 = attribute("format", "102");
     let mut x = Writer::new();
     x.open(
         "rsm:CrossIndustryInvoice",
@@ -818,36 +1782,82 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
         ),
     );
     x.open("rsm:ExchangedDocumentContext", "");
-    x.open("ram:BusinessProcessSpecifiedDocumentContextParameter", "");
-    x.leaf("ram:ID", "", PROCESS);
-    x.close("ram:BusinessProcessSpecifiedDocumentContextParameter");
-    x.open("ram:GuidelineSpecifiedDocumentContextParameter", "");
-    x.leaf("ram:ID", "", XRECHNUNG);
-    x.close("ram:GuidelineSpecifiedDocumentContextParameter");
+    x.wrapped("ram:BusinessProcessSpecifiedDocumentContextParameter", "ram:ID", "", PROCESS);
+    x.wrapped("ram:GuidelineSpecifiedDocumentContextParameter", "ram:ID", "", XRECHNUNG);
     x.close("rsm:ExchangedDocumentContext");
     x.open("rsm:ExchangedDocument", "");
     x.leaf("ram:ID", "", &invoice.number);
-    x.leaf("ram:TypeCode", "", type_code(invoice.kind));
-    x.open("ram:IssueDateTime", "");
-    x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(invoice.date));
-    x.close("ram:IssueDateTime");
+    x.leaf("ram:TypeCode", "", type_code(invoice));
+    x.wrapped("ram:IssueDateTime", "udt:DateTimeString", &date_102, &compact(invoice.date));
+    for note in &data.notes {
+        x.open("ram:IncludedNote", "");
+        x.leaf("ram:Content", "", &note.text);
+        x.some("ram:SubjectCode", note.subject.as_deref());
+        x.close("ram:IncludedNote");
+    }
     x.close("rsm:ExchangedDocument");
     x.open("rsm:SupplyChainTradeTransaction", "");
     for line in &data.lines {
         x.open("ram:IncludedSupplyChainTradeLineItem", "");
         x.open("ram:AssociatedDocumentLineDocument", "");
         x.some("ram:LineID", line.id.as_deref());
+        if let Some(note) = &line.note {
+            x.wrapped("ram:IncludedNote", "ram:Content", "", note);
+        }
         x.close("ram:AssociatedDocumentLineDocument");
         x.open("ram:SpecifiedTradeProduct", "");
+        if let Some(id) = &line.standard_item {
+            x.identifier("ram:GlobalID", "schemeID", id);
+        }
+        x.some("ram:SellerAssignedID", line.seller_item.as_deref());
+        x.some("ram:BuyerAssignedID", line.buyer_item.as_deref());
         x.leaf("ram:Name", "", &line.name);
+        x.some("ram:Description", line.description.as_deref());
+        for property in &line.attributes {
+            x.open("ram:ApplicableProductCharacteristic", "");
+            x.leaf("ram:Description", "", &property.name);
+            x.leaf("ram:Value", "", &property.value);
+            x.close("ram:ApplicableProductCharacteristic");
+        }
+        for class in &line.classifications {
+            let mut attributes = attribute("listID", &class.list);
+            if let Some(version) = &class.version {
+                attributes.push_str(&attribute("listVersionID", version));
+            }
+            x.wrapped("ram:DesignatedProductClassification", "ram:ClassCode", &attributes, &class.code);
+        }
+        if let Some(origin) = &line.origin {
+            x.wrapped("ram:OriginTradeCountry", "ram:ID", "", origin.as_str());
+        }
         x.close("ram:SpecifiedTradeProduct");
+        let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
         x.open("ram:SpecifiedLineTradeAgreement", "");
+        if let Some(order_line) = &line.order_line {
+            x.wrapped("ram:BuyerOrderReferencedDocument", "ram:LineID", "", order_line);
+        }
+        if line.gross_price.is_some() || line.price_discount.is_some() {
+            x.open("ram:GrossPriceProductTradePrice", "");
+            let gross = line.gross_price.or(line.price).map(|p| p.to_string()).unwrap_or_default();
+            x.leaf("ram:ChargeAmount", "", &gross);
+            if let Some(quantity) = line.price_quantity {
+                x.leaf("ram:BasisQuantity", &unit, &quantity.to_string());
+            }
+            if let Some(discount) = line.price_discount {
+                x.open("ram:AppliedTradeAllowanceCharge", "");
+                x.wrapped("ram:ChargeIndicator", "udt:Indicator", "", "false");
+                x.leaf("ram:ActualAmount", "", &discount.to_string());
+                x.close("ram:AppliedTradeAllowanceCharge");
+            }
+            x.close("ram:GrossPriceProductTradePrice");
+        }
         x.open("ram:NetPriceProductTradePrice", "");
         x.leaf("ram:ChargeAmount", "", &line.price.map(|p| p.to_string()).unwrap_or_default());
+        if let Some(quantity) = line.price_quantity {
+            x.leaf("ram:BasisQuantity", &unit, &quantity.to_string());
+        }
         x.close("ram:NetPriceProductTradePrice");
         x.close("ram:SpecifiedLineTradeAgreement");
         x.open("ram:SpecifiedLineTradeDelivery", "");
-        let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
         x.leaf("ram:BilledQuantity", &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
         x.close("ram:SpecifiedLineTradeDelivery");
         x.open("ram:SpecifiedLineTradeSettlement", "");
@@ -856,107 +1866,200 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
         x.leaf("ram:CategoryCode", "", category_code(line.category));
         x.some("ram:RateApplicablePercent", written_rate(line.category, line.rate).as_deref());
         x.close("ram:ApplicableTradeTax");
-        x.open("ram:SpecifiedTradeSettlementLineMonetarySummation", "");
-        x.leaf("ram:LineTotalAmount", "", &amount(&line.net));
-        x.close("ram:SpecifiedTradeSettlementLineMonetarySummation");
+        if let Some(period) = &line.period {
+            write_cii_period(&mut x, period);
+        }
+        for (items, charge) in [(&line.allowances, false), (&line.charges, true)] {
+            for item in items {
+                write_cii_allowance_charge(&mut x, item, charge, &amount);
+            }
+        }
+        x.wrapped("ram:SpecifiedTradeSettlementLineMonetarySummation", "ram:LineTotalAmount", "", &amount(&line.net));
+        if let Some(object) = &line.object {
+            x.open("ram:AdditionalReferencedDocument", "");
+            x.leaf("ram:IssuerAssignedID", "", &object.id);
+            x.leaf("ram:TypeCode", "", "130");
+            x.some("ram:ReferenceTypeCode", object.scheme.as_deref());
+            x.close("ram:AdditionalReferencedDocument");
+        }
+        if let Some(accounting) = &line.accounting {
+            x.wrapped("ram:ReceivableSpecifiedTradeAccountingAccount", "ram:ID", "", accounting);
+        }
         x.close("ram:SpecifiedLineTradeSettlement");
         x.close("ram:IncludedSupplyChainTradeLineItem");
     }
     x.open("ram:ApplicableHeaderTradeAgreement", "");
     x.some("ram:BuyerReference", data.buyer_reference.as_deref());
-    for (tag, party) in [("ram:SellerTradeParty", &data.seller), ("ram:BuyerTradeParty", &data.buyer)] {
-        x.open(tag, "");
-        x.leaf("ram:Name", "", &party.name);
-        if let Some(contact) = &party.contact {
-            x.open("ram:DefinedTradeContact", "");
-            x.some("ram:PersonName", contact.name.as_deref());
-            if let Some(phone) = &contact.phone {
-                x.open("ram:TelephoneUniversalCommunication", "");
-                x.leaf("ram:CompleteNumber", "", phone);
-                x.close("ram:TelephoneUniversalCommunication");
-            }
-            if let Some(email) = &contact.email {
-                x.open("ram:EmailURIUniversalCommunication", "");
-                x.leaf("ram:URIID", "", email);
-                x.close("ram:EmailURIUniversalCommunication");
-            }
-            x.close("ram:DefinedTradeContact");
+    write_cii_party(&mut x, "ram:SellerTradeParty", &data.seller);
+    write_cii_party(&mut x, "ram:BuyerTradeParty", &data.buyer);
+    if let Some(representative) = &data.tax_representative {
+        write_cii_party(&mut x, "ram:SellerTaxRepresentativeTradeParty", representative);
+    }
+    if let Some(sales_order) = &references.sales_order {
+        x.wrapped("ram:SellerOrderReferencedDocument", "ram:IssuerAssignedID", "", sales_order);
+    }
+    if let Some(order) = &references.order {
+        x.wrapped("ram:BuyerOrderReferencedDocument", "ram:IssuerAssignedID", "", order);
+    }
+    if let Some(contract) = &references.contract {
+        x.wrapped("ram:ContractReferencedDocument", "ram:IssuerAssignedID", "", contract);
+    }
+    for document in &data.attachments {
+        x.open("ram:AdditionalReferencedDocument", "");
+        x.leaf("ram:IssuerAssignedID", "", &document.reference);
+        x.some("ram:URIID", document.uri.as_deref());
+        x.leaf("ram:TypeCode", "", "916");
+        x.some("ram:Name", document.description.as_deref());
+        if let Some(file) = &document.file {
+            let bytes = invoice.files.get(&file.hash).map(|b| BASE64.encode(b)).unwrap_or_default();
+            let attributes = format!(
+                "{}{}",
+                attribute("mimeCode", &file.media_type),
+                attribute("filename", file.name.as_deref().unwrap_or_default())
+            );
+            x.leaf("ram:AttachmentBinaryObject", &attributes, &bytes);
         }
-        x.open("ram:PostalTradeAddress", "");
-        x.some("ram:PostcodeCode", party.postcode.as_deref());
-        x.some("ram:LineOne", party.street.as_deref());
-        x.some("ram:CityName", party.city.as_deref());
-        x.some("ram:CountryID", party.country.as_ref().map(Country::as_str));
-        x.close("ram:PostalTradeAddress");
-        if let Some(endpoint) = &party.endpoint {
-            x.open("ram:URIUniversalCommunication", "");
-            x.leaf("ram:URIID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
-            x.close("ram:URIUniversalCommunication");
-        }
-        for (id, scheme) in [(&party.tax_number, "FC"), (&party.vat_id, "VA")] {
-            if let Some(id) = id {
-                x.open("ram:SpecifiedTaxRegistration", "");
-                x.leaf("ram:ID", &attribute("schemeID", scheme), id);
-                x.close("ram:SpecifiedTaxRegistration");
-            }
-        }
-        x.close(tag);
+        x.close("ram:AdditionalReferencedDocument");
+    }
+    if let Some(tender) = &references.tender {
+        x.open("ram:AdditionalReferencedDocument", "");
+        x.leaf("ram:IssuerAssignedID", "", tender);
+        x.leaf("ram:TypeCode", "", "50");
+        x.close("ram:AdditionalReferencedDocument");
+    }
+    if let Some(object) = &references.object {
+        x.open("ram:AdditionalReferencedDocument", "");
+        x.leaf("ram:IssuerAssignedID", "", &object.id);
+        x.leaf("ram:TypeCode", "", "130");
+        x.some("ram:ReferenceTypeCode", object.scheme.as_deref());
+        x.close("ram:AdditionalReferencedDocument");
+    }
+    if let Some(project) = &references.project {
+        x.open("ram:SpecifiedProcuringProject", "");
+        x.leaf("ram:ID", "", project);
+        x.leaf("ram:Name", "", "Project reference");
+        x.close("ram:SpecifiedProcuringProject");
     }
     x.close("ram:ApplicableHeaderTradeAgreement");
     x.open("ram:ApplicableHeaderTradeDelivery", "");
+    if let Some(delivery) = &data.delivery {
+        x.open("ram:ShipToTradeParty", "");
+        if let Some(location) = &delivery.location {
+            write_cii_identifiers(&mut x, std::slice::from_ref(location));
+        }
+        x.some("ram:Name", delivery.name.as_deref());
+        if let Some(address) = &delivery.address {
+            write_cii_address(&mut x, address);
+        }
+        x.close("ram:ShipToTradeParty");
+    }
     if let Some(delivery) = data.delivery_date {
         x.open("ram:ActualDeliverySupplyChainEvent", "");
-        x.open("ram:OccurrenceDateTime", "");
-        x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(delivery));
-        x.close("ram:OccurrenceDateTime");
+        x.wrapped("ram:OccurrenceDateTime", "udt:DateTimeString", &date_102, &compact(delivery));
         x.close("ram:ActualDeliverySupplyChainEvent");
+    }
+    if let Some(despatch) = &references.despatch_advice {
+        x.wrapped("ram:DespatchAdviceReferencedDocument", "ram:IssuerAssignedID", "", despatch);
+    }
+    if let Some(receipt) = &references.receiving_advice {
+        x.wrapped("ram:ReceivingAdviceReferencedDocument", "ram:IssuerAssignedID", "", receipt);
     }
     x.close("ram:ApplicableHeaderTradeDelivery");
     x.open("ram:ApplicableHeaderTradeSettlement", "");
-    if let Some(debit) = &data.direct_debit {
+    let payment = data.payment.as_ref();
+    if let Some(debit) = payment.and_then(|p| p.direct_debit.as_ref()) {
         x.leaf("ram:CreditorReferenceID", "", &debit.creditor);
     }
-    x.leaf("ram:InvoiceCurrencyCode", "", code);
-    if let Some(means) = &data.payment_means {
-        x.open("ram:SpecifiedTradeSettlementPaymentMeans", "");
-        x.leaf("ram:TypeCode", "", means);
-        if let Some(debit) = &data.direct_debit {
-            x.open("ram:PayerPartyDebtorFinancialAccount", "");
-            x.leaf("ram:IBANID", "", &debit.debited);
-            x.close("ram:PayerPartyDebtorFinancialAccount");
-        }
-        if let Some(iban) = &data.iban {
-            x.open("ram:PayeePartyCreditorFinancialAccount", "");
-            x.leaf("ram:IBANID", "", iban);
-            x.close("ram:PayeePartyCreditorFinancialAccount");
-        }
-        x.close("ram:SpecifiedTradeSettlementPaymentMeans");
+    x.some("ram:PaymentReference", payment.and_then(|p| p.remittance.as_deref()));
+    if let Some(tax) = &data.totals.tax_accounting {
+        x.leaf("ram:TaxCurrencyCode", "", tax.currency().as_str());
     }
-    for tax in &data.taxes {
+    x.leaf("ram:InvoiceCurrencyCode", "", code);
+    if let Some(payee) = &data.payee {
+        write_cii_party(&mut x, "ram:PayeeTradeParty", payee);
+    }
+    if let Some(payment) = payment {
+        let accounts: Vec<Option<&CreditTransfer>> =
+            if payment.transfers.is_empty() { vec![None] } else { payment.transfers.iter().map(Some).collect() };
+        for (index, transfer) in accounts.into_iter().enumerate() {
+            let first = index == 0;
+            x.open("ram:SpecifiedTradeSettlementPaymentMeans", "");
+            x.leaf("ram:TypeCode", "", &payment.means);
+            x.some("ram:Information", payment.means_text.as_deref().filter(|_| first));
+            if let Some(card) = payment.card.as_ref().filter(|_| first) {
+                x.open("ram:ApplicableTradeSettlementFinancialCard", "");
+                x.leaf("ram:ID", "", &card.number);
+                x.some("ram:CardholderName", card.holder.as_deref());
+                x.close("ram:ApplicableTradeSettlementFinancialCard");
+            }
+            if let Some(debit) = payment.direct_debit.as_ref().filter(|_| first) {
+                x.wrapped("ram:PayerPartyDebtorFinancialAccount", "ram:IBANID", "", &debit.debited);
+            }
+            if let Some(transfer) = transfer {
+                x.open("ram:PayeePartyCreditorFinancialAccount", "");
+                let tag = if is_iban(&transfer.account) { "ram:IBANID" } else { "ram:ProprietaryID" };
+                x.leaf(tag, "", &transfer.account);
+                x.some("ram:AccountName", transfer.name.as_deref());
+                x.close("ram:PayeePartyCreditorFinancialAccount");
+                if let Some(provider) = &transfer.provider {
+                    x.wrapped("ram:PayeeSpecifiedCreditorFinancialInstitution", "ram:BICID", "", provider);
+                }
+            }
+            x.close("ram:SpecifiedTradeSettlementPaymentMeans");
+        }
+    }
+    for (index, tax) in data.taxes.iter().enumerate() {
+        let first = index == 0;
         x.open("ram:ApplicableTradeTax", "");
         x.leaf("ram:CalculatedAmount", "", &amount(&tax.tax));
         x.leaf("ram:TypeCode", "", "VAT");
         x.some("ram:ExemptionReason", tax.exemption.as_deref());
         x.leaf("ram:BasisAmount", "", &amount(&tax.base));
         x.leaf("ram:CategoryCode", "", category_code(tax.category));
-        x.some("ram:RateApplicablePercent", written_rate(tax.category, tax.rate).as_deref());
+        x.some("ram:ExemptionReasonCode", tax.exemption_code.as_deref());
+        if let Some(day) = data.tax_point_date.filter(|_| first) {
+            x.wrapped("ram:TaxPointDate", "udt:DateString", &date_102, &compact(day));
+        }
+        x.some("ram:DueDateTypeCode", data.tax_point_code.as_deref().filter(|_| first).map(tax_point_to_cii));
+        x.leaf("ram:RateApplicablePercent", "", &breakdown_rate(tax.rate));
         x.close("ram:ApplicableTradeTax");
     }
-    if data.payment_terms.is_some() || data.due_date.is_some() || data.direct_debit.is_some() {
-        x.open("ram:SpecifiedTradePaymentTerms", "");
-        x.some("ram:Description", data.payment_terms.as_deref());
-        if let Some(due) = data.due_date {
-            x.open("ram:DueDateDateTime", "");
-            x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(due));
-            x.close("ram:DueDateDateTime");
+    if let Some(period) = &data.period {
+        write_cii_period(&mut x, period);
+    }
+    for (items, charge) in [(&data.allowances, false), (&data.charges, true)] {
+        for item in items {
+            write_cii_allowance_charge(&mut x, item, charge, &amount);
         }
-        x.some("ram:DirectDebitMandateID", data.direct_debit.as_ref().map(|d| d.mandate.as_str()));
+    }
+    let debit = payment.and_then(|p| p.direct_debit.as_ref());
+    if data.payment_terms.is_some() || data.due_date.is_some() || debit.is_some() {
+        x.open("ram:SpecifiedTradePaymentTerms", "");
+        x.some("ram:Description", data.payment_terms.as_deref().map(written_terms).as_deref());
+        if let Some(due) = data.due_date {
+            x.wrapped("ram:DueDateDateTime", "udt:DateTimeString", &date_102, &compact(due));
+        }
+        x.some("ram:DirectDebitMandateID", debit.map(|d| d.mandate.as_str()));
         x.close("ram:SpecifiedTradePaymentTerms");
     }
+    let sum = |items: &[AllowanceCharge]| -> i128 { items.iter().map(|a| a.amount.base_units()).sum() };
+    let units = |u: i128| -> std::result::Result<String, WriteError> {
+        Money::new(u, data.currency.clone()).map(|m| amount(&m)).ok_or_else(|| WriteError::Currency(code.to_owned()))
+    };
     x.open("ram:SpecifiedTradeSettlementHeaderMonetarySummation", "");
-    x.leaf("ram:LineTotalAmount", "", &amount(&data.totals.net));
+    x.leaf("ram:LineTotalAmount", "", &units(data.lines.iter().map(|l| l.net.base_units()).sum())?);
+    if !data.charges.is_empty() {
+        x.leaf("ram:ChargeTotalAmount", "", &units(sum(&data.charges))?);
+    }
+    if !data.allowances.is_empty() {
+        x.leaf("ram:AllowanceTotalAmount", "", &units(sum(&data.allowances))?);
+    }
     x.leaf("ram:TaxBasisTotalAmount", "", &amount(&data.totals.net));
     x.leaf("ram:TaxTotalAmount", &attribute("currencyID", code), &amount(&data.totals.tax));
+    if let Some(tax) = &data.totals.tax_accounting {
+        let tax_decimals = decimals_of(tax.currency(), currencies)?;
+        x.leaf("ram:TaxTotalAmount", &attribute("currencyID", tax.currency().as_str()), &written(tax, tax_decimals));
+    }
     if let Some(rounding) = &data.totals.rounding {
         x.leaf("ram:RoundingAmount", "", &amount(rounding));
     }
@@ -966,6 +2069,17 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     }
     x.leaf("ram:DuePayableAmount", "", &amount(&data.totals.due));
     x.close("ram:SpecifiedTradeSettlementHeaderMonetarySummation");
+    for preceding in &data.preceding {
+        x.open("ram:InvoiceReferencedDocument", "");
+        x.leaf("ram:IssuerAssignedID", "", &preceding.number);
+        if let Some(day) = preceding.date {
+            x.wrapped("ram:FormattedIssueDateTime", "qdt:DateTimeString", &date_102, &compact(day));
+        }
+        x.close("ram:InvoiceReferencedDocument");
+    }
+    if let Some(accounting) = &references.accounting {
+        x.wrapped("ram:ReceivableSpecifiedTradeAccountingAccount", "ram:ID", "", accounting);
+    }
     x.close("ram:ApplicableHeaderTradeSettlement");
     x.close("rsm:SupplyChainTradeTransaction");
     x.close("rsm:CrossIndustryInvoice");

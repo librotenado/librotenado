@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
-# Format, lints and tests of the library; the licence check (REUSE); a sign-off (DCO) on every commit of a pull
-# request. Actions are pinned by commit, with the version as a comment.
+# Format, lints and tests of the library; the written XRechnung checked by the KoSIT validator; the licence check
+# (REUSE); a sign-off (DCO) on every commit of a pull request. Actions are pinned by commit, with the version as a
+# comment, downloads by their SHA-256.
 name: CI
 
 on:
@@ -27,6 +28,34 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - run: cargo test --locked
+
+  xrechnung:
+    runs-on: ubuntu-latest
+    env:
+      VALIDATOR: https://github.com/itplr-kosit/validator/releases/download/v1.6.3/validator-1.6.3-standalone.jar
+      CONFIGURATION: https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v2026-08-31/xrechnung-3.0.2-validator-configuration-2026-08-31.zip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+      - name: KoSIT validator 1.6.3 and XRechnung configuration 3.0.2
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sSfLo validator.jar "$VALIDATOR"
+          curl -sSfLo configuration.zip "$CONFIGURATION"
+          printf '%s  %s\n' \
+            799e64befca97d4080e03608c80b85dd5a5ecc5f4ae4f35d1116ec2855b9a7c9 validator.jar \
+            2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8 configuration.zip | sha256sum -c -
+          unzip -q configuration.zip -d configuration
+          mkdir written
+      - name: Every test invoice written as XRechnung in UBL and CII
+        run: LIBROTENADO_EXPORT="$RUNNER_TEMP/written" cargo test --locked --test en16931 written_invoices_read_back_the_same
+      - name: All of them accepted
+        working-directory: ${{ runner.temp }}
+        run: |
+          java -jar validator.jar -s configuration/scenarios.xml -r configuration -o reports written/*.xml | tee result.txt
+          grep -Eq 'Rejected: +0$' result.txt
 
   licences:
     runs-on: ubuntu-latest
