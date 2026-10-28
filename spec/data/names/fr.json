@@ -902,5 +902,7 @@
   "01a18343-01c6-7c40-bba1-f38816738e4f": "Biens de faible valeur",
   "01a18343-01c7-79fb-b4ac-f70942aabddd": "Élimination des déchets",
   "01a18343-01c8-7ddd-9289-d5563bd9bca4": "Intérêts sur le financement d'immobilisations",
-  "01a18343-01c9-7871-a986-d2edc2680c82": "Frais informatiques courants"
+  "01a18343-01c9-7871-a986-d2edc2680c82": "Frais informatiques courants",
+  "EUR/0": "euro",
+  "EUR/1": "centime"
 }}

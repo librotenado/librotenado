@@ -74,8 +74,7 @@ validates against the DTD (the DTD's own content model of `Media` is not determi
   follows it once it is final.
 - Fields of GoBD Rz. 94 the protocol does not record yet: exchange rate and amount in the functional currency for a
   foreign-currency posting, authorisation by a person rather than a device, the booking period of the VAT return.
-- Account names in German for the export (names exist in English and French); account numbers of a national chart
-  alongside the identities.
+- Account numbers of a national chart alongside the identities in the export.
 - The terms of use of the DTD and of the description of the Beschreibungsstandard, which are not published under a
   licence; the library writes the reference to the DTD, not the DTD.
 - How erasing books after their retention period is recorded.

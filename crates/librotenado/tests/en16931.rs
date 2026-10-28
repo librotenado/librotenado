@@ -198,7 +198,7 @@ mod data_transfer {
         gobd::export(
             &set,
             &Chart::v0_1(),
-            &Names::v0_1("en").unwrap(),
+            &Names::v0_1("de").unwrap(),
             &CurrencyTable::v0_1(),
             &TaxTable::de(),
             &owner,
@@ -242,6 +242,7 @@ mod data_transfer {
         let journal = text("buchungen.csv");
         assert_eq!(journal.lines().count(), 1 + 5, "header, two net amounts, two VAT amounts, the supplier");
         assert!(journal.contains("\"de-in-19\";\"19\""), "{journal}");
+        assert!(journal.contains("\"Sonstiges Material\";\"Aufwand\""), "German account names: {journal}");
         assert!(text("belege.csv").contains(&format!("\"{}\"", read("03.01a-INVOICE_ubl.xml").number)));
     }
 }

@@ -59,8 +59,8 @@ which charts may be published, see the whitepaper).
 ## The chart of version 0.1
 
 The harmonised chart of version 0.1 is published as [`spec/data/chart.json`](data/chart.json), with names in
-[English](data/names/en.json) and [French](data/names/fr.json). It is built against its first national chart, the
-French Plan comptable général in its version of 1 January 2026
+[German](data/names/de.json), [English](data/names/en.json) and [French](data/names/fr.json). It is built against
+its first national chart, the French Plan comptable général in its version of 1 January 2026
 ([Autorité des normes comptables, PCG](https://www.anc.gouv.fr/files/anc/files/1_Normes_fran%C3%A7aises/Plans%20comptables/2026/PCG--1er-janvier-2026.pdf),
 articles 1121-1 and 1231-80 to 1231-89):
 
@@ -75,7 +75,8 @@ articles 1121-1 and 1231-80 to 1231-89):
   and have the opposite balance.
 
 Each further national chart is translated against this chart, and the chart grows where it distinguishes more
-finely. The English names are the project's translation.
+finely. The English and German names are the project's translation; the German ones follow the terms of the HGB and
+of German bookkeeping practice where there are such terms.
 
 The German balance sheet (HGB § 266, part 0009) already distinguishes more finely than the PCG: shares, receivables,
 payables and current securities of **affiliated companies** and of **companies linked by participating interests**,

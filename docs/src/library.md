@@ -55,12 +55,13 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
   the books. `EventSet::review_parties` reports books without owners, `EventSet::state` the state of the books that
   filings record.
 - **The chart comes with the library.** `Chart::v0_1()` is the harmonised chart, `ChartTranslation::fr_pcg()` the
-  French PCG translated into it, `Names::v0_1("en")` and `Names::v0_1("fr")` name its accounts.
+  French PCG translated into it, `Names::v0_1("de")`, `"en"` and `"fr"` name its accounts, tax codes and German
+  report positions.
 - **Electronic invoices.** `en16931::read` translates XRechnung and other EN 16931 invoices in UBL or CII,
   `en16931::read_pdf` the XML in a ZUGFeRD or Factur-X PDF (feature `pdf`, on by default), into a document's
   `InvoiceData`; `propose_booking` proposes a booking with German tax codes.
 - **Tax audits.** `gobd::export` writes the books of one owner for a period as CSV files with an `index.xml`
-  for the German data transfer (Z3).
+  for the German data transfer (Z3), with account names from `Names::v0_1("de")`.
 - **German reports.** Postings carry tax codes (`TaxTable::de()`); `EventSet::period_report` fills the VAT return
   of 2026, the Anlage EÜR of 2025 and the HGB profit and loss account (`ReportMapping::de_ustva_2026()`,
   `de_euer_2025()`, `de_hgb_275_gkv_2026()`), `EventSet::account_report` the HGB balance sheet
