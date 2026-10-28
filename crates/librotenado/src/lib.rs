@@ -83,6 +83,7 @@ mod decimal;
 mod document;
 pub mod en16931;
 mod event;
+pub mod gobd;
 mod invoice;
 mod money;
 mod names;

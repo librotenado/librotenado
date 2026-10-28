@@ -24,10 +24,13 @@ Specification and library share one version. Until 1.0, any version may change w
   VAT breakdown, lines, totals, after EN 16931); translation of electronic invoices in UBL and CII – XRechnung,
   ZUGFeRD and Factur-X PDFs –, tested with the XRechnung test suite of KoSIT; booking proposals with German tax
   codes.
+- [0010 Audit and retention](spec/0010-audit.md): what the protocol guarantees for audits; for Germany the retention
+  periods of § 147 AO, the requirements of the GoBD (as amended 2024 and 2025) against the protocol for the
+  procedural documentation, and the data transfer (Z3) after the Beschreibungsstandard.
 - Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`, `Chart::v0_1()`,
   `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`, `TaxCode`, `TaxTable`, `ReportMapping`,
   `EventSet::period_report`, `EventSet::account_report`, `InvoiceData`, `en16931::read`, `en16931::read_pdf`,
-  `propose_booking`; dependencies `roxmltree`, and `lopdf` for the feature `pdf`.
+  `propose_booking`, `gobd::export`; dependencies `roxmltree`, and `lopdf` for the feature `pdf`.
 
 ## 0.1.0 – 2026-10-28
 

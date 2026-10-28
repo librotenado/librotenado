@@ -165,3 +165,83 @@ mod proposals {
         assert!(on_supplier > 0, "a credit note from a supplier reduces what is owed");
     }
 }
+
+mod data_transfer {
+    use super::*;
+    use librotenado::{
+        Chart, Clock, Document, Event, EventSet, InvoiceSide, Names, Original, PartyId, Payload, ProposalAccounts,
+        TaxTable, gobd, propose_booking,
+    };
+
+    /// Books with one purchase invoice and its booking, exported for a tax audit.
+    pub(crate) fn exported() -> Vec<gobd::ExportFile> {
+        let owner: PartyId = "0192f1e4-0000-7000-8000-0000000000a1".parse().unwrap();
+        let translated = read("03.01a-INVOICE_ubl.xml");
+        let document = Document {
+            id: "0192f1e4-0000-7000-8000-0000000000d1".parse().unwrap(),
+            kind: translated.kind,
+            number: Some(translated.number.clone()),
+            date: translated.date,
+            received: translated.date,
+            original: Original::of(b"the XML", "application/xml"),
+            invoice: Some(Box::new(translated.invoice)),
+        };
+        let booking =
+            propose_booking(&document, InvoiceSide::Purchase, &owner, &ProposalAccounts::v0_1(InvoiceSide::Purchase))
+                .unwrap();
+        let date = booking.date;
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("laptop".parse().unwrap());
+        set.insert(Event { time: clock.now(1), seq: 1, prev: None, payload: Payload::DocumentRecorded { document } });
+        let (seq, prev) = set.chain_head(&"laptop".parse().unwrap());
+        set.insert(Event { time: clock.now(2), seq, prev, payload: Payload::BookingRecorded { booking } });
+        gobd::export(
+            &set,
+            &Chart::v0_1(),
+            &Names::v0_1("en").unwrap(),
+            &CurrencyTable::v0_1(),
+            &TaxTable::de(),
+            &owner,
+            date,
+            date,
+        )
+    }
+
+    /// Writes the export to the directory in `LIBROTENADO_EXPORT`, to check it with other tools.
+    #[test]
+    fn writes_the_export_where_asked() {
+        if let Ok(dir) = std::env::var("LIBROTENADO_EXPORT") {
+            for file in exported() {
+                std::fs::write(format!("{dir}/{}", file.path), file.content).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn an_export_for_a_tax_audit() {
+        let files = exported();
+        let names: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(names, ["index.xml", "konten.csv", "buchungen.csv", "belege.csv"]);
+        let text =
+            |name: &str| String::from_utf8(files.iter().find(|f| f.path == name).unwrap().content.clone()).unwrap();
+        let index = text("index.xml");
+        let doc = roxmltree::Document::parse_with_options(
+            &index,
+            roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() },
+        )
+        .unwrap();
+        assert_eq!(doc.root_element().tag_name().name(), "DataSet");
+        for table in doc.descendants().filter(|n| n.has_tag_name("Table")) {
+            let url = table.children().find(|c| c.has_tag_name("URL")).unwrap().text().unwrap();
+            let columns = table.descendants().filter(|n| n.has_tag_name("VariableColumn")).count();
+            for line in text(url).lines() {
+                let cells = line.split(';').count();
+                assert!(cells >= columns, "{url}: {cells} cells for {columns} columns in {line}");
+            }
+        }
+        let journal = text("buchungen.csv");
+        assert_eq!(journal.lines().count(), 1 + 5, "header, two net amounts, two VAT amounts, the supplier");
+        assert!(journal.contains("\"de-in-19\";\"19\""), "{journal}");
+        assert!(text("belege.csv").contains(&format!("\"{}\"", read("03.01a-INVOICE_ubl.xml").number)));
+    }
+}

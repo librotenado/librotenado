@@ -14,5 +14,6 @@ Version 0.1 – a draft, not yet stable. Normative statements will use the key w
 | [0007 Filings](0007-filings.md) | submissions to authorities: derived from a state of the books, never changed; adapters over HTTPS | draft, proposal |
 | [0008 Parties](0008-parties.md) | the organisations and persons books belong to: legal form, registers, tax numbers, roles and shares | draft, implemented |
 | [0009 Reports](0009-reports.md) | report mappings per country and version: HGB balance sheet and profit and loss account, VAT return | draft, implemented |
+| [0010 Audit and retention](0010-audit.md) | what the protocol guarantees for audits; Germany: retention, GoBD, data transfer (Z3) | draft, implemented |
 
 The reasoning behind the protocol is in the [whitepaper](https://github.com/librotenado/whitepaper).
