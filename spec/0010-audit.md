@@ -45,7 +45,7 @@ procedural documentation (Verfahrensdokumentation, Rz. 150 to 155):
 | Order | Rz. 53–57 | events in an order every device agrees on; the journal by booking date (part 0002) |
 | Immutability and logging | Rz. 58–60, 107–112 | events are immutable from the moment they are written – stricter than a later fixing ("Festschreibung"); a correction is a reversal (parts 0001, 0002) |
 | Documents | Rz. 61–81 | documents as records of their own, linked from bookings; the original kept and identified by its hash (part 0005) |
-| Journal | Rz. 90–94 | per posting: booking and document data, amount, currency, tax code and rate, account with its kind and type, debit and credit – exported below |
+| Journal | Rz. 90–94 | per posting: booking and document data, amount, currency, for foreign currency the exchange rate and the amount in the functional currency, tax code and rate, account with its kind and type, debit and credit – exported below |
 | Retention of e-invoices | Rz. 118–131 (as amended 2025) | the structured part (the XML) is the original; a PDF only where it carries more (part 0005) |
 | Data access | Rz. 158–178 | inspection (Z1) and evaluation (Z2) by the implementation; data transfer (Z3) as below |
 
@@ -61,7 +61,7 @@ as `DD.MM.YYYY`.
 | File | Table | One row per |
 |---|---|---|
 | `konten.csv` | Konten | account posted on, and the accounts it refines: identity, name, kind (Aktiva, Passiva, Kapital, Aufwand, Ertrag, sonstige), type (Bilanz, GuV, sonstige), parent, chart or opened |
-| `buchungen.csv` | Buchungen | posting: booking (event hash) and position, booking date, time and device of entry, text, account with name, kind and type, debit, credit, currency, tax code and rate, documents with numbers and dates, the booking a reversal reverses, note |
+| `buchungen.csv` | Buchungen | posting: booking (event hash) and position, booking date, time and device of entry, text, account with name, kind and type, debit, credit, currency, exchange rate, debit and credit in the functional currency and that currency, tax code and rate, documents with numbers and dates, the booking a reversal reverses, note |
 | `belege.csv` | Belege | document of the exported bookings: identity, kind, number, date, day received, its original in the export (`belege/<hash>`) with hash, media type and file name, seller and buyer with VAT identification and tax numbers, net, VAT, gross, currency |
 
 The originals are added to the export by the implementation from its store. The reference library's `index.xml`
@@ -72,8 +72,8 @@ validates against the DTD (the DTD's own content model of `Media` is not determi
 - The Verordnung under § 147b AO (Buchführungsdatenschnittstellenverordnung, DSFinV-BV), a draft as of October 2026:
   a standard export on XBRL-CSV, in force from the end of the third year after its promulgation. The export above
   follows it once it is final.
-- Fields of GoBD Rz. 94 the protocol does not record yet: exchange rate and amount in the functional currency for a
-  foreign-currency posting, authorisation by a person rather than a device, the booking period of the VAT return.
+- Fields of GoBD Rz. 94 the protocol does not record yet: authorisation by a person rather than a device, the booking
+  period of the VAT return.
 - Account numbers of a national chart alongside the identities in the export.
 - The terms of use of the DTD and of the description of the Beschreibungsstandard, which are not published under a
   licence; the library writes the reference to the DTD, not the DTD.

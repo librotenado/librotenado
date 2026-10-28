@@ -22,6 +22,9 @@ Specification and library share one version. Until 1.0, any version may change w
   German balance sheet (HGB § 266), profit and loss account (§ 275 Abs. 2) and VAT return of 2026 and the Anlage EÜR
   of 2025, as drafts for review by tax advisers; reports over a period combine tax codes, accounts and the settlement
   of VAT with the tax office. The chart grows by twenty accounts the Anlage EÜR distinguishes.
+- [0001 Base types](spec/0001-base-types.md): postings in foreign currency carry the exchange rate and the amount in
+  the owner's functional currency (`exchange`); converted, a booking balances as well; reports use the converted
+  amounts, and the GoBD export lists rate and amounts in the functional currency.
 - [0009 Reports](spec/0009-reports.md): the E-Bilanz (§ 5b EStG) in the taxonomy 6.10 – balance sheet and profit
   and loss account by nature of expense, derived from the HGB down to the Mussfelder and catch-all positions, sales
   by VAT; tax rules that apply `within` a position, and the `mandatory` positions of a report.

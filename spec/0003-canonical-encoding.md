@@ -52,7 +52,7 @@ Every object of the protocol has a **type**, defined in its part:
 | `payment` | 0005 | | `credit_transfer` | 0005 |
 | `payment_card` | 0005 | | `allowance_charge` | 0005 |
 | `supporting_document` | 0005 | | `classification` | 0005 |
-| `item_attribute` | 0005 | | | |
+| `item_attribute` | 0005 | | `exchange` | 0001 |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 

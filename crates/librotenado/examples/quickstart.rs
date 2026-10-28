@@ -23,6 +23,7 @@ fn booking(text: &str, account: &str, cents: i128) -> Booking {
                 amount: money(cents),
                 note: None,
                 tax: None,
+                exchange: None,
             },
             Posting {
                 owner: OWNER.parse().unwrap(),
@@ -30,6 +31,7 @@ fn booking(text: &str, account: &str, cents: i128) -> Booking {
                 amount: money(-cents),
                 note: None,
                 tax: None,
+                exchange: None,
             },
         ],
         documents: vec![],

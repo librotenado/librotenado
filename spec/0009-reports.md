@@ -36,7 +36,8 @@ A report mapping is a root object of type `report_mapping`:
 - **The side can follow the balance.** Where `credit_accounts` names a position for an account, a credit balance
   falls there: a bank account in overdraft is a liability to a credit institution, not cash.
 - **A report on a date** – a balance sheet – takes the balances (part 0004) of the accounts that fall into a position,
-  for one owner (part 0008), in base units, debit positive. Presenting it – signs, totals, subtotals – is a matter of
+  for one owner (part 0008), in base units of the owner's functional currency – postings in foreign currency by their
+  converted amount (part 0001) –, debit positive. Presenting it – signs, totals, subtotals – is a matter of
   the report.
 
 ### Reports over a period

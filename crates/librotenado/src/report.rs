@@ -197,7 +197,7 @@ impl EventSet {
     ///   the tax office;
     /// - otherwise, and where the rule has no `base`: the position of its account.
     ///
-    /// Amounts are in base units and positive as the report expects them: sales and VAT owed as credit, purchases
+    /// Amounts are in base units of the functional currency – converted where a posting has an exchange – and positive as the report expects them: sales and VAT owed as credit, purchases
     /// and deductible VAT as debit; positions of accounts on the normal side of their kind, or – where the mapping
     /// distinguishes the sides – on the side mapped.
     pub fn period_report(
@@ -231,7 +231,7 @@ impl EventSet {
                 continue;
             }
             for posting in booking.postings.iter().filter(|p| p.owner == *owner) {
-                let units = posting.amount.base_units();
+                let units = posting.functional().base_units();
                 let on_output = within(&posting.account, &vat.output);
                 let on_input = within(&posting.account, &vat.input);
                 let credit = units < 0;
@@ -292,8 +292,8 @@ impl EventSet {
     }
 
     /// The positions of a report computed from accounts – a balance sheet, a profit and loss account – for `owner`
-    /// on `until`: per position, the sum of the balances of the accounts that fall into it, in base units, debit
-    /// positive. Accounts without a position are left out.
+    /// on `until`: per position, the sum of the balances of the accounts that fall into it, in base units of the
+    /// owner's functional currency, debit positive. Accounts without a position are left out.
     pub fn account_report(
         &self,
         mapping: &ReportMapping,
@@ -303,7 +303,7 @@ impl EventSet {
     ) -> Result<BTreeMap<String, i128>, BalanceError> {
         let parents = self.account_parents(chart);
         let mut positions: BTreeMap<String, i128> = BTreeMap::new();
-        for (party, account, _, units) in self.balances(until)?.iter() {
+        for (party, account, _, units) in self.functional_balances(until)?.iter() {
             if party != owner {
                 continue;
             }
@@ -329,6 +329,7 @@ mod tests {
             amount: Money::new(units, "EUR".parse().unwrap()).unwrap(),
             note: None,
             tax: tax.map(|t| t.parse().unwrap()),
+            exchange: None,
         }
     }
 

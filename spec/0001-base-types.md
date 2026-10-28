@@ -122,7 +122,8 @@ A booking (type `booking`) is an object with `date`, `text`, `postings` and, if 
 `documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003).
 A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
 remark, `note` – for example why there is no document for it; absent if none, never empty – and, if it is treated for
-VAT, `tax`, a tax code (below). `owner` is the
+VAT, `tax`, a tax code (below), and, if its currency is not the functional currency of its owner, `exchange`
+(below). `owner` is the
 organisation or person whose books the posting is in (part 0008); every posting has one. A positive amount is a
 debit, a negative amount a credit.
 
@@ -131,6 +132,21 @@ every currency**: the `base_units` of the postings of one owner in one currency 
 stay balanced on their own, while one booking can concern several owners – an internet bill split between a business
 and its owner's private books, both resting on the same document. A booking that converts between currencies
 therefore books each currency against an exchange account.
+
+### Foreign currency
+
+Every owner keeps its statements in one **functional currency** – the euro for German books (§ 244 HGB). A posting in
+another currency carries `exchange` (type `exchange`): `rate`, the units of the functional currency per unit of the
+posting's currency, as a decimal number, and `amount`, the amount in the functional currency – the posting's amount
+times the rate, rounded half away from zero to base units, or as the bank converted it. German books convert at the
+rate of the day of the transaction (§ 256a HGB) and record rate and converted amount with every posting in foreign
+currency (GoBD Rz. 94, part 0010).
+
+- The postings of an owner are converted into **one** currency, never into their own; once one posting of an owner in
+  a booking has an `exchange`, every posting of that owner is in that currency or converted into it.
+- Converted, the postings of each owner balance as well: the converted amounts and the amounts already in the
+  functional currency sum to zero. A rounding difference is evened out on one posting's converted amount.
+- Balances stay per currency (part 0004); reports in one currency (part 0009) take the converted amounts.
 
 A booking is never changed. It is cancelled by a reversal: a booking with the same accounts, the same tax codes and
 the opposite amounts (part 0002).

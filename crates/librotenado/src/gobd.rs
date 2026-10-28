@@ -85,7 +85,10 @@ pub fn export(
         for (line, posting) in booking.postings.iter().enumerate().filter(|(_, p)| p.owner == *owner) {
             let units = posting.amount.base_units();
             let places = decimals_of(posting.amount.currency());
-            accuracy = accuracy.max(places);
+            let functional = posting.functional();
+            let functional_places = decimals_of(functional.currency());
+            let functional_units = functional.base_units();
+            accuracy = accuracy.max(places).max(functional_places);
             used_accounts.insert(posting.account.clone(), ());
             used_documents.extend(booking.documents.iter().map(|id| (id.clone(), ())));
             let kind = kinds.get(&posting.account).copied();
@@ -97,6 +100,7 @@ pub fn export(
                 .map(|r| r.to_string().replace('.', ","));
             journal.push((
                 places,
+                functional_places,
                 vec![
                     hash.to_string(),
                     (line + 1).to_string(),
@@ -111,6 +115,10 @@ pub fn export(
                     if units > 0 { units.to_string() } else { String::new() },
                     if units < 0 { (-units).to_string() } else { String::new() },
                     posting.amount.currency().to_string(),
+                    posting.exchange.as_ref().map(|e| e.rate.to_string().replace('.', ",")).unwrap_or_default(),
+                    if functional_units > 0 { functional_units.to_string() } else { String::new() },
+                    if functional_units < 0 { (-functional_units).to_string() } else { String::new() },
+                    functional.currency().to_string(),
                     posting.tax.as_ref().map(ToString::to_string).unwrap_or_default(),
                     rate.unwrap_or_default(),
                     booking.documents.iter().map(ToString::to_string).collect::<Vec<_>>().join(","),
@@ -125,8 +133,8 @@ pub fn export(
     // Amounts in a common number of places.
     let journal: Vec<Vec<String>> = journal
         .into_iter()
-        .map(|(places, mut row)| {
-            for column in [10, 11] {
+        .map(|(places, functional_places, mut row)| {
+            for (column, places) in [(10, places), (11, places), (14, functional_places), (15, functional_places)] {
                 if let Ok(units) = row[column].parse::<i128>() {
                     row[column] = amount(units * 10i128.pow(accuracy - places), accuracy);
                 }
@@ -228,6 +236,10 @@ pub fn export(
                 Number("SOLL", "Soll-Betrag", accuracy),
                 Number("HABEN", "Haben-Betrag", accuracy),
                 Text("WAEHRUNG", "Währung (ISO 4217)"),
+                Text("KURS", "Bei Fremdwährung: Kurs, Einheiten der Hauswährung je Einheit der Währung"),
+                Number("SOLL_HAUSWAEHRUNG", "Soll-Betrag in der Hauswährung", accuracy),
+                Number("HABEN_HAUSWAEHRUNG", "Haben-Betrag in der Hauswährung", accuracy),
+                Text("HAUSWAEHRUNG", "Hauswährung (ISO 4217)"),
                 Text("STEUERSCHLUESSEL", "Steuerschlüssel"),
                 Text("STEUERSATZ", "Umsatzsteuersatz in Prozent"),
                 Text("BELEG_IDS", "Belege der Buchung"),

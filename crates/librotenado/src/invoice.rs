@@ -747,6 +747,7 @@ pub fn propose_booking(
                 amount,
                 note: None,
                 tax: tax.cloned(),
+                exchange: None,
             });
         }
         Ok(())

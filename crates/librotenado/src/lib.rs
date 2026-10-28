@@ -93,7 +93,7 @@ mod report;
 mod tax;
 
 pub use balance::{BalanceError, Balances};
-pub use booking::{AccountId, Booking, BookingError, Posting};
+pub use booking::{AccountId, Booking, BookingError, Exchange, Posting};
 pub use canonical::{CanonicalError, MAX_SAFE_INTEGER, canonicalize, to_canonical_vec};
 pub use chart::{Account, AccountKind, Chart, ChartError, ChartTranslation, TranslationError};
 pub use clock::{Clock, DeviceId, Hlc};

@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{AccountId, Chart, Currency, Date, EventSet, PartyId, Payload};
+use crate::{AccountId, Chart, Currency, Date, EventSet, Money, PartyId, Payload, Posting};
 
 /// Balances: per owner, account and currency, the sum of the base units of the postings. Positive is a debit
 /// balance, negative a credit balance.
@@ -53,6 +53,16 @@ impl Balances {
 impl EventSet {
     /// The balances of all bookings – recorded and reversing – dated on or before `until`, or of all bookings.
     pub fn balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
+        self.sum_postings(until, |posting| &posting.amount)
+    }
+
+    /// The balances in the functional currency of each owner: amounts converted where a posting has an exchange
+    /// (spec part 0001) – what statements in one currency are drawn from.
+    pub fn functional_balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
+        self.sum_postings(until, Posting::functional)
+    }
+
+    fn sum_postings(&self, until: Option<Date>, amount: fn(&Posting) -> &Money) -> Result<Balances, BalanceError> {
         let mut sums: BTreeMap<(PartyId, AccountId, Currency), i128> = BTreeMap::new();
         for (_, event) in self.ordered() {
             let booking = match &event.payload {
@@ -63,9 +73,10 @@ impl EventSet {
                 continue;
             }
             for posting in &booking.postings {
-                let key = (posting.owner.clone(), posting.account.clone(), posting.amount.currency().clone());
+                let amount = amount(posting);
+                let key = (posting.owner.clone(), posting.account.clone(), amount.currency().clone());
                 let sum = sums.entry(key).or_default();
-                *sum = sum.checked_add(posting.amount.base_units()).ok_or(BalanceError::Overflow)?;
+                *sum = sum.checked_add(amount.base_units()).ok_or(BalanceError::Overflow)?;
             }
         }
         Ok(Balances(sums))
@@ -111,6 +122,7 @@ mod tests {
             amount: Money::new(units, eur()).unwrap(),
             note: None,
             tax: None,
+            exchange: None,
         };
         Booking {
             date: date.parse().unwrap(),

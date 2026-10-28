@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Currency, Date, DocumentId, Money, Object, ParseError, PartyId, TaxCode};
+use crate::{Currency, Date, Decimal, DocumentId, Money, Object, ParseError, PartyId, TaxCode};
 
 /// The identity of an account: a UUID (RFC 9562) in its one form, lower case `8-4-4-4-12` hexadecimal digits, e.g.
 /// `0192f1e4-7a3c-7b1e-9c2d-5e8f0a1b2c3d`. It carries no meaning – what an account is follows from its kind, parent
@@ -61,6 +61,28 @@ pub struct Posting {
     /// How the posting is treated for VAT, as a tax code of its country (`de-out-19`); left out when it is not.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub tax: Option<TaxCode>,
+    /// For an amount in a currency other than the owner's functional currency: the rate and the amount in the
+    /// functional currency; left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub exchange: Option<Exchange>,
+}
+
+/// The conversion of a posting's amount into the functional currency of its owner – the currency the owner's
+/// statements are in, the euro for German books (§ 244 HGB).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Exchange {
+    /// Units of the functional currency per unit of the posting's currency.
+    pub rate: Decimal,
+    /// The amount in the functional currency: the posting's amount times the rate, rounded half away from zero to
+    /// the functional currency's base units – or as the bank converted it.
+    pub amount: Money,
+}
+
+impl Posting {
+    /// The amount in the owner's functional currency: converted where the posting has an exchange, else its own.
+    pub fn functional(&self) -> &Money {
+        self.exchange.as_ref().map_or(&self.amount, |e| &e.amount)
+    }
 }
 
 /// A booking: a business transaction on a date, as postings that balance for every owner in every currency. One
@@ -76,6 +98,10 @@ pub struct Booking {
     /// The documents it is based on (receipts, invoices, statements); left out of JSON when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub documents: Vec<DocumentId>,
+}
+
+impl Object for Exchange {
+    const TYPE: &'static str = "exchange";
 }
 
 impl Object for Posting {
@@ -106,6 +132,18 @@ pub enum BookingError {
     /// The sums do not fit the number range.
     #[error("the amounts are too large")]
     Overflow,
+    /// Postings of an owner converted into more than one currency, or a posting in neither its owner's functional
+    /// currency nor converted into it.
+    #[error("posting {0} is not converted into the functional currency of its owner")]
+    Exchange(usize),
+    /// The converted amounts of an owner do not balance.
+    #[error("in the functional currency, debit and credit of {owner} differ by {difference}")]
+    UnbalancedFunctional {
+        /// The owner whose converted postings do not balance.
+        owner: PartyId,
+        /// By how much.
+        difference: Money,
+    },
 }
 
 impl Booking {
@@ -123,9 +161,34 @@ impl Booking {
             let sum = sums.entry((&posting.owner, posting.amount.currency().clone())).or_insert(0);
             *sum = sum.checked_add(posting.amount.base_units()).ok_or(BookingError::Overflow)?;
         }
-        match sums.into_iter().find(|&(_, sum)| sum != 0) {
-            Some(((owner, currency), sum)) => match Money::new(sum, currency) {
+        if let Some(((owner, currency), sum)) = sums.into_iter().find(|&(_, sum)| sum != 0) {
+            return match Money::new(sum, currency) {
                 Some(difference) => Err(BookingError::Unbalanced { owner: owner.clone(), difference }),
+                None => Err(BookingError::Overflow),
+            };
+        }
+        // An owner with converted postings balances in its functional currency, too.
+        let mut functional: BTreeMap<&PartyId, &Currency> = BTreeMap::new();
+        for (i, posting) in self.postings.iter().enumerate() {
+            if let Some(exchange) = &posting.exchange {
+                let currency = functional.entry(&posting.owner).or_insert(exchange.amount.currency());
+                if *currency != exchange.amount.currency() || posting.amount.currency() == *currency {
+                    return Err(BookingError::Exchange(i));
+                }
+            }
+        }
+        let mut sums: BTreeMap<&PartyId, i128> = BTreeMap::new();
+        for (i, posting) in self.postings.iter().enumerate() {
+            let Some(currency) = functional.get(&posting.owner) else { continue };
+            if posting.functional().currency() != *currency {
+                return Err(BookingError::Exchange(i));
+            }
+            let sum = sums.entry(&posting.owner).or_insert(0);
+            *sum = sum.checked_add(posting.functional().base_units()).ok_or(BookingError::Overflow)?;
+        }
+        match sums.into_iter().find(|&(_, sum)| sum != 0) {
+            Some((owner, sum)) => match Money::new(sum, functional[owner].clone()) {
+                Some(difference) => Err(BookingError::UnbalancedFunctional { owner: owner.clone(), difference }),
                 None => Err(BookingError::Overflow),
             },
             None => Ok(()),
@@ -143,6 +206,7 @@ impl Booking {
                 amount: -p.amount.clone(),
                 note: None,
                 tax: p.tax.clone(),
+                exchange: p.exchange.as_ref().map(|e| Exchange { rate: e.rate, amount: -e.amount.clone() }),
             })
             .collect();
         Booking { date, text, postings, documents: self.documents.clone() }
@@ -160,7 +224,57 @@ pub(crate) mod tests {
 
     fn posting(n: u8, base_units: i128, currency: &str) -> Posting {
         let amount = Money::new(base_units, currency.parse().unwrap()).unwrap();
-        Posting { owner: crate::party::tests::party(1), account: account(n), amount, note: None, tax: None }
+        Posting {
+            owner: crate::party::tests::party(1),
+            account: account(n),
+            amount,
+            note: None,
+            tax: None,
+            exchange: None,
+        }
+    }
+
+    /// A posting in US dollars converted into euros at `rate`.
+    fn converted(n: u8, cents: i128, rate: &str, euro_cents: i128) -> Posting {
+        Posting {
+            exchange: Some(Exchange {
+                rate: rate.parse().unwrap(),
+                amount: Money::new(euro_cents, "EUR".parse().unwrap()).unwrap(),
+            }),
+            ..posting(n, cents, "USD")
+        }
+    }
+
+    /// An invoice in dollars: it balances in dollars and, converted, in euros (GoBD Rz. 94, § 256a HGB).
+    #[test]
+    fn foreign_currency_balances_converted_too() {
+        let booking =
+            |postings| Booking { date: "2026-10-28".parse().unwrap(), text: "".into(), postings, documents: vec![] };
+        let invoice = booking(vec![converted(1, 10_000, "0.9213", 9_213), converted(2, -10_000, "0.9213", -9_213)]);
+        assert_eq!(invoice.validate(), Ok(()));
+        assert_eq!(invoice.postings[0].functional().base_units(), 9_213);
+        let reversal = invoice.reversed("2026-10-29".parse().unwrap(), "".into());
+        assert_eq!(reversal.validate(), Ok(()));
+        assert_eq!(reversal.postings[0].functional().base_units(), -9_213);
+
+        let rounded = booking(vec![converted(1, 10_000, "0.9213", 9_213), converted(2, -10_000, "0.9213", -9_214)]);
+        assert!(matches!(rounded.validate(), Err(BookingError::UnbalancedFunctional { .. })));
+        // A conversion into the posting's own currency, or a euro posting beside dollars converted into euros.
+        let same = booking(vec![
+            Posting {
+                exchange: Some(Exchange { rate: "1".parse().unwrap(), amount: posting(1, 1, "USD").amount }),
+                ..posting(1, 1, "USD")
+            },
+            posting(2, -1, "USD"),
+        ]);
+        assert_eq!(same.validate(), Err(BookingError::Exchange(0)));
+        let unconverted = booking(vec![
+            converted(1, 10_000, "0.9213", 9_213),
+            converted(2, -10_000, "0.9213", -9_213),
+            posting(3, 500, "GBP"),
+            posting(4, -500, "GBP"),
+        ]);
+        assert_eq!(unconverted.validate(), Err(BookingError::Exchange(2)));
     }
 
     #[test]
