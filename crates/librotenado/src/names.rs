@@ -77,8 +77,13 @@ mod tests {
         ] {
             let taxes = mapping.taxes.iter().flat_map(|r| [&r.base, &r.output, &r.input]).flatten();
             let settlement = mapping.vat_settlement.iter().flat_map(|s| [&s.debit, &s.credit]).flatten();
-            for position in
-                mapping.accounts.values().chain(mapping.credit_accounts.values()).chain(taxes).chain(settlement)
+            for position in mapping
+                .accounts
+                .values()
+                .chain(mapping.credit_accounts.values())
+                .chain(taxes)
+                .chain(settlement)
+                .chain(&mapping.mandatory)
             {
                 let key = format!("{}/{position}", mapping.report);
                 assert!(de.get(&key).is_some(), "{key}");

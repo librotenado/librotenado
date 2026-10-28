@@ -55,6 +55,23 @@ pub struct TaxRule {
     /// The field for deductible VAT: postings with the code on input VAT accounts.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub input: Option<String>,
+    /// Where the rule applies only to postings on accounts of one position: that position. Its positions below –
+    /// written with it and a dot before them – count, too. E.g. sales by tax code within the net sales.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub within: Option<String>,
+}
+
+impl TaxRule {
+    /// Whether the rule applies to a posting on an account of this position.
+    fn applies(&self, position: Option<&str>) -> bool {
+        match (&self.within, position) {
+            (None, _) => true,
+            (Some(within), Some(position)) => {
+                position == within || position.strip_prefix(within.as_str()).is_some_and(|rest| rest.starts_with('.'))
+            }
+            (Some(_), None) => false,
+        }
+    }
 }
 
 /// How the harmonised chart and the tax codes fall into one version of a national report.
@@ -88,6 +105,10 @@ pub struct ReportMapping {
     /// The fields each tax code fills.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub taxes: Vec<TaxRule>,
+    /// The positions a report must state even without an amount – as empty (NIL), not as zero –, e.g. the
+    /// Mussfelder of the E-Bilanz.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub mandatory: Vec<String>,
 }
 
 impl Object for ReportMapping {
@@ -110,6 +131,18 @@ impl ReportMapping {
     /// The German profit and loss account of 2026, by nature of expense (HGB § 275 Abs. 2).
     pub fn de_hgb_275_gkv_2026() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-275-gkv-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The balance sheet of the German E-Bilanz (§ 5b EStG) in the taxonomy 6.10: positions of `de-gaap-ci`.
+    pub fn de_ebilanz_bs_6_10() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-ebilanz-bs-6.10.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The income statement by nature of expense of the German E-Bilanz (§ 5b EStG) in the taxonomy 6.10.
+    pub fn de_ebilanz_is_gkv_6_10() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-ebilanz-is-gkv-6.10.json"))
             .expect("the published mapping is valid")
     }
 
@@ -201,7 +234,12 @@ impl EventSet {
                 let units = posting.amount.base_units();
                 let on_output = within(&posting.account, &vat.output);
                 let on_input = within(&posting.account, &vat.input);
-                let rule = posting.tax.as_ref().and_then(|code| mapping.taxes.iter().find(|rule| rule.tax == *code));
+                let credit = units < 0;
+                let position = mapping.position(&posting.account, &parents, credit);
+                let rule = posting
+                    .tax
+                    .as_ref()
+                    .and_then(|code| mapping.taxes.iter().find(|rule| rule.tax == *code && rule.applies(position)));
                 if let Some(rule) = rule {
                     let sales = taxes.get(&rule.tax).is_some_and(|d| d.direction == TaxDirection::Output);
                     let (field, amount) = if on_output {
@@ -226,10 +264,9 @@ impl EventSet {
                     }
                     continue;
                 }
-                let credit = units < 0;
                 let sided =
                     ancestry(&posting.account, &parents).into_iter().any(|id| mapping.credit_accounts.contains_key(id));
-                if let Some(position) = mapping.position(&posting.account, &parents, credit) {
+                if let Some(position) = position {
                     let debit_positive = if sided {
                         !credit
                     } else {
@@ -373,6 +410,61 @@ mod tests {
         assert_eq!(position(&gkv, "706", false), Some("gkv.1".into()));
     }
 
+    /// The E-Bilanz takes every account the HGB places, a level deeper where the taxonomy requires it.
+    #[test]
+    fn the_e_bilanz_refines_the_hgb() {
+        let chart = Chart::v0_1();
+        let parents = EventSet::new().account_parents(&chart);
+        for (hgb, ebilanz, prefix) in [
+            (ReportMapping::de_hgb_266_2026(), ReportMapping::de_ebilanz_bs_6_10(), "bs."),
+            (ReportMapping::de_hgb_275_gkv_2026(), ReportMapping::de_ebilanz_is_gkv_6_10(), "is."),
+        ] {
+            assert!(!ebilanz.mandatory.is_empty());
+            for (account, position) in hgb.accounts.iter().chain(&hgb.credit_accounts) {
+                if position.contains(".extra.") {
+                    continue; // French positions a German set of books does not use
+                }
+                for credit in [false, true] {
+                    let position = ebilanz.position(account, &parents, credit).unwrap_or_else(|| panic!("{account}"));
+                    assert!(position.starts_with(prefix), "{account}: {position}");
+                }
+            }
+        }
+        let pcg = ChartTranslation::fr_pcg();
+        let bs = ReportMapping::de_ebilanz_bs_6_10();
+        let position = |n: &str, credit| bs.position(&pcg.accounts[n], &parents, credit).map(str::to_owned);
+        assert_eq!(position("53", false), Some("bs.ass.currAss.cashEquiv.cash".into()));
+        assert_eq!(position("5121", false), Some("bs.ass.currAss.cashEquiv.bank".into()));
+        assert_eq!(position("5121", true), Some("bs.eqLiab.liab.bank.misc".into()));
+    }
+
+    /// Sales fall into the net sales by their VAT, as the E-Bilanz requires.
+    #[test]
+    fn e_bilanz_sales_by_tax_code() {
+        let set = books(vec![
+            vec![
+                posting("5121", 119_000, None),
+                posting("706", -100_000, Some("de-out-19")),
+                posting("44571", -19_000, Some("de-out-19")),
+            ],
+            vec![
+                posting("5121", 10_700, None),
+                posting("706", -10_000, Some("de-out-7")),
+                posting("44571", -700, None),
+            ],
+            vec![posting("5121", 5_000, None), posting("706", -5_000, None)],
+        ]);
+        let mapping = ReportMapping::de_ebilanz_is_gkv_6_10();
+        let day: Date = "2026-03-15".parse().unwrap();
+        let report = set.period_report(&mapping, &TaxTable::de(), &Chart::v0_1(), &party(1), day, day).unwrap();
+        let sales = "is.netIncome.regular.operatingTC.grossTradingProfit.totalOutput.netSales.grossSales";
+        let field = |name: &str| report.get(&format!("{sales}.{name}")).copied();
+        assert_eq!(field("generalRateVAT"), Some(100_000));
+        assert_eq!(field("reducedRateVAT"), Some(10_000));
+        assert_eq!(field("unknownVAT"), Some(5_000), "without a tax code: the catch-all position");
+        assert_eq!(report.len(), 3, "VAT accounts are not in the income statement: {report:?}");
+    }
+
     #[test]
     fn an_income_statement_on_a_cash_basis() {
         let names = crate::Names::v0_1("en").unwrap();
@@ -448,6 +540,7 @@ mod tests {
             vat_accounts: None,
             vat_settlement: None,
             taxes: vec![],
+            mandatory: vec![],
         };
         let set = books(vec![vec![posting("4111", 5_000, None), posting("5121", -5_000, None)]]);
         let report = set.account_report(&mapping, &Chart::v0_1(), &party(1), None).unwrap();

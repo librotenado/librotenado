@@ -27,6 +27,7 @@ A report mapping is a root object of type `report_mapping`:
 | `vat_accounts` | `output` and `input`: the accounts that hold VAT owed and deductible VAT |
 | `vat_settlement` | `debit` and `credit`: the fields for VAT paid to and refunded by the tax office |
 | `taxes` | per tax code, the fields it fills (below); absent for a report computed from accounts alone |
+| `mandatory` | positions to state even without an amount (the E-Bilanz below); absent when none |
 
 ### Reports from accounts
 
@@ -43,7 +44,8 @@ A report mapping is a root object of type `report_mapping`:
 A report over a period – a profit and loss account, a VAT return, an income statement on a cash basis – takes the
 postings of one owner in the bookings dated within the period, one by one:
 
-1. **With a tax code that has a rule** (below): its field, and nothing else – unless the rule has no `base` and the
+1. **With a tax code that has a rule** (below) – one whose `within`, if it has one, holds the posting's account: its
+   field, and nothing else – unless the rule has no `base` and the
    posting is on no VAT account; then the posting falls to 3.
 2. **Without a tax code, on a VAT account**: the field of `vat_settlement` for its side – a payment to the tax office
    on the debit, a refund on the credit.
@@ -93,6 +95,38 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
 - Every account of the harmonised chart 0.1 that is an asset, a liability or equity has a position of § 266; every
   account of income or expense one of § 275 Abs. 2; every account of expense a line of the Anlage EÜR.
 
+### The E-Bilanz
+
+The balance sheet and the profit and loss account a business transmits under § 5b EStG follow the taxonomy the BMF
+publishes as the prescribed data set: version 6.10 of 1 April 2026, for financial years beginning after 31 December
+2026 and admissible for 2026 (BMF letter of 8 June 2026, IV C 6 - S 2133-b/00067/002/023,
+[eSteuer](https://www.esteuer.de)). Its positions are finer than the HGB's: many must be stated – **Mussfelder** – and
+where the books cannot tell, an amount goes to a **catch-all position** ("nicht zuordenbar") instead.
+
+| Report | File |
+|---|---|
+| Balance sheet, taxonomy 6.10 (`de-gaap-ci`, `bs.…`) | [`de-ebilanz-bs-6.10.json`](data/reports/de-ebilanz-bs-6.10.json) |
+| Profit and loss account by nature of expense, taxonomy 6.10 (`is.…`) | [`de-ebilanz-is-gkv-6.10.json`](data/reports/de-ebilanz-is-gkv-6.10.json) |
+
+- **Positions** are the element identifiers of the taxonomy without their prefix `de-gaap-ci_`:
+  `bs.ass.currAss.cashEquiv.cash` is the cash in hand.
+- **Derived from the HGB:** every account takes the element the taxonomy refers to its HGB position, and – where that
+  element has Mussfelder below it – the catch-all position below it; where the chart tells more, the Mussfeld itself
+  (cash, bank, liabilities to and receivables from shareholders, to employees, from taxes and social security).
+- **Sales by VAT:** net sales fall into the gross sales by their tax code – standard and reduced rate, zero rate,
+  exempt by their provision, § 13b, not taxable –, sales without a tax code into the catch-all position. Services
+  bought fall by their input tax: deductible, under § 13b, not deductible. A tax rule applies here only `within` the
+  position named (below).
+- **`mandatory`** lists the Mussfelder and Summenmussfelder that apply to every legal form; a report states each of
+  them, empty (NIL) where the books have no amount – never 0.
+
+Two members of a report mapping serve the E-Bilanz:
+
+| Member | Content |
+|---|---|
+| `taxes[].within` | the rule applies only to postings on accounts whose position is this one or one below it (written with it and a dot); without it, to every posting with the code |
+| `mandatory` | positions a report states even without an amount, as empty |
+
 ## Open points
 
 - Review of the German mappings by tax advisers; until then they are drafts.
@@ -103,7 +137,10 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
 - The Anlage EÜR: the annex for depreciation (Anlage AVEÜR), which the lines of depreciation are carried from; the
   split of business entertainment into its deductible and non-deductible part (§ 4 Abs. 5 Satz 1 Nr. 2 EStG), which
   the books record on two accounts; the 10-day rule for regular payments (§ 11 Abs. 1 Satz 2, Abs. 2 Satz 2 EStG).
-- The E-Bilanz (§ 5b EStG, taxonomy 6.9 for financial years from 2026, 6.10 from 2027): positions by element
-  identifier only, until the conditions for reusing the taxonomy (© XBRL Deutschland e.V.) are clarified.
+- The E-Bilanz: the positions that depend on the legal form (partnerships' capital accounts, the Mussfelder of
+  sole proprietors, corporations and partnerships alone), the reconciliation to the tax balance sheet
+  (Überleitungsrechnung), the split of reductions of sales by VAT, the other modules of the taxonomy (GCD master data,
+  notes, appropriation of profits), and writing the XBRL instance – which ERiC transmits (part 0007). Names of the
+  positions stay with the taxonomy until the conditions for reusing it (© XBRL Deutschland e.V.) are clarified.
 - The recapitulative statement (§ 18a UStG), which needs the customer's VAT identification number per posting or
   document.
