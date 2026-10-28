@@ -96,6 +96,10 @@ pub struct ReportMapping {
     /// Account → position for a credit balance, where it differs (a bank account in overdraft).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "crate::non_empty_map")]
     pub credit_accounts: BTreeMap<AccountId, String>,
+    /// Accounts the report leaves out – with every account that refines them, unless a refinement has a mapping of its
+    /// own: imputed costs, or provisions in an income statement on a cash basis.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub excluded: Vec<AccountId>,
     /// The accounts that hold VAT; with `taxes`.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub vat_accounts: Option<VatAccounts>,
@@ -159,27 +163,22 @@ impl ReportMapping {
     }
 
     /// The position of an account: its own mapping or the nearest of the accounts it refines; for a credit balance
-    /// the credit mapping, where there is one.
+    /// the credit mapping, where there is one. None for an account the report leaves out, or that has no position.
     pub fn position(
         &self,
         account: &AccountId,
         parents: &BTreeMap<AccountId, AccountId>,
         credit: bool,
     ) -> Option<&str> {
-        if credit && let Some(position) = nearest(&self.credit_accounts, account, parents) {
-            return Some(position);
+        // An exclusion ends the search: mappings of the accounts above it do not reach below it.
+        let mut chain = ancestry(account, parents);
+        if let Some(excluded) = chain.iter().position(|id| self.excluded.contains(id)) {
+            chain.truncate(excluded);
         }
-        nearest(&self.accounts, account, parents)
+        let nearest = |map: &'_ BTreeMap<AccountId, String>| chain.iter().any(|id| map.contains_key(*id));
+        let map = if credit && nearest(&self.credit_accounts) { &self.credit_accounts } else { &self.accounts };
+        chain.iter().find_map(|id| map.get(*id)).map(String::as_str)
     }
-}
-
-/// The mapping of an account or of the nearest account it refines.
-fn nearest<'m>(
-    map: &'m BTreeMap<AccountId, String>,
-    account: &AccountId,
-    parents: &BTreeMap<AccountId, AccountId>,
-) -> Option<&'m str> {
-    ancestry(account, parents).into_iter().find_map(|id| map.get(id)).map(String::as_str)
 }
 
 /// An account and the accounts it refines, nearest first.
@@ -229,8 +228,9 @@ impl EventSet {
             Ok(())
         };
         for (_, event) in self.ordered() {
-            let booking = match &event.payload {
-                Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
+            let (booking, reversal) = match &event.payload {
+                Payload::BookingRecorded { booking } => (booking, false),
+                Payload::BookingReversed { booking, .. } => (booking, true),
                 _ => continue,
             };
             if booking.date < from || booking.date > to {
@@ -240,7 +240,9 @@ impl EventSet {
                 let units = posting.functional().base_units();
                 let on_output = within(&posting.account, &vat.output);
                 let on_input = within(&posting.account, &vat.input);
-                let credit = units < 0;
+                // The side of the posting – for a reversal, the side of the posting it cancels, so that it cancels
+                // in the same field.
+                let credit = if reversal { units > 0 } else { units < 0 };
                 let position = mapping.position(&posting.account, &parents, credit);
                 let rule = posting
                     .tax
@@ -263,9 +265,9 @@ impl EventSet {
                     }
                 } else if on_output || on_input {
                     if let Some(settlement) = &mapping.vat_settlement {
-                        let field = if units < 0 { &settlement.credit } else { &settlement.debit };
+                        let field = if credit { &settlement.credit } else { &settlement.debit };
                         if let Some(field) = field {
-                            add(field, units.abs())?;
+                            add(field, if credit { -units } else { units })?;
                         }
                     }
                     continue;
@@ -522,6 +524,103 @@ mod tests {
     }
 
     #[test]
+    fn a_freelancers_expenses_in_skr_03_fall_into_their_lines_of_the_euer() {
+        let skr03 = ChartTranslation::de_skr03();
+        let posting = |number: &str, units: i128| Posting {
+            owner: party(1),
+            account: skr03.accounts[number].clone(),
+            amount: Money::new(units, "EUR".parse().unwrap()).unwrap(),
+            note: None,
+            tax: None,
+            exchange: None,
+        };
+        let paid = |number: &str, units: i128| vec![posting(number, units), posting("1200", -units)];
+        let set = books(vec![
+            paid("4920", 4_000),  // telephone
+            paid("4925", 2_000),  // internet
+            paid("4930", 1_500),  // office supplies
+            paid("4650", 7_000),  // entertainment, the deductible 70 %
+            paid("4676", 9_000),  // the proprietor's hotel on a business trip
+            paid("4955", 30_000), // bookkeeping
+            paid("4530", 6_000),  // fuel
+            // Imputed costs and their offset are no expenses on a cash basis.
+            vec![posting("4990", 50_000), posting("2890", -50_000)],
+            // Commuting: the actual costs (Haben) out, the flat rate in, the rest not deductible.
+            vec![posting("4678", 1_000), posting("4679", 500), posting("4680", -1_500)],
+            // A car sold at a loss: the proceeds are income of line 19.
+            vec![posting("1200", 300_000), posting("8800", -300_000)],
+        ]);
+        let report = set
+            .period_report(
+                &ReportMapping::de_euer_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-01-01".parse().unwrap(),
+                "2026-12-31".parse().unwrap(),
+            )
+            .unwrap();
+        let expected: BTreeMap<String, i128> = [
+            ("2.280", 6_000),
+            ("2.229", 1_500),
+            ("2.175", 7_000),
+            ("2.221", 9_000),
+            ("2.194", 30_000),
+            ("2.146", 6_000),
+            ("2.176", 1_000),
+            ("2.142", 1_500),
+            ("1.102", 300_000),
+        ]
+        .into_iter()
+        .map(|(field, units)| (field.to_owned(), units))
+        .collect();
+        assert_eq!(report, expected);
+    }
+
+    #[test]
+    fn a_reversal_cancels_in_the_field_of_what_it_reverses() {
+        let skr03 = ChartTranslation::de_skr03();
+        let posting = |number: &str, units: i128| Posting {
+            owner: party(1),
+            account: skr03.accounts[number].clone(),
+            amount: Money::new(units, "EUR".parse().unwrap()).unwrap(),
+            note: None,
+            tax: None,
+            exchange: None,
+        };
+        // A car sold at a loss (a field of the credit side), a VAT payment and a withdrawal – each reversed.
+        let mut set = books(vec![
+            vec![posting("1200", 300_000), posting("8800", -300_000)],
+            vec![posting("1780", 18_050), posting("1200", -18_050)],
+            vec![posting("1800", 30_000), posting("1200", -30_000)],
+        ]);
+        let period = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let euer = |set: &EventSet| {
+            set.period_report(
+                &ReportMapping::de_euer_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                period.0,
+                period.1,
+            )
+            .unwrap()
+        };
+        let fields: Vec<String> = euer(&set).into_keys().collect();
+        assert_eq!(fields, ["1.102", "2.186", "5.122"], "proceeds, VAT paid, withdrawal");
+        let mut clock = Clock::new("b".parse().unwrap());
+        for (hash, event) in set.clone().ordered() {
+            let Payload::BookingRecorded { booking } = &event.payload else { continue };
+            let reversal = booking.reversed(booking.date, "reversed".into());
+            let (seq, prev) = set.chain_head(&"b".parse().unwrap());
+            let payload = Payload::BookingReversed { reverses: hash, booking: reversal };
+            set.insert(Event { time: clock.now(10_000 + seq), seq, prev, payload });
+        }
+        let report = euer(&set);
+        assert!(report.values().all(|units| *units == 0), "{report:?}");
+    }
+
+    #[test]
     fn every_expense_has_a_line_of_the_euer() {
         let chart = Chart::v0_1();
         let parents = EventSet::new().account_parents(&chart);
@@ -529,7 +628,17 @@ mod tests {
         for euer in [ReportMapping::de_euer_2025(), ReportMapping::de_euer_2026()] {
             let expenses = chart.accounts.iter().filter(|a| a.kind == AccountKind::Expense && !refined.contains(&a.id));
             for account in expenses {
-                assert!(euer.position(&account.id, &parents, false).is_some(), "{} has no line", account.id);
+                let id = &account.id;
+                let own = euer.accounts.contains_key(id)
+                    || euer.credit_accounts.contains_key(id)
+                    || euer.excluded.contains(id);
+                if own {
+                    continue;
+                }
+                // An account without a mapping of its own takes its group's line – never by accident the catch-all
+                // line of other expenses (Kz 183), which an account reaches only by its own mapping.
+                let line = euer.position(id, &parents, false);
+                assert!(line.is_some_and(|line| line != "2.183"), "{id} falls to {line:?}");
             }
         }
         // The form of 2026 has the Kennzahlen of 2025.
@@ -555,6 +664,7 @@ mod tests {
             status: MappingStatus::Draft,
             accounts,
             credit_accounts,
+            excluded: vec![],
             vat_accounts: None,
             vat_settlement: None,
             taxes: vec![],
@@ -564,5 +674,13 @@ mod tests {
         let report = set.account_report(&mapping, &Chart::v0_1(), &party(1), None).unwrap();
         assert_eq!(report.get("aktiv.B.II.1"), Some(&5_000), "4111 refines 41");
         assert_eq!(report.get("passiv.C.2"), Some(&-5_000), "an overdrawn bank account is a liability");
+        // An exclusion keeps the mapping above it from reaching the accounts below it, but not their own mappings.
+        let mut mapping = mapping;
+        mapping.excluded.push(pcg.accounts["411"].clone());
+        let parents = EventSet::new().account_parents(&Chart::v0_1());
+        assert_eq!(mapping.position(&pcg.accounts["4111"], &parents, false), None);
+        assert_eq!(mapping.position(&pcg.accounts["41"], &parents, false), Some("aktiv.B.II.1"));
+        mapping.accounts.insert(pcg.accounts["4111"].clone(), "aktiv.B.II.4".into());
+        assert_eq!(mapping.position(&pcg.accounts["4111"], &parents, false), Some("aktiv.B.II.4"));
     }
 }

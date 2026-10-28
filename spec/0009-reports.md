@@ -24,6 +24,7 @@ A report mapping is a root object of type `report_mapping`:
 | `status` | `draft` or `reviewed` – reviewed by tax advisers of the country |
 | `accounts` | account → position; absent for a report computed from tax codes alone |
 | `credit_accounts` | account → position for a credit balance, where it differs; absent when none |
+| `excluded` | accounts the report leaves out; absent when none |
 | `vat_accounts` | `output` and `input`: the accounts that hold VAT owed and deductible VAT |
 | `vat_settlement` | `debit` and `credit`: the fields for VAT paid to and refunded by the tax office |
 | `taxes` | per tax code, the fields it fills (below); absent for a report computed from accounts alone |
@@ -35,6 +36,9 @@ A report mapping is a root object of type `report_mapping`:
   group covers every account below it – of the chart and opened in the books – unless one of them has its own.
 - **The side can follow the balance.** Where `credit_accounts` names a position for an account, a credit balance
   falls there: a bank account in overdraft is a liability to a credit institution, not cash.
+- **Some accounts are left out.** An account in `excluded`, and every account below it without a mapping of its own,
+  falls into no position – imputed costs, or provisions in an income statement on a cash basis. Mappings of the
+  accounts above an excluded one do not reach below it.
 - **A report on a date** – a balance sheet – takes the balances (part 0004) of the accounts that fall into a position,
   for one owner (part 0008), in base units of the owner's functional currency – postings in foreign currency by their
   converted amount (part 0001) –, debit positive. Presenting it – signs, totals, subtotals – is a matter of
@@ -52,6 +56,9 @@ postings of one owner in the bookings dated within the period, one by one:
    on the debit, a refund on the credit.
 3. **Otherwise**: the position of its account. Its amount counts positive on the normal side of the account's kind –
    income credit, expenses debit; where `credit_accounts` distinguishes the sides of an account, on the side mapped.
+
+A reversal (part 0002) counts on the side of the posting it cancels, with the opposite amount, so that it cancels in
+the same field – also where the side decides the field: a reversed VAT payment is no refund.
 
 #### Tax codes
 
@@ -94,11 +101,29 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
   `vat_settlement`; withdrawals and contributions of the proprietor by the side of their account. The EÜR counts
   receipts and payments when they occur (§ 11 EStG), so a set of books that determines its profit this way dates its
   bookings when paid. The lines the form computes – totals, the profit, its corrections – are not part of the
-  mapping. The form of 2026 has the Kennzahlen of 2025; it adds one line without a Kennzahl of its own – a reserve
+  mapping.
+- **Every expense account has its line**, after the instructions to the form (Anleitung zur Anlage EÜR 2026): an
+  account falls to the line of other expenses (`2.183`, line 61) only by a mapping of its own, never as the default
+  of its group. From the standard charts SKR 03/04, for example: telephone and internet `2.280`, office supplies and
+  specialist literature `2.229`, the proprietor's hotel and incidental travel costs `2.221`, the travel costs of
+  employees `2.120` (with the staff), the proprietor's meals away `2.171`, entertainment `2.165`/`2.175`, gifts
+  `2.164`/`2.174`, vehicle costs `2.144` to `2.147`, rooms `2.150`/`2.151`, residual book values of assets disposed of
+  `2.135`, the cost of current assets of § 4 Abs. 3 Satz 4 EStG when the proceeds come in `2.100`, the formation of
+  reserves in section 4. The proceeds of an asset sold at a loss, which the SKR keep on an account of expense, are
+  income of line 19 (`1.102`, credit side).
+- **Left out** (`excluded`): what a set of books determining its profit on a cash basis does not have – imputed costs
+  and their offset, provisions, value adjustments and write-downs of receivables, current and financial assets,
+  losses on receivables that never counted as income – and the part of commuting costs that is not deductible.
+  Commuting (lines 73 and 74): the actual costs leave the vehicle costs by the credit account (`2.142`), the flat
+  rate comes back as deductible (`2.176`).
+- **OPEN:** the account-by-account review by tax advisers; the share of maintenance in line 43 (`2.153`), which a
+  mapping of one field per account cannot fill.
+- The form of 2026 has the Kennzahlen of 2025; it adds one line without a Kennzahl of its own – a reserve
   for the valuation of animals, carried over from the Anlage LuF – and the lines after it move down by one, so the
   mapping of 2026 is that of 2025.
 - Every account of the harmonised chart 0.1 that is an asset, a liability or equity has a position of § 266; every
-  account of income or expense one of § 275 Abs. 2; every account of expense a line of the Anlage EÜR.
+  account of income or expense one of § 275 Abs. 2; every account of expense a line of the Anlage EÜR, or is left
+  out of it.
 
 ### The E-Bilanz
 

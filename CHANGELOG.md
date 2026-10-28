@@ -26,8 +26,13 @@ closed periods.
   `de-skr03`, `de-skr04`), so that every device shows the same.
 - [0009 Reports](spec/0009-reports.md): the Anlage EÜR of 2026 (BMF letter of 1 September 2026), with the
   Kennzahlen of 2025; the German names of its fields in the wording of the form of 2026.
+- [0009 Reports](spec/0009-reports.md): report mappings can leave accounts out (`excluded`); a reversal counts in
+  the field of the posting it cancels, also where the side decides the field. The Anlage EÜR 2025 and 2026 gives every
+  expense account its line after the instructions to the form – 244 accounts, most of them from SKR 03/04, had fallen
+  to the line of other expenses –, leaves out what a cash basis does not have, and books commuting and the proceeds of
+  assets sold at a loss as the form asks.
 - Library: `EventSet::review_bookings`, `BookingProblem`, `Booking::cancels`, `Configuration::chart`,
-  `ReportMapping::de_euer_2026`.
+  `ReportMapping::de_euer_2026`, `ReportMapping::excluded`.
 - Library: `BooksId`, `Payload::BooksFounded`, `EventSet::books`, `EventSet::review_books`, `Transaction`,
   `TransactionId`, `Booking::transaction`, `review_transactions`, `Configuration`, `VatScheme`, `VatBasis`,
   `ReturnPeriod`, `RegimeCode`, `Payload::OwnerConfigured`, `EventSet::configuration`, `Closing`,
