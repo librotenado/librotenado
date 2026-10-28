@@ -55,6 +55,7 @@ pub(crate) fn safe_u64<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
     Ok(value)
 }
 
+mod balance;
 mod booking;
 mod canonical;
 mod chart;
@@ -67,6 +68,7 @@ mod money;
 mod object;
 mod party;
 
+pub use balance::{BalanceError, Balances};
 pub use booking::{AccountId, Booking, BookingError, Posting};
 pub use canonical::{CanonicalError, MAX_SAFE_INTEGER, canonicalize, to_canonical_vec};
 pub use chart::{Account, AccountKind, Chart, ChartError, ChartTranslation, TranslationError};
@@ -75,7 +77,7 @@ pub use date::Date;
 pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
-pub use money::{Currency, CurrencyDefinition, DefinitionError, Money};
+pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{Country, Organisation, PartyId, Person, Registration, Role, RoleKind, Shares, TaxId};
 

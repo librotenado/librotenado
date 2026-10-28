@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# Builds the documentation into docs/book: the book (mdBook) with the brand fonts and icons, and the API
-# documentation of the library under api/.
+# Builds the documentation into docs/book: the book (mdBook) with the brand fonts and icons and the data files of the
+# specification, and the API documentation of the library under api/.
 set -eu
 cd "$(dirname "$0")"
 
@@ -9,6 +9,8 @@ mkdir -p src/fonts
 cp ../brand/fonts/*.ttf ../brand/fonts/OFL.txt src/fonts/
 cp ../brand/web/favicon.svg theme/favicon.svg
 cp ../brand/web/icon-192.png theme/favicon.png
+mkdir -p src/spec/data
+cp ../spec/data/*.json src/spec/data/
 
 mdbook build
 

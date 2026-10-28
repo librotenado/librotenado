@@ -5,7 +5,7 @@ use std::{fmt, ops::Neg, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Object, ParseError};
+use crate::{Date, Object, ParseError};
 
 /// A currency by its code: three upper-case letters for an ISO 4217 currency (`EUR`, `CHF`), `x-` and 1–62 characters
 /// of `a-z`, `0-9` and `-` for a currency defined outside ISO 4217 (`x-btc`, `x-galleon`).
@@ -215,6 +215,41 @@ impl CurrencyDefinition {
     }
 }
 
+/// A published table of currency definitions – reference data, versioned with the protocol (spec part 0001).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CurrencyTable {
+    /// The version of the table.
+    pub version: String,
+    /// The date of the ISO 4217 list the table follows.
+    pub iso_4217: Date,
+    /// The definitions, each code once.
+    pub currencies: Vec<CurrencyDefinition>,
+}
+
+impl Object for CurrencyTable {
+    const TYPE: &'static str = "currency_table";
+}
+
+impl CurrencyTable {
+    /// The table of version 0.1: every currency of ISO 4217 with a minor unit, and `x-btc` and `x-eth`
+    /// (`spec/data/currencies.json`).
+    pub fn v0_1() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/currencies.json")).expect("the published table is valid")
+    }
+
+    /// The definition of this currency, if the table has it.
+    pub fn get(&self, code: &Currency) -> Option<&CurrencyDefinition> {
+        self.currencies.iter().find(|definition| definition.code() == code)
+    }
+
+    /// Whether every code occurs once.
+    pub fn is_valid(&self) -> bool {
+        let mut codes: Vec<&Currency> = self.currencies.iter().map(CurrencyDefinition::code).collect();
+        codes.sort();
+        codes.windows(2).all(|pair| pair[0] != pair[1])
+    }
+}
+
 /// The written form of a definition: `{"code": …, "subdivisions": […]}`.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -305,6 +340,20 @@ mod tests {
         let galleon = definition(r#"{"code":"x-galleon","subdivisions":[17,29]}"#).unwrap();
         assert_eq!((galleon.base_units_per_unit(), galleon.decimals()), (Some(493), None));
         assert_eq!(galleon.subdivisions(), [17, 29]);
+    }
+
+    #[test]
+    fn the_table_of_version_0_1() {
+        let table = CurrencyTable::v0_1();
+        assert!(table.is_valid());
+        assert_eq!(table.currencies.len(), 167);
+        let decimals = |code: &str| table.get(&code.parse().unwrap()).and_then(CurrencyDefinition::decimals);
+        assert_eq!(
+            [decimals("EUR"), decimals("JPY"), decimals("KWD"), decimals("CLF"), decimals("MGA")],
+            [Some(2), Some(0), Some(3), Some(4), Some(2)]
+        );
+        assert_eq!((decimals("x-btc"), decimals("x-eth")), (Some(8), Some(18)));
+        assert!(table.get(&"XAU".parse().unwrap()).is_none(), "units without a minor unit are not in the table");
     }
 
     #[test]

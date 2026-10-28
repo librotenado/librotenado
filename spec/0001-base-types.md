@@ -65,16 +65,22 @@ stage 0 is the unit itself, the last stage the base unit. Translation data names
 `EUR/0` euro, `EUR/1` cent; `x-galleon/0` Galleon, `x-galleon/1` Sickle, `x-galleon/2` Knut. The `/` cannot occur
 in a code, so keys are unambiguous.
 
+### The table of version 0.1
+
+The definitions of version 0.1 are published as [`spec/data/currencies.json`](data/currencies.json), a root object of
+type `currency_table` with `version`, `iso_4217` – the date of the ISO 4217 list it follows – and `currencies`, each
+code once. It holds every currency of ISO 4217 list one with a minor unit, as published by its maintenance agency on
+2026-09-17 ([SIX, ISO 4217 list one](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml)),
+and `x-btc` and `x-eth`. ISO 4217 gives the Malagasy ariary (MGA) and the Mauritanian ouguiya (MRU) two decimal
+places, and so does the table – although each divides in theory into five subunits
+([Wikipedia, ISO 4217](https://en.wikipedia.org/wiki/ISO_4217)).
+
 OPEN:
 
-- The table of definitions for version 0.1, from the ISO 4217 list of its maintenance agency, and the definitions
-  of common currencies outside it (`x-btc`, `x-eth`, …); the divisions of bitcoin and ether above are common
-  usage, not yet sourced.
-- ISO 4217 lists the Malagasy ariary (MGA) and the Mauritanian ouguiya (MRU) with two decimal places, although each
-  divides in theory into five subunits; the table follows ISO 4217. Source so far:
-  [Wikipedia, ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) – to be verified against the standard.
-- Units without a minor unit in ISO 4217, such as gold (XAU), and a validity period per definition (DEM,
-  replaced by the euro).
+- The divisions of bitcoin and ether are common usage, not yet sourced; further currencies outside ISO 4217.
+- Units without a minor unit in ISO 4217 – precious metals such as gold (XAU), units of account such as the special
+  drawing right (XDR), the codes for testing and for no currency (XTS, XXX) – are not in the table; and a validity
+  period per definition (DEM, replaced by the euro).
 - The form of translation data, and whether the names of ISO 4217 currencies and their subunits can be taken from
   [Unicode CLDR](https://cldr.unicode.org), including plural forms.
 

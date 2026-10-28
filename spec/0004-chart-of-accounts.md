@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.1, draft. Implemented in the reference library (`Chart`, `ChartTranslation`).
+Version 0.1, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -53,6 +53,17 @@ A translation is an object of type `chart_translation`:
 
 Translations are versioned together with the national chart and tested with published cases per country (OPEN:
 which charts may be published, see the whitepaper).
+
+## Balances
+
+The **balance** of an account, for one owner in one currency on a date, is the sum of the `base_units` of the postings
+of that owner on that account in that currency, in all bookings – recorded and reversing – dated on or before that date
+(part 0001). A positive balance is a debit balance, a negative one a credit balance. Over all accounts of one owner in
+one currency, the balances sum to zero.
+
+In the hierarchy, the balance of an account **includes the accounts that refine it** – of the chart and opened in the
+books (part 0002): the balance of office expenses includes that of software. Balances rolled up this way over all
+accounts are the **trial balance**, from which reports are derived.
 
 ## Open points
 

@@ -2,6 +2,14 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## Unreleased
+
+- [0001 Base types](spec/0001-base-types.md): the currency table of version 0.1, `spec/data/currencies.json` – every
+  ISO 4217 currency with a minor unit (list of 2026-09-17), and `x-btc`, `x-eth`; type `currency_table`.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): balances per owner, account and currency on a date, and
+  the trial balance rolled up the hierarchy.
+- Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`.
+
 ## 0.1.0 – 2026-10-28
 
 The first draft of the protocol.
