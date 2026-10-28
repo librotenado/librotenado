@@ -1,6 +1,6 @@
 # 0003 Canonical encoding
 
-Version 0.1, draft. Implemented in the reference library (`canonicalize`, `to_canonical_vec`, `EventSet::receive`).
+Version 0.2, draft. Implemented in the reference library (`canonicalize`, `to_canonical_vec`, `EventSet::receive`).
 
 Every implementation must compute the same hash for the same event. The protocol therefore defines one byte-exact
 encoding: the **JSON Canonicalization Scheme** ([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)), restricted to

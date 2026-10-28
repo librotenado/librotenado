@@ -1,6 +1,6 @@
 # 0001 Base types
 
-Version 0.1, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.2, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Money
 

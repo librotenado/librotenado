@@ -1,6 +1,6 @@
 # 0010 Audit and retention
 
-Version 0.1, draft. Implemented in the reference library (`gobd::export`).
+Version 0.2, draft. Implemented in the reference library (`gobd::export`).
 
 Books must be kept so that an auditor can follow every business transaction from its document to the statements and
 back, for years. This part says what the protocol guarantees for that, and how books are handed over to an auditor

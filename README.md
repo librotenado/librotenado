@@ -10,9 +10,10 @@
 **An open protocol for accounting data in Europe** – one model for bookings, receipts, invoices, reports and
 filings that the existing European formats translate into and out of.
 
-> **Status:** version 0.1, a draft: base types, events and synchronisation, the canonical encoding, the form of the
-> harmonised chart of accounts, documents and parties are specified and implemented; encryption and filings are
-> proposals. Everything may change before 1.0. The first implementation is
+> **Status:** version 0.2, a draft: base types, events and synchronisation, the canonical encoding, the harmonised
+> chart of accounts with the French PCG and the German SKR 03 and SKR 04, documents and e-invoices after EN 16931,
+> parties, reports – HGB, VAT return, Anlage EÜR, E-Bilanz –, filings and the GoBD export are specified and
+> implemented; encryption and the adapter interface are proposals. Everything may change before 1.0. The first implementation is
 > [spezado](https://github.com/spezado/spezado). The reasoning is in the
 > [whitepaper](https://github.com/librotenado/whitepaper); the documentation is at
 > [librotenado.dev](https://librotenado.dev).

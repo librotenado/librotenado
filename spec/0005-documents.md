@@ -1,6 +1,6 @@
 # 0005 Documents
 
-Version 0.1, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+Version 0.2, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
 `propose_booking`, event kind `document_recorded`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of

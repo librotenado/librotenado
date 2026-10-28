@@ -1,6 +1,6 @@
 # 0007 Filings
 
-Version 0.1, draft. Filings and their events are implemented in the reference library (`Filing`,
+Version 0.2, draft. Filings and their events are implemented in the reference library (`Filing`,
 `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`); the adapter interface is a proposal.
 
 Books end in filings: VAT returns, income statements, annual accounts, recapitulative statements. Every country has

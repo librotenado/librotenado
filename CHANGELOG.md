@@ -2,7 +2,10 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
-## Unreleased
+## 0.2.0 – 2026-10-28
+
+German law: e-invoices after EN 16931 in full, the reports and the E-Bilanz, the GoBD export, foreign currency,
+filings, and the standard charts SKR 03 and SKR 04.
 
 - [0001 Base types](spec/0001-base-types.md): the currency table of version 0.1, `spec/data/currencies.json` – every
   ISO 4217 currency with a minor unit (list of 2026-09-17), and `x-btc`, `x-eth`; type `currency_table`.
@@ -51,8 +54,11 @@ Specification and library share one version. Until 1.0, any version may change w
 - Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`, `Chart::v0_1()`,
   `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`, `TaxCode`, `TaxTable`, `ReportMapping`,
   `EventSet::period_report`, `EventSet::account_report`, `InvoiceData`, `en16931::read`, `en16931::read_pdf`,
-  `en16931::write_ubl`, `en16931::write_cii`, `en16931::attach_to_pdf`, `propose_booking`, `gobd::export`;
-  dependencies `roxmltree`, and `lopdf` for the feature `pdf`.
+  `en16931::write_ubl`, `en16931::write_cii`, `en16931::attach_to_pdf`, `propose_booking`, `gobd::export`,
+  `ChartTranslation::de_skr03()`, `ChartTranslation::de_skr04()`, `ReportMapping::de_ebilanz_bs_6_10()`,
+  `ReportMapping::de_ebilanz_is_gkv_6_10()`, `Exchange`, `Posting::functional`, `EventSet::functional_balances`,
+  `Filing`, `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`; dependencies `roxmltree`,
+  `base64`, and `lopdf` for the feature `pdf`.
 
 ## 0.1.0 – 2026-10-28
 

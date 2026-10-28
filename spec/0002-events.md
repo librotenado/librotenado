@@ -1,6 +1,6 @@
 # 0002 Events and synchronisation
 
-Version 0.1, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.2, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Events
 
