@@ -1,6 +1,7 @@
 # 0005 Documents
 
-Version 0.1, draft. Implemented in the reference library (`Document`, `Original`, event kind `document_recorded`).
+Version 0.1, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+`propose_booking`, event kind `document_recorded`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of
 its own**: its data – kind, number, date – stand in the document, never only in its file. The file it came as, the
@@ -26,9 +27,70 @@ A document is an object of type `document` (part 0003):
 | `date` | the date it bears, e.g. the invoice date (part 0001) |
 | `received` | the day it was received; it may be earlier than the day it was recorded – a letter scanned days later |
 | `original` | the file it came as (below) |
+| `invoice` | the data of an invoice or credit note (below); absent when not recorded |
 
-Later versions add kinds and members – the parties, the due date, the taxes and totals of an invoice (OPEN). An
-implementation keeps a document of a kind it does not know, but does not interpret it.
+Later versions add kinds and members. An implementation keeps a document of a kind it does not know, but does not
+interpret it.
+
+## The data of an invoice
+
+The data of an invoice or credit note is an object of type `invoice_data` – whether entered by hand or translated
+from an electronic invoice (below). Its terms follow EN 16931, the European semantic model of an electronic invoice;
+the business terms (BT) it takes them from are named in brackets.
+
+| Member | Content |
+|---|---|
+| `currency` | the currency of the invoice (BT-5) |
+| `seller`, `buyer` | the parties (type `invoice_party`): `name` (BT-27, BT-44), and where stated `vat_id` (BT-31, BT-48), `tax_number` (BT-32), `country` (BT-40, BT-55), and `party` – the organisation or person of the books it is (part 0008), once known |
+| `due_date` | when payment is due (BT-9) |
+| `delivery_date` | when the supply was made (BT-72) |
+| `buyer_reference` | the reference the buyer asked for, e.g. the Leitweg-ID of a German public authority (BT-10) |
+| `iban` | the account to pay to (BT-84) |
+| `taxes` | the VAT per category and rate (BG-23, type `vat_breakdown`), at least one: `category`, `rate` in percent where the category has one, `base` and `tax` as money, and `exemption` where stated (BT-116 to BT-120) |
+| `lines` | the lines (BG-25, type `invoice_line`): `name`, `net` as money, `category`, `rate` (BT-153, BT-131, BT-151, BT-152); absent when not recorded |
+| `totals` | type `invoice_totals`: `net` (BT-109), `tax` (BT-110), `gross` (BT-112), `due` (BT-115) |
+
+The VAT categories are the codes EN 16931 uses (UNCL 5305): `S` standard or reduced rate, `Z` zero rate, `E` exempt,
+`AE` reverse charge, `K` intra-Community supply, `G` export, `O` not subject to VAT, `L` and `M` the indirect taxes of
+the Canary Islands and of Ceuta and Melilla. Amounts are money of the invoice's currency (part 0001), as printed –
+positive on a credit note, too: its `kind` says which way it books.
+
+## Electronic invoices
+
+An electronic invoice according to EN 16931 is translated into a document's data: its number (BT-1), date (BT-2),
+kind – `credit_note` for type code 381 or a UBL CreditNote, otherwise `invoice` (BT-3) – and its `invoice` data. Both
+syntaxes give the same data:
+
+- **UBL** – XRechnung, Peppol BIS Billing 3.0 – as a UBL Invoice or CreditNote;
+- **UN/CEFACT CII** – XRechnung, and the XML that ZUGFeRD and Factur-X embed in a PDF; the translation reads the XML
+  attached to the PDF.
+
+In Germany an invoice is electronic in the sense of § 14 UStG if it follows EN 16931: XRechnung, which is in force in
+version 3.0 ([KoSIT](https://xeinkauf.de/xrechnung/versionen-und-bundles/)), and ZUGFeRD from version 2.0.1 except
+its profiles MINIMUM and BASIC WL (BMF letter of 15 October 2024, III C 2 - S 7287-a/23/10001 :007, Rz. 29 and 30).
+The paths of the business terms in both syntaxes follow the open syntax bindings of Peppol BIS Billing 3.0
+([OpenPEPPOL](https://docs.peppol.eu/poacc/billing/3.0/)) and of the XRechnung visualisation (KoSIT). The reference
+library is tested with the XRechnung test suite of KoSIT and a credit note of CEN/TC 434.
+
+## Booking proposals
+
+From the data of an invoice an implementation proposes a booking; whoever books reviews it and may change every
+posting. Per VAT category and rate, the proposal books the net amount on a counter account – an expense for a
+purchase, income for a sale – and the VAT on the VAT account, each with the tax code of the country (part 0001), and
+the gross amount on the account of the supplier or customer. A credit note books the other way round. Under reverse
+charge and on an intra-Community acquisition the buyer computes the VAT it owes and deducts it in the same booking.
+
+The German tax codes follow from category, rate and side:
+
+| Category | Sale | Purchase |
+|---|---|---|
+| `S` 19 % / 7 % | `de-out-19` / `de-out-7` | `de-in-19` / `de-in-7` |
+| `Z` | `de-out-0` | – |
+| `E` | `de-out-exempt` | – |
+| `AE` | `de-out-13b` | `de-in-13b-domestic`, or `de-in-13b-eu-service` from a seller abroad, at 19 % |
+| `K` | `de-out-ig-supply` | `de-in-ig-acquisition-19` |
+| `G` | `de-out-export` | – |
+| `O` | `de-out-not-taxable` | – |
 
 ## The original
 
@@ -52,7 +114,7 @@ Formats in version 0.1 (names are lower case; more follow with their translation
 | `format` | Meaning |
 |---|---|
 | `en16931-ubl` | an invoice according to EN 16931 in the UBL syntax (e.g. XRechnung, Peppol BIS Billing 3.0) |
-| `en16931-cii` | an invoice according to EN 16931 in the UN/CEFACT CII syntax – also a PDF with an embedded CII invoice (ZUGFeRD/Factur-X) |
+| `en16931-cii` | an invoice according to EN 16931 in the UN/CEFACT CII syntax – also a PDF with an embedded CII invoice (ZUGFeRD, Factur-X) |
 | `iso20022-camt.053` | a bank statement (ISO 20022 BankToCustomerStatement) |
 
 ## Events
@@ -66,10 +128,14 @@ Formats in version 0.1 (names are lower case; more follow with their translation
 
 ## Open points
 
-- The further data of a document: parties, due date, period of service, taxes and totals – for invoices taken from
-  EN 16931 by translation.
+- Further terms of EN 16931: allowances and charges on the document and its lines (BG-20, BG-21, BG-27, BG-28), the
+  invoicing period (BG-14), prepaid amounts, VAT in a second currency (BT-6, BT-111), payment terms (BT-20).
+- Reverse charge and intra-Community acquisitions at the reduced rate: the proposal assumes 19 %; rates other than
+  19 % and 7 % get no tax code.
+- Translating outgoing invoices from the model into XRechnung and ZUGFeRD.
 - Correcting the data of a recorded document by a later event.
-- Translations of documents into bookings: their form and their versioning, per format.
+- Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
+  may be quoted in a specification under CC BY; this part names their identifiers only.
 - Whether the names of formats should be the identifiers the standards define (e.g. the specification identifier of
   EN 16931 and its CIUS such as XRechnung) instead of names of our own.
 - Which rules require keeping the structured part of an e-invoice as received (see the whitepaper).

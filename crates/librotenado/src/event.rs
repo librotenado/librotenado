@@ -770,6 +770,7 @@ mod tests {
             date: "2026-10-24".parse().unwrap(),
             received: "2026-10-24".parse().unwrap(),
             original: Original::of(b"a receipt", "image/jpeg"),
+            invoice: None,
         };
         let mut based = booking(5);
         based.documents = vec![id.clone()];

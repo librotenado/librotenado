@@ -30,6 +30,11 @@ impl Decimal {
         (scale <= Self::MAX_SCALE).then(|| Decimal { units, scale }.reduced())
     }
 
+    /// The integer `units` of `units · 10^−scale`.
+    pub fn units(self) -> i128 {
+        self.units
+    }
+
     /// The number of decimal places.
     pub fn scale(self) -> u8 {
         self.scale

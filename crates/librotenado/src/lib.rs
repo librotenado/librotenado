@@ -81,7 +81,9 @@ mod clock;
 mod date;
 mod decimal;
 mod document;
+pub mod en16931;
 mod event;
+mod invoice;
 mod money;
 mod names;
 mod object;
@@ -98,6 +100,10 @@ pub use date::Date;
 pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
+pub use invoice::{
+    InvoiceData, InvoiceLine, InvoiceParty, InvoiceSide, InvoiceTotals, ProposalAccounts, ProposalError, VatBreakdown,
+    VatCategory, de_tax_code, propose_booking,
+};
 pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};

@@ -14,7 +14,17 @@ workspace = true
 
 [dependencies]
 hex = "0.4.3"
+lopdf = { version = "0.46.0", optional = true }
+roxmltree = "0.21.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 thiserror = "2.0.21"
+
+[features]
+default = ["pdf"]
+# Reading the invoice embedded in a PDF (ZUGFeRD, Factur-X).
+pdf = ["dep:lopdf"]
+
+[dev-dependencies]
+lopdf = "0.46.0"

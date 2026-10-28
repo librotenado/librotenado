@@ -7,7 +7,7 @@ use std::{fmt, str::FromStr};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
-use crate::{Date, Object, ParseError};
+use crate::{Date, InvoiceData, Object, ParseError};
 
 /// The identity of a document: a UUID in its one form (spec part 0001), like an account's. It carries no meaning.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -158,6 +158,9 @@ pub struct Document {
     pub received: Date,
     /// The file it came as.
     pub original: Original,
+    /// The data of an invoice or credit note: parties, VAT and totals; absent when not recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub invoice: Option<Box<InvoiceData>>,
 }
 
 impl Object for Document {
@@ -180,6 +183,7 @@ mod tests {
             date: "2026-10-20".parse().unwrap(),
             received: "2026-10-24".parse().unwrap(),
             original,
+            invoice: None,
         }
     }
 

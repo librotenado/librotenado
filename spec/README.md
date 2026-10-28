@@ -9,7 +9,7 @@ Version 0.1 – a draft, not yet stable. Normative statements will use the key w
 | [0002 Events and synchronisation](0002-events.md) | events, hybrid logical clocks, chains per device, merging; the accounts of a set of books | draft, implemented |
 | [0003 Canonical encoding](0003-canonical-encoding.md) | a byte-exact encoding every implementation can hash (RFC 8785); objects and their types | draft, implemented |
 | [0004 Chart of accounts](0004-chart-of-accounts.md) | the harmonised chart: hierarchy with attributes; national charts as translations | draft, implemented (form; the accounts themselves follow) |
-| [0005 Documents](0005-documents.md) | invoices, receipts, statements as records of their own; originals as artefacts | draft, implemented |
+| [0005 Documents](0005-documents.md) | invoices, receipts, statements as records of their own; invoice data; XRechnung and ZUGFeRD; booking proposals | draft, implemented |
 | [0006 Encryption](0006-encryption.md) | end-to-end encryption: an ordered list of members and keys, a books key per member, a chain of keys | draft, proposal |
 | [0007 Filings](0007-filings.md) | submissions to authorities: derived from a state of the books, never changed; adapters over HTTPS | draft, proposal |
 | [0008 Parties](0008-parties.md) | the organisations and persons books belong to: legal form, registers, tax numbers, roles and shares | draft, implemented |

@@ -41,7 +41,9 @@ Every object of the protocol has a **type**, defined in its part:
 | `filing` | 0007 | | `shares` | 0008 |
 | `currency_table` | 0001 | | `names` | 0001 |
 | `tax_code` | 0001 | | `tax_table` | 0001 |
-| `report_mapping` | 0009 | | | |
+| `report_mapping` | 0009 | | `invoice_data` | 0005 |
+| `invoice_party` | 0005 | | `vat_breakdown` | 0005 |
+| `invoice_line` | 0005 | | `invoice_totals` | 0005 |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 
