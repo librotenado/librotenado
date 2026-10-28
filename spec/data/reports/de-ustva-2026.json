@@ -1,4 +1,4 @@
-{"type": "report_mapping", "report": "de-ustva", "country": "DE", "version": "2026", "valid_from": "2026-01-01", "into": "librotenado/0.1", "status": "draft", "vat_accounts": {"output": ["01a182f7-1f45-7412-9f33-a92ab4fa7d37", "01a182f7-1f3a-7013-91df-7f6e0476852a"], "input": ["01a182f7-1f3f-727e-8cb7-7ad4a5dec582"]},
+{"type": "report_mapping", "report": "de-ustva", "country": "DE", "version": "2026", "valid_from": "2026-01-01", "into": "librotenado/0.1", "status": "draft", "vat_accounts": {"output": ["01a182f7-1f45-7412-9f33-a92ab4fa7d37", "01a182f7-1f3a-7013-91df-7f6e0476852a", "01a182f7-1f3b-7d6d-98f8-43222873f0c7"], "input": ["01a182f7-1f3f-727e-8cb7-7ad4a5dec582", "01a182f7-1f48-700f-a0c8-0fa7731fa2b1"]},
  "taxes": [
   {"tax": "de-out-19", "base": "81"},
   {"tax": "de-out-7", "base": "86"},

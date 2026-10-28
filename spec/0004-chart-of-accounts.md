@@ -80,7 +80,9 @@ finely. The English names are the project's translation.
 The German balance sheet (HGB § 266, part 0009) already distinguishes more finely than the PCG: shares, receivables,
 payables and current securities of **affiliated companies** and of **companies linked by participating interests**,
 and the reserve for shares in a controlling company. The chart 0.1 has seven accounts for them, refining the PCG
-accounts 261, 411, 401, 503 and 106; they have no account of the PCG of their own.
+accounts 261, 411, 401, 503 and 106; they have no account of the PCG of their own. The Anlage EÜR distinguishes more
+finely still – vehicle costs, business entertainment and gifts by their deductible part, home office, telecommunications
+apart from postage, legal and tax advice, low-value assets and others: twenty further accounts.
 
 ## Balances
 

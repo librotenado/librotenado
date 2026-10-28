@@ -7,7 +7,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccountId, BalanceError, Chart, Country, Date, EventSet, Object, PartyId, Payload, TaxCode, TaxDirection, TaxTable,
+    AccountId, AccountKind, BalanceError, Chart, Country, Date, EventSet, Object, PartyId, Payload, TaxCode,
+    TaxDirection, TaxTable,
 };
 
 /// Whether a mapping has been reviewed by tax advisers of its country.
@@ -27,6 +28,17 @@ pub struct VatAccounts {
     pub output: Vec<AccountId>,
     /// Accounts of deductible VAT. Their refinements count, too.
     pub input: Vec<AccountId>,
+}
+
+/// The fields for settling VAT with the tax office: postings on VAT accounts without a tax code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VatSettlement {
+    /// The field for a debit: VAT paid to the tax office.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub debit: Option<String>,
+    /// The field for a credit: VAT refunded by the tax office.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub credit: Option<String>,
 }
 
 /// Which fields of a report a tax code fills.
@@ -70,6 +82,9 @@ pub struct ReportMapping {
     /// The accounts that hold VAT; with `taxes`.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub vat_accounts: Option<VatAccounts>,
+    /// The fields for postings on VAT accounts without a tax code: payments to and refunds from the tax office.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub vat_settlement: Option<VatSettlement>,
     /// The fields each tax code fills.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub taxes: Vec<TaxRule>,
@@ -95,6 +110,12 @@ impl ReportMapping {
     /// The German profit and loss account of 2026, by nature of expense (HGB § 275 Abs. 2).
     pub fn de_hgb_275_gkv_2026() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-275-gkv-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The German income statement on a cash basis of 2025 (Anlage EÜR, § 4 Abs. 3 EStG).
+    pub fn de_euer_2025() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-euer-2025.json"))
             .expect("the published mapping is valid")
     }
 
@@ -135,10 +156,18 @@ fn ancestry<'a>(account: &'a AccountId, parents: &'a BTreeMap<AccountId, Account
 }
 
 impl EventSet {
-    /// The fields of a report computed from tax codes – a VAT return – for `owner`, over the bookings dated from
-    /// `from` to `to` inclusive. Amounts are in base units and positive as the form expects them: net amounts and
-    /// VAT owed of sales as credit, net amounts of purchases and deductible VAT as debit.
-    pub fn tax_report(
+    /// The fields of a report over a period – a VAT return, a profit and loss account, an income statement on a
+    /// cash basis – for `owner`, from the bookings dated from `from` to `to` inclusive (spec part 0009). Per posting:
+    ///
+    /// - with a tax code that has a rule: on VAT accounts its `output` or `input` field, elsewhere its `base` field;
+    /// - without a tax code on a VAT account: the `vat_settlement` field of its side – a payment to or a refund from
+    ///   the tax office;
+    /// - otherwise, and where the rule has no `base`: the position of its account.
+    ///
+    /// Amounts are in base units and positive as the report expects them: sales and VAT owed as credit, purchases
+    /// and deductible VAT as debit; positions of accounts on the normal side of their kind, or – where the mapping
+    /// distinguishes the sides – on the side mapped.
+    pub fn period_report(
         &self,
         mapping: &ReportMapping,
         taxes: &TaxTable,
@@ -148,12 +177,18 @@ impl EventSet {
         to: Date,
     ) -> Result<BTreeMap<String, i128>, BalanceError> {
         let parents = self.account_parents(chart);
+        let kinds = self.account_kinds(chart);
         let none = VatAccounts { output: vec![], input: vec![] };
         let vat = mapping.vat_accounts.as_ref().unwrap_or(&none);
         let within = |account: &AccountId, roots: &[AccountId]| {
             ancestry(account, &parents).into_iter().any(|id| roots.contains(id))
         };
         let mut fields: BTreeMap<String, i128> = BTreeMap::new();
+        let mut add = |field: &str, amount: i128| -> Result<(), BalanceError> {
+            let sum = fields.entry(field.to_owned()).or_default();
+            *sum = sum.checked_add(amount).ok_or(BalanceError::Overflow)?;
+            Ok(())
+        };
         for (_, event) in self.ordered() {
             let booking = match &event.payload {
                 Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
@@ -163,24 +198,60 @@ impl EventSet {
                 continue;
             }
             for posting in booking.postings.iter().filter(|p| p.owner == *owner) {
-                let Some(code) = &posting.tax else { continue };
-                let Some(rule) = mapping.taxes.iter().find(|rule| rule.tax == *code) else { continue };
                 let units = posting.amount.base_units();
-                let (field, amount) = if within(&posting.account, &vat.output) {
-                    (rule.output.as_ref(), -units)
-                } else if within(&posting.account, &vat.input) {
-                    (rule.input.as_ref(), units)
-                } else {
-                    let sales = taxes.get(code).is_some_and(|d| d.direction == TaxDirection::Output);
-                    (rule.base.as_ref(), if sales { -units } else { units })
-                };
-                if let Some(field) = field {
-                    let sum = fields.entry(field.clone()).or_default();
-                    *sum = sum.checked_add(amount).ok_or(BalanceError::Overflow)?;
+                let on_output = within(&posting.account, &vat.output);
+                let on_input = within(&posting.account, &vat.input);
+                let rule = posting.tax.as_ref().and_then(|code| mapping.taxes.iter().find(|rule| rule.tax == *code));
+                if let Some(rule) = rule {
+                    let sales = taxes.get(&rule.tax).is_some_and(|d| d.direction == TaxDirection::Output);
+                    let (field, amount) = if on_output {
+                        (rule.output.as_ref(), -units)
+                    } else if on_input {
+                        (rule.input.as_ref(), units)
+                    } else {
+                        (rule.base.as_ref(), if sales { -units } else { units })
+                    };
+                    if let Some(field) = field {
+                        add(field, amount)?;
+                    }
+                    if on_output || on_input || rule.base.is_some() {
+                        continue;
+                    }
+                } else if on_output || on_input {
+                    if let Some(settlement) = &mapping.vat_settlement {
+                        let field = if units < 0 { &settlement.credit } else { &settlement.debit };
+                        if let Some(field) = field {
+                            add(field, units.abs())?;
+                        }
+                    }
+                    continue;
+                }
+                let credit = units < 0;
+                let sided =
+                    ancestry(&posting.account, &parents).into_iter().any(|id| mapping.credit_accounts.contains_key(id));
+                if let Some(position) = mapping.position(&posting.account, &parents, credit) {
+                    let debit_positive = if sided {
+                        !credit
+                    } else {
+                        kinds.get(&posting.account).is_none_or(|kind| kind.debit_normal() || *kind == AccountKind::Memo)
+                    };
+                    add(position, if debit_positive { units } else { -units })?;
                 }
             }
         }
         Ok(fields)
+    }
+
+    /// The kind of every account: of `chart`, and opened in the books.
+    pub fn account_kinds(&self, chart: &Chart) -> BTreeMap<AccountId, AccountKind> {
+        let mut kinds: BTreeMap<AccountId, AccountKind> =
+            chart.accounts.iter().map(|account| (account.id.clone(), account.kind)).collect();
+        for (_, event) in self.ordered() {
+            if let Payload::AccountOpened { account } = &event.payload {
+                kinds.entry(account.id.clone()).or_insert(account.kind);
+            }
+        }
+        kinds
     }
 
     /// The positions of a report computed from accounts – a balance sheet, a profit and loss account – for `owner`
@@ -261,7 +332,7 @@ mod tests {
             ],
         ]);
         let report = set
-            .tax_report(
+            .period_report(
                 &ReportMapping::de_ustva_2026(),
                 &TaxTable::de(),
                 &Chart::v0_1(),
@@ -303,6 +374,61 @@ mod tests {
     }
 
     #[test]
+    fn an_income_statement_on_a_cash_basis() {
+        let names = crate::Names::v0_1("en").unwrap();
+        let grown =
+            |name: &str| names.names.iter().find(|(_, n)| n.as_str() == name).map(|(id, _)| id.clone()).unwrap();
+        let on = |id: String, units: i128, tax: Option<&str>| Posting {
+            account: id.parse().unwrap(),
+            ..posting("512", units, tax)
+        };
+        let set = books(vec![
+            // A sale at 19 %, received in the bank.
+            vec![
+                posting("5121", 119_000, None),
+                posting("706", -100_000, Some("de-out-19")),
+                posting("44571", -19_000, Some("de-out-19")),
+            ],
+            // A phone bill, paid.
+            vec![
+                on(grown("Telecommunications"), 5_000, Some("de-in-19")),
+                posting("44566", 950, Some("de-in-19")),
+                posting("5121", -5_950, None),
+            ],
+            // The VAT paid to the tax office, and a withdrawal by the proprietor.
+            vec![posting("44551", 18_050, None), posting("5121", -18_050, None)],
+            vec![posting("108", 30_000, None), posting("5121", -30_000, None)],
+        ]);
+        let report = set
+            .period_report(
+                &ReportMapping::de_euer_2025(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-01-01".parse().unwrap(),
+                "2026-12-31".parse().unwrap(),
+            )
+            .unwrap();
+        let field = |f: &str| report.get(f).copied().unwrap_or(0);
+        assert_eq!((field("1.112"), field("1.140")), (100_000, 19_000), "sales and VAT received");
+        assert_eq!((field("2.280"), field("2.185")), (5_000, 950), "telecommunications and input VAT paid");
+        assert_eq!(field("2.186"), 18_050, "VAT paid to the tax office");
+        assert_eq!(field("5.122"), 30_000, "withdrawal");
+        assert_eq!(report.len(), 6, "the bank account is no line of the EÜR: {report:?}");
+    }
+
+    #[test]
+    fn every_expense_has_a_line_of_the_euer() {
+        let chart = Chart::v0_1();
+        let parents = EventSet::new().account_parents(&chart);
+        let refined: std::collections::BTreeSet<&AccountId> = parents.values().collect();
+        let euer = ReportMapping::de_euer_2025();
+        for account in chart.accounts.iter().filter(|a| a.kind == AccountKind::Expense && !refined.contains(&a.id)) {
+            assert!(euer.position(&account.id, &parents, false).is_some(), "{} has no line", account.id);
+        }
+    }
+
+    #[test]
     fn positions_follow_the_nearest_mapping_and_the_credit_side() {
         let pcg = ChartTranslation::fr_pcg();
         let mut accounts = BTreeMap::new();
@@ -320,6 +446,7 @@ mod tests {
             accounts,
             credit_accounts,
             vat_accounts: None,
+            vat_settlement: None,
             taxes: vec![],
         };
         let set = books(vec![vec![posting("4111", 5_000, None), posting("5121", -5_000, None)]]);

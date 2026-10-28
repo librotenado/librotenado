@@ -17,11 +17,12 @@ Specification and library share one version. Until 1.0, any version may change w
 - [0004 Chart of accounts](spec/0004-chart-of-accounts.md): seven accounts the HGB distinguishes and the PCG does not
   (affiliated companies, companies linked by participating interests, reserve for shares in a controlling company).
 - [0009 Reports](spec/0009-reports.md): report mappings per country and version, from accounts and from tax codes; the
-  German balance sheet (HGB § 266), profit and loss account (§ 275 Abs. 2) and VAT return of 2026, as drafts for
-  review by tax advisers.
+  German balance sheet (HGB § 266), profit and loss account (§ 275 Abs. 2) and VAT return of 2026 and the Anlage EÜR
+  of 2025, as drafts for review by tax advisers; reports over a period combine tax codes, accounts and the settlement
+  of VAT with the tax office. The chart grows by twenty accounts the Anlage EÜR distinguishes.
 - Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`, `Chart::v0_1()`,
   `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`, `TaxCode`, `TaxTable`, `ReportMapping`,
-  `EventSet::tax_report`, `EventSet::account_report`.
+  `EventSet::period_report`, `EventSet::account_report`.
 
 ## 0.1.0 – 2026-10-28
 

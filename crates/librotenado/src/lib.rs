@@ -102,7 +102,7 @@ pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Mo
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{Country, Organisation, PartyId, Person, Registration, Role, RoleKind, Shares, TaxId};
-pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts};
+pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use tax::{TaxCode, TaxCodeDefinition, TaxDirection, TaxTable};
 
 /// A value in the protocol that could not be read.
