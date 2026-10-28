@@ -77,8 +77,9 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
   (receivables from trade), `passiv.C.2` § 266 Abs. 3 C. 2., `gkv.6.a` § 275 Abs. 2 Nr. 6 Buchst. a. Positions the
   HGB does not list, which a French account may still carry – formation expenses, regulated provisions, investment
   grants – are written `aktiv.extra.…` and `passiv.extra.…`; a German set of books does not use those accounts.
-- **Names of the positions** stand in the translation data (part 0001) under `<report>/<position>`; the German names
-  of the HGB positions are the wording of the law.
+- **Names of the positions** stand in the translation data (part 0001) under `<report>/<position>`: the German names
+  of the HGB positions are the wording of the law, those of the VAT return and the Anlage EÜR the wording of the
+  official forms of the BMF letters named above (`de-ustva/81`, `de-euer/2.280`).
 - **Fields of the VAT return** are its Kennzahlen (`81`, `66`, …). The fields the form computes or asks for directly –
   the totals, the advance payment (Kz 83), the special advance payment (Kz 39), the yes/no questions – are not part of
   the mapping.
@@ -106,5 +107,3 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
   identifier only, until the conditions for reusing the taxonomy (© XBRL Deutschland e.V.) are clarified.
 - The recapitulative statement (§ 18a UStG), which needs the customer's VAT identification number per posting or
   document.
-- Whether the official forms published with BMF letters may be reproduced (§ 5 UrhG); the mappings carry only their
-  field numbers.

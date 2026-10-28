@@ -69,8 +69,17 @@ mod tests {
         for code in crate::TaxTable::de().codes {
             assert!(de.get(code.code.as_str()).is_some() && en.get(code.code.as_str()).is_some(), "{}", code.code);
         }
-        for mapping in [crate::ReportMapping::de_hgb_266_2026(), crate::ReportMapping::de_hgb_275_gkv_2026()] {
-            for position in mapping.accounts.values().chain(mapping.credit_accounts.values()) {
+        for mapping in [
+            crate::ReportMapping::de_hgb_266_2026(),
+            crate::ReportMapping::de_hgb_275_gkv_2026(),
+            crate::ReportMapping::de_ustva_2026(),
+            crate::ReportMapping::de_euer_2025(),
+        ] {
+            let taxes = mapping.taxes.iter().flat_map(|r| [&r.base, &r.output, &r.input]).flatten();
+            let settlement = mapping.vat_settlement.iter().flat_map(|s| [&s.debit, &s.credit]).flatten();
+            for position in
+                mapping.accounts.values().chain(mapping.credit_accounts.values()).chain(taxes).chain(settlement)
+            {
                 let key = format!("{}/{position}", mapping.report);
                 assert!(de.get(&key).is_some(), "{key}");
             }

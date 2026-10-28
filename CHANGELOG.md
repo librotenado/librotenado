@@ -13,8 +13,9 @@ Specification and library share one version. Until 1.0, any version may change w
   1 January 2026), groups of mixed kind split – with the translation `fr-pcg` and names in English and French; the
   kind `memo` for commitments and the opening and closing balance sheet.
 - [0001 Base types](spec/0001-base-types.md): translation data as root objects of type `names` – in German, English and
-  French: accounts, euro and cent, tax codes, and the positions of the HGB in the wording of the law; tax codes on
-  postings, per country in a `tax_table` – the German one in `spec/data/tax/de.json`.
+  French: accounts, euro and cent, tax codes, the positions of the HGB in the wording of the law, and the fields of the
+  VAT return and the Anlage EÜR in the wording of the official forms; tax codes on postings, per country in a
+  `tax_table` – the German one in `spec/data/tax/de.json`.
 - [0004 Chart of accounts](spec/0004-chart-of-accounts.md): seven accounts the HGB distinguishes and the PCG does not
   (affiliated companies, companies linked by participating interests, reserve for shares in a controlling company).
 - [0009 Reports](spec/0009-reports.md): report mappings per country and version, from accounts and from tax codes; the
