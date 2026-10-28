@@ -65,6 +65,9 @@ stage 0 is the unit itself, the last stage the base unit. Translation data names
 `EUR/0` euro, `EUR/1` cent; `x-galleon/0` Galleon, `x-galleon/1` Sickle, `x-galleon/2` Knut. The `/` cannot occur
 in a code, so keys are unambiguous.
 
+Translation data is a root object of type `names`: `language`, a BCP 47 tag (`en`, `fr`), and `names`, key → name.
+The keys name currency stages as above and accounts by their identity (part 0004).
+
 ### The table of version 0.1
 
 The definitions of version 0.1 are published as [`spec/data/currencies.json`](data/currencies.json), a root object of

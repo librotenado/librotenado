@@ -65,6 +65,7 @@ mod decimal;
 mod document;
 mod event;
 mod money;
+mod names;
 mod object;
 mod party;
 
@@ -78,6 +79,7 @@ pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
 pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
+pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{Country, Organisation, PartyId, Person, Registration, Role, RoleKind, Shares, TaxId};
 

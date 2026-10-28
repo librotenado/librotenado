@@ -8,7 +8,13 @@ Specification and library share one version. Until 1.0, any version may change w
   ISO 4217 currency with a minor unit (list of 2026-09-17), and `x-btc`, `x-eth`; type `currency_table`.
 - [0004 Chart of accounts](spec/0004-chart-of-accounts.md): balances per owner, account and currency on a date, and
   the trial balance rolled up the hierarchy.
-- Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the harmonised chart of version 0.1,
+  `spec/data/chart.json` – six roots by kind, one account for every account of the French PCG (version of
+  1 January 2026), groups of mixed kind split – with the translation `fr-pcg` and names in English and French; the
+  kind `memo` for commitments and the opening and closing balance sheet.
+- [0001 Base types](spec/0001-base-types.md): translation data as root objects of type `names`.
+- Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`, `Chart::v0_1()`,
+  `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`.
 
 ## 0.1.0 – 2026-10-28
 

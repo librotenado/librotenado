@@ -39,7 +39,7 @@ Every object of the protocol has a **type**, defined in its part:
 | `person` | 0008 | | `registration` | 0008 |
 | `tax_id` | 0008 | | `role` | 0008 |
 | `filing` | 0007 | | `shares` | 0008 |
-| `currency_table` | 0001 | | | |
+| `currency_table` | 0001 | | `names` | 0001 |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 

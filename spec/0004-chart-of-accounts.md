@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.1, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`).
+Version 0.1, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -13,11 +13,13 @@ An account is an object of type `account` (part 0003):
 | Member | Content |
 |---|---|
 | `id` | its identity, a UUID (part 0001), stable across versions of the chart |
-| `kind` | `asset`, `liability`, `equity`, `income` or `expense` |
+| `kind` | `asset`, `liability`, `equity`, `income`, `expense` or `memo` |
 | `parent` | the account it refines; absent for a top-level account |
 | `attributes` | further distinctions as attribute → value, e.g. a tax treatment or a non-profit sphere; absent when empty |
 
-Assets and expenses normally have a debit balance, the other kinds a credit balance (part 0001: debit positive).
+Assets and expenses normally have a debit balance, liabilities, equity and income a credit balance (part 0001: debit
+positive). **Memo** accounts stand outside the balance sheet and the result – commitments given and received, the
+opening and closing balance sheet – and have no normal side.
 
 Names are not part of an account, as they differ by language: translation data names an account by its `id`. The
 identity carries no meaning – no path, no name – so moving an account in the hierarchy or renaming it changes
@@ -54,6 +56,27 @@ A translation is an object of type `chart_translation`:
 Translations are versioned together with the national chart and tested with published cases per country (OPEN:
 which charts may be published, see the whitepaper).
 
+## The chart of version 0.1
+
+The harmonised chart of version 0.1 is published as [`spec/data/chart.json`](data/chart.json), with names in
+[English](data/names/en.json) and [French](data/names/fr.json). It is built against its first national chart, the
+French Plan comptable général in its version of 1 January 2026
+([Autorité des normes comptables, PCG](https://www.anc.gouv.fr/files/anc/files/1_Normes_fran%C3%A7aises/Plans%20comptables/2026/PCG--1er-janvier-2026.pdf),
+articles 1121-1 and 1231-80 to 1231-89):
+
+- **Six roots**, one per kind: assets, liabilities, equity, income, expenses, memo accounts.
+- **One harmonised account for every account of the PCG** – 851, classes 1 to 8 – refining the harmonised account
+  of its national parent. The translation [`fr-pcg`](data/translations/fr-pcg.json) is therefore reversible
+  everywhere.
+- **Groups of mixed kind are split.** Where a national group holds accounts of different kinds – suppliers (40, a
+  liability) and suppliers with debit balances (409, an asset), or the VAT accounts of 445 – the accounts of the other
+  kind refine a harmonised group of their own, under the root of their kind: 20 such groups.
+- Contra accounts – depreciation and impairment, rebates obtained or granted – keep the kind of what they correct
+  and have the opposite balance.
+
+Each further national chart is translated against this chart, and the chart grows where it distinguishes more
+finely. The English names are the project's translation.
+
 ## Balances
 
 The **balance** of an account, for one owner in one currency on a date, is the sum of the `base_units` of the postings
@@ -67,5 +90,11 @@ accounts are the **trial balance**, from which reports are derived.
 
 ## Open points
 
-- The content of the harmonised chart 0.1 – the accounts themselves – is the next step; this part defines its form.
+- Further national charts, starting with Germany's standard charts – whether a translation of them may be published.
+- The accounts of the PCG as a template rather than a harmonisation: grouping them by concept across countries
+  (statement items, tax treatment) once a second chart shows where they meet.
+- The PCG lists its suspense accounts as a range, "471 à 473"; the translation maps 471 only.
+- The kind of accounts the PCG lets run either way – group and partners' current accounts (451, 455), suspense
+  accounts (471) – follows their usual side.
+- The conditions for reusing the text of the PCG, which the French names follow.
 - Attributes: a registry of attribute names and values (tax treatment, sphere, …).

@@ -9,8 +9,8 @@ mkdir -p src/fonts
 cp ../brand/fonts/*.ttf ../brand/fonts/OFL.txt src/fonts/
 cp ../brand/web/favicon.svg theme/favicon.svg
 cp ../brand/web/icon-192.png theme/favicon.png
-mkdir -p src/spec/data
-cp ../spec/data/*.json src/spec/data/
+rm -rf src/spec/data
+cp -R ../spec/data src/spec/data
 
 mdbook build
 

@@ -21,10 +21,13 @@ pub enum AccountKind {
     Income,
     /// What decreases the result.
     Expense,
+    /// Outside the balance sheet and the result: commitments, opening and closing balance sheet accounts.
+    Memo,
 }
 
 impl AccountKind {
-    /// Whether the account normally has a debit balance (assets and expenses) – postings there are positive.
+    /// Whether the account normally has a debit balance (assets and expenses) – postings there are positive. Memo
+    /// accounts have no normal side.
     pub fn debit_normal(self) -> bool {
         matches!(self, AccountKind::Asset | AccountKind::Expense)
     }
@@ -57,6 +60,22 @@ pub struct Chart {
     pub version: String,
     /// The accounts.
     pub accounts: Vec<Account>,
+}
+
+impl Chart {
+    /// The harmonised chart of version 0.1 (`spec/data/chart.json`).
+    pub fn v0_1() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/chart.json")).expect("the published chart is valid")
+    }
+}
+
+impl ChartTranslation {
+    /// The translation of the French Plan comptable général, version of 1 January 2026, into the harmonised chart
+    /// 0.1 (`spec/data/translations/fr-pcg.json`).
+    pub fn fr_pcg() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/translations/fr-pcg.json"))
+            .expect("the published translation is valid")
+    }
 }
 
 impl Object for Account {
@@ -239,6 +258,30 @@ mod tests {
         assert_eq!(attrs.get("tax").map(String::as_str), Some("input-vat-deductible"));
         assert_eq!(attrs.get("useful-life").map(String::as_str), Some("3y"));
         assert!(AccountKind::Expense.debit_normal() && !AccountKind::Income.debit_normal());
+    }
+
+    #[test]
+    fn the_chart_of_version_0_1_with_the_pcg() {
+        let chart = Chart::v0_1();
+        assert_eq!(chart.validate(), Ok(()));
+        let roots: Vec<AccountKind> = chart.accounts.iter().filter(|a| a.parent.is_none()).map(|a| a.kind).collect();
+        assert_eq!(roots.len(), 6, "one root per kind");
+
+        let pcg = ChartTranslation::fr_pcg();
+        assert_eq!(pcg.validate(&chart), Ok(()));
+        assert!(pcg.coarser_accounts().is_empty(), "every PCG account has an account of its own");
+        let kind = |number: &str| chart.get(&pcg.accounts[number]).map(|a| a.kind);
+        assert_eq!(kind("512"), Some(AccountKind::Asset), "banks");
+        assert_eq!(kind("519"), Some(AccountKind::Liability), "bank overdrafts, under banks in the PCG");
+        assert_eq!(kind("401"), Some(AccountKind::Liability));
+        assert_eq!(kind("409"), Some(AccountKind::Asset), "suppliers with debit balances");
+        assert_eq!(kind("44566"), Some(AccountKind::Asset), "deductible VAT");
+        assert_eq!(kind("44571"), Some(AccountKind::Liability), "VAT collected");
+        assert_eq!(kind("101"), Some(AccountKind::Equity));
+        assert_eq!(kind("6064"), Some(AccountKind::Expense));
+        assert_eq!(kind("706"), Some(AccountKind::Income));
+        assert_eq!(kind("890"), Some(AccountKind::Memo));
+        assert_eq!(pcg.national(&pcg.accounts["6064"]), Some("6064"), "reversible");
     }
 
     #[test]

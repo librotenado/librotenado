@@ -54,6 +54,8 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
 - **Books belong to someone.** `Organisation` and `Person` are described by events; `owner_added` binds them to
   the books. `EventSet::review_parties` reports books without owners, `EventSet::state` the state of the books that
   filings record.
+- **The chart comes with the library.** `Chart::v0_1()` is the harmonised chart, `ChartTranslation::fr_pcg()` the
+  French PCG translated into it, `Names::v0_1("en")` and `Names::v0_1("fr")` name its accounts.
 - **Balances are derived.** `EventSet::balances(until)` sums the postings per owner, account and currency;
   `EventSet::trial_balance(chart, until)` rolls them up the hierarchy. `CurrencyTable::v0_1()` says how each currency
   divides, for formatting.
