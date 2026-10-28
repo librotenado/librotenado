@@ -57,6 +57,9 @@ Every object of the protocol has a **type**, defined in its part:
 | `item_attribute` | 0005 | | `exchange` | 0001 |
 | `transaction` | 0002 | | `closing` | 0002 |
 | `configuration` | 0008 | | `vat_scheme` | 0008 |
+| `statement_data` | 0005 | | `statement_account` | 0005 |
+| `statement_entry` | 0005 | | `entry_detail` | 0005 |
+| `counterparty` | 0005 | | `entry_reference` | 0005 |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 

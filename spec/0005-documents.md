@@ -1,7 +1,7 @@
 # 0005 Documents
 
-Version 0.2, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
-`propose_booking`, event kind `document_recorded`).
+Version 0.3, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+`propose_booking`, `StatementData`, `camt`, event kind `document_recorded`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of
 its own**: its data – kind, number, date – stand in the document, never only in its file. The file it came as, the
@@ -28,6 +28,7 @@ A document is an object of type `document` (part 0003):
 | `received` | the day it was received; it may be earlier than the day it was recorded – a letter scanned days later |
 | `original` | the file it came as (below) |
 | `invoice` | the data of an invoice or credit note (below); absent when not recorded |
+| `statement` | the data of a bank statement (below); absent when not recorded |
 
 Later versions add kinds and members. An implementation keeps a document of a kind it does not know, but does not
 interpret it.
@@ -188,7 +189,56 @@ Formats in version 0.1 (names are lower case; more follow with their translation
 |---|---|
 | `en16931-ubl` | an invoice according to EN 16931 in the UBL syntax (e.g. XRechnung, Peppol BIS Billing 3.0) |
 | `en16931-cii` | an invoice according to EN 16931 in the UN/CEFACT CII syntax – also a PDF with an embedded CII invoice (ZUGFeRD, Factur-X) |
-| `iso20022-camt.053` | a bank statement (ISO 20022 BankToCustomerStatement) |
+| `iso20022-camt.053` | a bank statement (ISO 20022 BankToCustomerStatement), read as below |
+
+## Bank statements
+
+A bank statement lists what was booked on one account over a period. Its data is an object of type `statement_data`:
+
+| Member | Content |
+|---|---|
+| `account` | the account (type `statement_account`): `iban` (ISO 13616), `currency`, and `holder`, the holder as the bank names them, absent if not given |
+| `from`, `to` | the period it covers, both days included; absent if the statement does not say |
+| `opening`, `closing` | the booked balance before the first and after the last entry, money – positive when in the holder's favour; absent if not given |
+| `entries` | the entries (type `statement_entry`) in the order of the statement; absent when there are none |
+
+An entry is numbered by its position, from 1. It has:
+
+| Member | Content |
+|---|---|
+| `booked` | the day it was booked |
+| `value` | the value date; absent if not given |
+| `amount` | money: positive when credited to the account – money in –, negative when debited |
+| `reversal` | `true` where the bank marks the entry as the reversal of an earlier one; absent otherwise |
+| `reference` | the bank's own reference for the entry; absent if none |
+| `code` | the bank's transaction code as given, e.g. the ISO 20022 domain, family and sub-family `PMNT/RCDT/ESCT`; absent if none |
+| `details` | the transactions it consists of (type `entry_detail`) – usually one, several for a batch; absent if the bank gives none |
+
+A transaction is `counterparty` – the other party, the payer of money in, the payee of money out (type `counterparty`:
+`name`, `iban`, `bic`, each absent if not given) –, `purpose` – the remittance information as text –,
+`end_to_end` – the payer's end-to-end reference –, `mandate` – the reference of a SEPA direct debit mandate –, and,
+where an entry bundles several, `amount`, each absent if not given.
+
+The bank account of a set of books is an account opened with the attribute `iban` (part 0004).
+
+### Reading camt.053
+
+The ISO 20022 message BankToCustomerStatement ([message definitions](https://www.iso20022.org/iso-20022-message-definitions))
+is read in the versions German banks deliver under the agreement on data transfer of the Deutsche Kreditwirtschaft,
+annex 3 (Spezifikation der Datenformate; version 3.7 of 5 April 2023 found, whether a later one applies is OPEN):
+`camt.053.001.02` and `camt.053.001.08`. Elements are matched by name, whatever their namespace:
+
+- **One document per statement** (`Stmt`): its `Id` is the document's number, the day of `CreDtTm` its date.
+- **The account:** `Acct/Id/IBAN`, `Acct/Ccy`, `Acct/Ownr/Nm`.
+- **Balances:** the opening balance is the one of type `PRCD` (closing balance of the previous statement) or `OPBD`,
+  the closing balance the one of type `CLBD`; their sign by `CdtDbtInd` (`CRDT` positive, `DBIT` negative).
+- **Entries:** only booked ones – status `BOOK`, in version 001.08 as `Sts/Cd`. `Amt`, its sign by `CdtDbtInd`,
+  `RvslInd`, `BookgDt` and `ValDt` (`Dt`, or the day of `DtTm`), `AcctSvcrRef`, `BkTxCd/Domn` as
+  domain/family/sub-family.
+- **Transactions:** each `NtryDtls/TxDtls`: `Refs/EndToEndId` (left out when `NOTPROVIDED`), `Refs/MndtId`, the
+  counterparty from `RltdPties` – for money in the debtor, for money out the creditor; their `Nm` directly or under
+  `Pty`, `Id/IBAN` of their account –, its BIC from `RltdAgts`, `RmtInf/Ustrd` joined by spaces, and `AmtDtls/TxAmt/Amt`
+  where an entry has more than one.
 
 ## Events
 
@@ -198,6 +248,16 @@ Formats in version 0.1 (names are lower case; more follow with their translation
   booking may rest on several documents.
 - An implementation MUST report, and MUST NOT silently resolve, a booking based on a document that has not been
   recorded (it may not have arrived yet), and a document recorded twice under the same identity.
+- A booking of what a bank statement shows names the entries it books in `entries`: an array of entry references
+  (type `entry_reference`) – `document`, a recorded bank statement, and `entry`, the position of the entry, from 1 –,
+  absent when there are none (part 0001). An implementation MUST report, and MUST NOT silently resolve:
+  - **Unknown entry** – a reference to a document that is not a recorded bank statement, or has no such entry.
+  - **Entry booked twice** – two bookings that stand, neither reversed nor a reversal, naming the same entry.
+  - **Entry shown twice** – an entry that two recorded statements of the same account show: the same bank
+    reference, or without one, the same day, amount, counterparty and purpose – statements that overlap. It is
+    booked once.
+  - **Balance mismatch** – the closing balance of a statement differs from the balance, on its last day, of the one
+    account of the books with its IBAN; no account, or more than one, with it is not checked.
 
 ## Open points
 
@@ -208,6 +268,7 @@ Formats in version 0.1 (names are lower case; more follow with their translation
 - Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED); the file name `xrechnung.xml` of the profile XRECHNUNG, to be verified against the
   ZUGFeRD specification.
 - Correcting the data of a recorded document by a later event.
+- Statements in other formats – MT940, the CSV files of banks –, and the intraday reports camt.052 and camt.054.
 - Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
   may be quoted in a specification under CC BY; this part names their identifiers only.
 - Whether the names of formats should be the identifiers the standards define (e.g. the specification identifier of

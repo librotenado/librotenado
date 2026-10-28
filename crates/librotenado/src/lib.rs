@@ -76,6 +76,7 @@ pub(crate) fn safe_u64<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
 mod balance;
 mod booking;
 mod books;
+pub mod camt;
 mod canonical;
 mod chart;
 mod clock;
@@ -92,6 +93,7 @@ mod names;
 mod object;
 mod party;
 mod report;
+mod statement;
 mod tax;
 
 pub use balance::{BalanceError, Balances};
@@ -123,6 +125,9 @@ pub use party::{
     Shares, TaxId, VatBasis, VatScheme,
 };
 pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
+pub use statement::{
+    Counterparty, EntryDetail, EntryReference, StatementAccount, StatementData, StatementEntry, StatementProblem,
+};
 pub use tax::{TaxCode, TaxCodeDefinition, TaxDirection, TaxTable};
 
 /// A value in the protocol that could not be read.

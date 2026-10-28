@@ -47,3 +47,9 @@ path = "crates/librotenado/tests/data/en16931/ubl-tc434-creditnote1.xml"
 precedence = "override"
 SPDX-FileCopyrightText = "CEN/TC 434"
 SPDX-License-Identifier = "EUPL-1.2"
+
+[[annotations]]
+path = "crates/librotenado/tests/data/camt/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
+SPDX-License-Identifier = "MIT"

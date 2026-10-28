@@ -129,6 +129,7 @@ mod tests {
             text: "test".into(),
             postings: vec![posting(to, cents), posting(2, -cents)],
             documents: vec![],
+            entries: vec![],
             transaction: None,
         }
     }

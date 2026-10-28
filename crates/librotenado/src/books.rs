@@ -384,6 +384,7 @@ mod tests {
             text: "internet".into(),
             postings: vec![posting(1, base_units), posting(2, -base_units)],
             documents: vec![],
+            entries: vec![],
             transaction: shared.map(|(id, others)| Transaction {
                 id: transaction(id),
                 books: others.iter().map(|n| books(*n)).collect(),

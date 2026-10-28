@@ -769,6 +769,7 @@ mod tests {
                 },
             ],
             documents: vec![],
+            entries: vec![],
             transaction: None,
         }
     }
@@ -991,6 +992,7 @@ mod tests {
             received: "2026-10-24".parse().unwrap(),
             original: Original::of(b"a receipt", "image/jpeg"),
             invoice: None,
+            statement: None,
         };
         let mut based = booking(5);
         based.documents = vec![id.clone()];

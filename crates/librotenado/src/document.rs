@@ -161,6 +161,9 @@ pub struct Document {
     /// The data of an invoice or credit note: parties, VAT and totals; absent when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub invoice: Option<Box<InvoiceData>>,
+    /// The data of a bank statement: account, balances, entries; absent when not recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub statement: Option<Box<crate::StatementData>>,
 }
 
 impl Object for Document {
@@ -184,6 +187,7 @@ mod tests {
             received: "2026-10-24".parse().unwrap(),
             original,
             invoice: None,
+            statement: None,
         }
     }
 

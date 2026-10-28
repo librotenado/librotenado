@@ -113,6 +113,7 @@ mod proposals {
             received: translated.date,
             original: Original::of(name.as_bytes(), "application/xml"),
             invoice: Some(Box::new(translated.invoice)),
+            statement: None,
         }
     }
 
@@ -185,6 +186,7 @@ mod data_transfer {
             received: translated.date,
             original: Original::of(b"the XML", "application/xml"),
             invoice: Some(Box::new(translated.invoice)),
+            statement: None,
         };
         let booking =
             propose_booking(&document, InvoiceSide::Purchase, &owner, &ProposalAccounts::v0_1(InvoiceSide::Purchase))

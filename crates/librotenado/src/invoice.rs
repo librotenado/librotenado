@@ -780,5 +780,12 @@ pub fn propose_booking(
         Some(number) => format!("{name} {number}"),
         None => name.clone(),
     };
-    Ok(Booking { date: document.date, text, postings, documents: vec![document.id.clone()], transaction: None })
+    Ok(Booking {
+        date: document.date,
+        text,
+        postings,
+        documents: vec![document.id.clone()],
+        entries: vec![],
+        transaction: None,
+    })
 }

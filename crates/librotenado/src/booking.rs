@@ -98,6 +98,9 @@ pub struct Booking {
     /// The documents it is based on (receipts, invoices, statements); left out of JSON when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub documents: Vec<DocumentId>,
+    /// The entries of bank statements it books; left out of JSON when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub entries: Vec<crate::EntryReference>,
     /// The business transaction it shares with bookings in other sets of books (spec part 0002); left out when it
     /// is recorded in these books only.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
@@ -232,7 +235,14 @@ impl Booking {
                 exchange: p.exchange.as_ref().map(|e| Exchange { rate: e.rate, amount: -e.amount.clone() }),
             })
             .collect();
-        Booking { date, text, postings, documents: self.documents.clone(), transaction: None }
+        Booking {
+            date,
+            text,
+            postings,
+            documents: self.documents.clone(),
+            entries: self.entries.clone(),
+            transaction: None,
+        }
     }
 }
 
@@ -276,6 +286,7 @@ pub(crate) mod tests {
             text: "".into(),
             postings,
             documents: vec![],
+            entries: vec![],
             transaction: None,
         };
         let invoice = booking(vec![converted(1, 10_000, "0.9213", 9_213), converted(2, -10_000, "0.9213", -9_213)]);
@@ -342,6 +353,7 @@ pub(crate) mod tests {
             text: "test".into(),
             postings,
             documents: vec![],
+            entries: vec![],
             transaction: None,
         }
     }

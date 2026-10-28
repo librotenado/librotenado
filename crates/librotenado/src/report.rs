@@ -350,6 +350,7 @@ mod tests {
                 text: "test".into(),
                 postings,
                 documents: vec![],
+                entries: vec![],
                 transaction: None,
             };
             booking.validate().unwrap();

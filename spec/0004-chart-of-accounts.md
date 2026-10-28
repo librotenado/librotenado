@@ -53,7 +53,8 @@ A translation is an object of type `chart_translation`:
   accounts map onto the same harmonised account, the harmonised chart is coarser than the national one: the model
   has to grow before that national chart is complete. Implementations report such accounts.
 
-Which national chart an owner works with is part of its configuration (`chart`, part 0008). Translations are
+Which national chart an owner works with is part of its configuration (`chart`, part 0008). An account opened for a
+bank account carries the attribute `iban`, its IBAN, by which bank statements find it (part 0005). Translations are
 versioned together with the national chart and tested with published cases per country (OPEN:
 which charts may be published, see the whitepaper).
 

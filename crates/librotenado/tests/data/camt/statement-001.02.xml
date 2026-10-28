@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A statement written for the tests of librotenado; every name, account and amount is made up. It overlaps the
+     statement of October by its first entry. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>TEST-2026-10-15</MsgId><CreDtTm>2026-10-16T06:00:00+02:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>2026-10-15</Id>
+      <CreDtTm>2026-10-16T06:00:00+02:00</CreDtTm>
+      <FrToDt><FrDtTm>2026-10-15T00:00:00+02:00</FrDtTm><ToDtTm>2026-10-15T23:59:59+02:00</ToDtTm></FrToDt>
+      <Acct><Id><IBAN>DE89370400440532013000</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Bal><Tp><CdOrPrtry><Cd>PRCD</Cd></CdOrPrtry></Tp><Amt Ccy="EUR">3380.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-10-14</Dt></Dt></Bal>
+      <Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="EUR">3320.50</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-10-15</Dt></Dt></Bal>
+      <Ntry>
+        <Amt Ccy="EUR">59.50</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-15</Dt></BookgDt><ValDt><Dt>2026-10-15</Dt></ValDt>
+        <AcctSvcrRef>2026101500007</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><MndtId>TK-4711</MndtId></Refs>
+          <RltdPties><Cdtr><Nm>Telefon AG</Nm></Cdtr><CdtrAcct><Id><IBAN>DE44500105175407324931</IBAN></Id></CdtrAcct></RltdPties>
+          <RltdAgts><CdtrAgt><FinInstnId><BIC>COBADEFFXXX</BIC></FinInstnId></CdtrAgt></RltdAgts>
+          <RmtInf><Ustrd>Kundennummer 123 Oktober</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

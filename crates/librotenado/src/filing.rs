@@ -268,6 +268,7 @@ mod tests {
                 posting("44571", -19_000, Some("de-out-19")),
             ],
             documents: vec![],
+            entries: vec![],
             transaction: None,
         };
         record(&mut set, &mut clock, Payload::BookingRecorded { booking });

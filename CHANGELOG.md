@@ -31,6 +31,14 @@ closed periods.
   expense account its line after the instructions to the form – 244 accounts, most of them from SKR 03/04, had fallen
   to the line of other expenses –, leaves out what a cash basis does not have, and books commuting and the proceeds of
   assets sold at a loss as the form asks.
+- [0005 Documents](spec/0005-documents.md): bank statements – account, period, balances, entries with their
+  transactions (`statement_data`) –, read from ISO 20022 camt.053 in the versions 001.02 and 001.08 that German banks
+  deliver; a booking names the entries of a statement it books (`entries`, part 0001); entries booked twice, entries
+  of no recorded statement, entries two statements show, and statements that do not close at the balance of their
+  account (the one opened with the attribute `iban`, part 0004) are for review.
+- Library: `StatementData`, `StatementAccount`, `StatementEntry`, `EntryDetail`, `Counterparty`, `EntryReference`,
+  `Document::statement`, `Booking::entries`, `camt::read`, `EventSet::statements`, `EventSet::booked_entries`,
+  `EventSet::review_statements`, `StatementProblem`.
 - Library: `EventSet::review_bookings`, `BookingProblem`, `Booking::cancels`, `Configuration::chart`,
   `ReportMapping::de_euer_2026`, `ReportMapping::excluded`.
 - Library: `BooksId`, `Payload::BooksFounded`, `EventSet::books`, `EventSet::review_books`, `Transaction`,

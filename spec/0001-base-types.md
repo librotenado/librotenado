@@ -119,8 +119,9 @@ RECOMMENDED for new accounts.
 ## Bookings
 
 A booking (type `booking`) is an object with `date`, `text`, `postings` and, if it is based on documents,
-`documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003) – and, if the same business transaction is
-recorded in other sets of books as well, `transaction`: its identity and those other sets (part 0002).
+`documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003) – and, if it books what a bank statement shows,
+`entries`: the entries of the statement it books (part 0005) – and, if the same business transaction is recorded in
+other sets of books as well, `transaction`: its identity and those other sets (part 0002).
 A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
 remark, `note` – for example why there is no document for it; absent if none, never empty – and, if it is treated for
 VAT, `tax`, a tax code (below), and, if its currency is not the functional currency of its owner, `exchange`
