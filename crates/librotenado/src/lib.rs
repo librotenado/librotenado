@@ -83,6 +83,7 @@ mod decimal;
 mod document;
 pub mod en16931;
 mod event;
+mod filing;
 pub mod gobd;
 mod invoice;
 mod money;
@@ -101,6 +102,7 @@ pub use date::Date;
 pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
+pub use filing::{Derivation, Filing, FilingId, FilingKind, FilingProblem, FilingState, ReportContent};
 pub use invoice::{
     AllowanceCharge, Classification, CreditTransfer, Delivery, DirectDebit, Endpoint, Identifier, InvoiceContact,
     InvoiceData, InvoiceLine, InvoiceNote, InvoiceParty, InvoiceReferences, InvoiceSide, InvoiceTotals, ItemAttribute,
@@ -144,6 +146,9 @@ pub enum ParseError {
     /// A tax code that is not a country in lower case, `-` and a name.
     #[error("not a tax code: {0:?}")]
     TaxCode(String),
+    /// A filing identity that is not a UUID in lower case.
+    #[error("not a filing id: {0:?}")]
+    Filing(String),
     /// A hash that is not `sha256:` and 64 lower-case hexadecimal digits.
     #[error("not a hash: {0:?}")]
     Hash(String),

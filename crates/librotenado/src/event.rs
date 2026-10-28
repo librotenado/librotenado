@@ -12,8 +12,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Account, AccountId, Booking, Chart, ContentHash, Currency, DeviceId, Document, DocumentId, Hlc, Money, Object,
-    ObjectError, Organisation, ParseError, PartyId, Person, canonical, from_root, to_root,
+    Account, AccountId, Booking, Chart, ContentHash, Currency, DeviceId, Document, DocumentId, Filing, FilingId, Hlc,
+    Money, Object, ObjectError, Organisation, ParseError, PartyId, Person, canonical, from_root, to_root,
 };
 
 /// The SHA-256 hash of an event's canonical encoding – its identity. Written as `sha256:` and 64 lower-case
@@ -98,6 +98,35 @@ pub enum Payload {
     DocumentRecorded {
         /// The document.
         document: Document,
+    },
+    /// A filing was derived from the books and is ready to be submitted (spec part 0007).
+    FilingPrepared {
+        /// The filing.
+        filing: Filing,
+    },
+    /// A filing was submitted to the authority.
+    FilingSubmitted {
+        /// The prepared filing.
+        filing: FilingId,
+        /// What the authority returned on submission, as documents; absent when nothing.
+        #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+        documents: Vec<DocumentId>,
+    },
+    /// The authority accepted a filing.
+    FilingAccepted {
+        /// The prepared filing.
+        filing: FilingId,
+        /// What the authority returned, as documents; absent when nothing.
+        #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+        documents: Vec<DocumentId>,
+    },
+    /// The authority rejected a filing.
+    FilingRejected {
+        /// The prepared filing.
+        filing: FilingId,
+        /// What the authority returned, as documents; absent when nothing.
+        #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+        documents: Vec<DocumentId>,
     },
     /// A kind of a later version of the protocol. The event is kept and synchronised as received, but not
     /// interpreted; it cannot be written by this version.

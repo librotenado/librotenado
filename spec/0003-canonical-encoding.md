@@ -39,6 +39,8 @@ Every object of the protocol has a **type**, defined in its part:
 | `person` | 0008 | | `registration` | 0008 |
 | `tax_id` | 0008 | | `role` | 0008 |
 | `filing` | 0007 | | `shares` | 0008 |
+| `report_content` | 0007 | | `submission` | 0007 |
+| `submission_status` | 0007 | | | |
 | `currency_table` | 0001 | | `names` | 0001 |
 | `tax_code` | 0001 | | `tax_table` | 0001 |
 | `report_mapping` | 0009 | | `invoice_data` | 0005 |
