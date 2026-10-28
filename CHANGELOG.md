@@ -26,7 +26,8 @@ Specification and library share one version. Until 1.0, any version may change w
   VAT breakdown, lines, totals, after EN 16931); translation of electronic invoices in UBL and CII – XRechnung,
   ZUGFeRD and Factur-X PDFs –, tested with the XRechnung test suite of KoSIT; booking proposals with German tax
   codes; writing XRechnung 3.0 in UBL and CII and attaching it to a PDF/A-3 as ZUGFeRD, after checking the terms
-  XRechnung requires.
+  XRechnung requires; prepaid amounts, rounding and SEPA direct debit (BT-113, BT-114, BG-19); written invoices
+  accepted by the KoSIT validator with the XRechnung configuration 3.0.2.
 - [0010 Audit and retention](spec/0010-audit.md): what the protocol guarantees for audits; for Germany the retention
   periods of § 147 AO, the requirements of the GoBD (as amended 2024 and 2025) against the protocol for the
   procedural documentation, and the data transfer (Z3) after the Beschreibungsstandard.

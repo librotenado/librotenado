@@ -5,8 +5,8 @@
 use roxmltree::{Document as Xml, Node};
 
 use crate::{
-    Country, Currency, CurrencyTable, Date, Decimal, DocumentKind, Endpoint, InvoiceContact, InvoiceData, InvoiceLine,
-    InvoiceParty, InvoiceTotals, Money, VatBreakdown, VatCategory,
+    Country, Currency, CurrencyTable, Date, Decimal, DirectDebit, DocumentKind, Endpoint, InvoiceContact, InvoiceData,
+    InvoiceLine, InvoiceParty, InvoiceTotals, Money, VatBreakdown, VatCategory,
 };
 
 const UBL_INVOICE: &str = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
@@ -199,6 +199,9 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
     let amount = |node: Node, path: &[&str], term| -> Result<Money> {
         money(&required(node, path, term)?, &currency, decimals, term)
     };
+    let optional = |node: Node, path: &[&str], term| -> Result<Option<Money>> {
+        text(node, path).map(|value| money(&value, &currency, decimals, term)).transpose()
+    };
     let party = |path: &str| -> Result<InvoiceParty> {
         let party = at(root, &[path, "Party"]).ok_or(TranslationError::Missing("BG-4/BG-7"))?;
         let tax_id = |vat: bool| {
@@ -277,6 +280,19 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
             buyer_reference: text(root, &["BuyerReference"]),
             payment_means: text(root, &["PaymentMeans", "PaymentMeansCode"]),
             iban: text(root, &["PaymentMeans", "PayeeFinancialAccount", "ID"]),
+            direct_debit: text(root, &["PaymentMeans", "PaymentMandate", "ID"]).map(|mandate| DirectDebit {
+                mandate,
+                creditor: at(root, &["AccountingSupplierParty", "Party"])
+                    .into_iter()
+                    .flat_map(|p| all(p, "PartyIdentification"))
+                    .filter_map(|i| at(i, &["ID"]))
+                    .find(|id| id.attribute("schemeID") == Some("SEPA"))
+                    .and_then(|id| id.text())
+                    .map(|t| t.trim().to_owned())
+                    .unwrap_or_default(),
+                debited: text(root, &["PaymentMeans", "PaymentMandate", "PayerFinancialAccount", "ID"])
+                    .unwrap_or_default(),
+            }),
             payment_terms: text(root, &["PaymentTerms", "Note"]),
             taxes,
             lines,
@@ -284,6 +300,8 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
                 net: amount(totals, &["TaxExclusiveAmount"], "BT-109")?,
                 tax: amount(tax_total, &["TaxAmount"], "BT-110")?,
                 gross: amount(totals, &["TaxInclusiveAmount"], "BT-112")?,
+                prepaid: optional(totals, &["PrepaidAmount"], "BT-113")?,
+                rounding: optional(totals, &["PayableRoundingAmount"], "BT-114")?,
                 due: amount(totals, &["PayableAmount"], "BT-115")?,
             },
         },
@@ -298,6 +316,9 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
     let (currency, decimals) = currency(&required(settlement, &["InvoiceCurrencyCode"], "BT-5")?, currencies)?;
     let amount = |node: Node, path: &[&str], term| -> Result<Money> {
         money(&required(node, path, term)?, &currency, decimals, term)
+    };
+    let optional = |node: Node, path: &[&str], term| -> Result<Option<Money>> {
+        text(node, path).map(|value| money(&value, &currency, decimals, term)).transpose()
     };
     let party = |name: &str| -> Result<InvoiceParty> {
         let party = at(agreement, &[name]).ok_or(TranslationError::Missing("BG-4/BG-7"))?;
@@ -405,6 +426,17 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
             buyer_reference: text(agreement, &["BuyerReference"]),
             payment_means: text(settlement, &["SpecifiedTradeSettlementPaymentMeans", "TypeCode"]),
             iban: means.and_then(|m| text(m, &["IBANID"]).or_else(|| text(m, &["ProprietaryID"]))),
+            direct_debit: text(settlement, &["SpecifiedTradePaymentTerms", "DirectDebitMandateID"]).map(|mandate| {
+                DirectDebit {
+                    mandate,
+                    creditor: text(settlement, &["CreditorReferenceID"]).unwrap_or_default(),
+                    debited: text(
+                        settlement,
+                        &["SpecifiedTradeSettlementPaymentMeans", "PayerPartyDebtorFinancialAccount", "IBANID"],
+                    )
+                    .unwrap_or_default(),
+                }
+            }),
             payment_terms: text(settlement, &["SpecifiedTradePaymentTerms", "Description"]),
             taxes,
             lines,
@@ -412,6 +444,8 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
                 net: amount(totals, &["TaxBasisTotalAmount"], "BT-109")?,
                 tax: money(tax_total.trim(), &currency, decimals, "BT-110")?,
                 gross: amount(totals, &["GrandTotalAmount"], "BT-112")?,
+                prepaid: optional(totals, &["TotalPrepaidAmount"], "BT-113")?,
+                rounding: optional(totals, &["RoundingAmount"], "BT-114")?,
                 due: amount(totals, &["DuePayableAmount"], "BT-115")?,
             },
         },
@@ -432,6 +466,9 @@ pub enum WriteError {
     /// The lines do not add up to the net total: allowances and charges on the document are not supported yet.
     #[error("the lines do not add up to the net total")]
     Lines,
+    /// The amount due is not the gross amount less prepaid amounts plus rounding.
+    #[error("the amount due is not gross less prepaid plus rounding")]
+    Totals,
     /// A currency the currency table does not divide by decimals.
     #[error("currency {0} is not in the currency table")]
     Currency(String),
@@ -466,6 +503,12 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
     if matches!(data.payment_means.as_deref(), Some("30" | "58")) {
         need(data.iban.is_some(), "BT-84");
     }
+    if data.payment_means.as_deref() == Some("59") {
+        let debit = data.direct_debit.as_ref();
+        need(debit.is_some_and(|d| !d.mandate.is_empty()), "BT-89");
+        need(debit.is_some_and(|d| !d.creditor.is_empty()), "BT-90");
+        need(debit.is_some_and(|d| !d.debited.is_empty()), "BT-91");
+    }
     need(!data.lines.is_empty(), "BG-25");
     for line in &data.lines {
         need(line.id.is_some(), "BT-126");
@@ -484,6 +527,11 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
     let lines: i128 = data.lines.iter().map(|l| l.net.base_units()).sum();
     if lines != data.totals.net.base_units() {
         return Err(WriteError::Lines);
+    }
+    let totals = &data.totals;
+    let units = |m: &Option<Money>| m.as_ref().map_or(0, Money::base_units);
+    if totals.gross.base_units() - units(&totals.prepaid) + units(&totals.rounding) != totals.due.base_units() {
+        return Err(WriteError::Totals);
     }
     Ok(())
 }
@@ -616,6 +664,13 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
         if let Some(endpoint) = &party.endpoint {
             x.leaf("cbc:EndpointID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
         }
+        if tag == "cac:AccountingSupplierParty"
+            && let Some(debit) = &data.direct_debit
+        {
+            x.open("cac:PartyIdentification", "");
+            x.leaf("cbc:ID", &attribute("schemeID", "SEPA"), &debit.creditor);
+            x.close("cac:PartyIdentification");
+        }
         x.open("cac:PostalAddress", "");
         x.some("cbc:StreetName", party.street.as_deref());
         x.some("cbc:CityName", party.city.as_deref());
@@ -663,6 +718,14 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
             x.leaf("cbc:ID", "", iban);
             x.close("cac:PayeeFinancialAccount");
         }
+        if let Some(debit) = &data.direct_debit {
+            x.open("cac:PaymentMandate", "");
+            x.leaf("cbc:ID", "", &debit.mandate);
+            x.open("cac:PayerFinancialAccount", "");
+            x.leaf("cbc:ID", "", &debit.debited);
+            x.close("cac:PayerFinancialAccount");
+            x.close("cac:PaymentMandate");
+        }
         x.close("cac:PaymentMeans");
     }
     if let Some(terms) = &data.payment_terms {
@@ -691,6 +754,12 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     x.leaf("cbc:LineExtensionAmount", &currency, &amount(&data.totals.net));
     x.leaf("cbc:TaxExclusiveAmount", &currency, &amount(&data.totals.net));
     x.leaf("cbc:TaxInclusiveAmount", &currency, &amount(&data.totals.gross));
+    if let Some(prepaid) = &data.totals.prepaid {
+        x.leaf("cbc:PrepaidAmount", &currency, &amount(prepaid));
+    }
+    if let Some(rounding) = &data.totals.rounding {
+        x.leaf("cbc:PayableRoundingAmount", &currency, &amount(rounding));
+    }
     x.leaf("cbc:PayableAmount", &currency, &amount(&data.totals.due));
     x.close("cac:LegalMonetaryTotal");
     let (line_tag, quantity_tag) = if credit_note {
@@ -844,10 +913,18 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     }
     x.close("ram:ApplicableHeaderTradeDelivery");
     x.open("ram:ApplicableHeaderTradeSettlement", "");
+    if let Some(debit) = &data.direct_debit {
+        x.leaf("ram:CreditorReferenceID", "", &debit.creditor);
+    }
     x.leaf("ram:InvoiceCurrencyCode", "", code);
     if let Some(means) = &data.payment_means {
         x.open("ram:SpecifiedTradeSettlementPaymentMeans", "");
         x.leaf("ram:TypeCode", "", means);
+        if let Some(debit) = &data.direct_debit {
+            x.open("ram:PayerPartyDebtorFinancialAccount", "");
+            x.leaf("ram:IBANID", "", &debit.debited);
+            x.close("ram:PayerPartyDebtorFinancialAccount");
+        }
         if let Some(iban) = &data.iban {
             x.open("ram:PayeePartyCreditorFinancialAccount", "");
             x.leaf("ram:IBANID", "", iban);
@@ -865,7 +942,7 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
         x.some("ram:RateApplicablePercent", written_rate(tax.category, tax.rate).as_deref());
         x.close("ram:ApplicableTradeTax");
     }
-    if data.payment_terms.is_some() || data.due_date.is_some() {
+    if data.payment_terms.is_some() || data.due_date.is_some() || data.direct_debit.is_some() {
         x.open("ram:SpecifiedTradePaymentTerms", "");
         x.some("ram:Description", data.payment_terms.as_deref());
         if let Some(due) = data.due_date {
@@ -873,13 +950,20 @@ pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
             x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(due));
             x.close("ram:DueDateDateTime");
         }
+        x.some("ram:DirectDebitMandateID", data.direct_debit.as_ref().map(|d| d.mandate.as_str()));
         x.close("ram:SpecifiedTradePaymentTerms");
     }
     x.open("ram:SpecifiedTradeSettlementHeaderMonetarySummation", "");
     x.leaf("ram:LineTotalAmount", "", &amount(&data.totals.net));
     x.leaf("ram:TaxBasisTotalAmount", "", &amount(&data.totals.net));
     x.leaf("ram:TaxTotalAmount", &attribute("currencyID", code), &amount(&data.totals.tax));
+    if let Some(rounding) = &data.totals.rounding {
+        x.leaf("ram:RoundingAmount", "", &amount(rounding));
+    }
     x.leaf("ram:GrandTotalAmount", "", &amount(&data.totals.gross));
+    if let Some(prepaid) = &data.totals.prepaid {
+        x.leaf("ram:TotalPrepaidAmount", "", &amount(prepaid));
+    }
     x.leaf("ram:DuePayableAmount", "", &amount(&data.totals.due));
     x.close("ram:SpecifiedTradeSettlementHeaderMonetarySummation");
     x.close("ram:ApplicableHeaderTradeSettlement");

@@ -45,6 +45,7 @@ Every object of the protocol has a **type**, defined in its part:
 | `invoice_party` | 0005 | | `vat_breakdown` | 0005 |
 | `invoice_line` | 0005 | | `invoice_totals` | 0005 |
 | `invoice_contact` | 0005 | | `endpoint` | 0005 |
+| `direct_debit` | 0005 | | | |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 

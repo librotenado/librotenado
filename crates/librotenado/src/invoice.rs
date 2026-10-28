@@ -150,8 +150,25 @@ pub struct InvoiceTotals {
     pub tax: Money,
     /// The total with VAT.
     pub gross: Money,
-    /// The amount due for payment, after prepaid amounts and rounding.
+    /// Amounts paid in advance (BT-113); absent when none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub prepaid: Option<Money>,
+    /// The rounding of the amount due (BT-114); absent when none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub rounding: Option<Money>,
+    /// The amount due for payment: gross, less prepaid, plus rounding.
     pub due: Money,
+}
+
+/// A SEPA direct debit (BG-19).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DirectDebit {
+    /// The mandate reference (BT-89).
+    pub mandate: String,
+    /// The creditor identifier of the seller (BT-90).
+    pub creditor: String,
+    /// The account debited, an IBAN (BT-91).
+    pub debited: String,
 }
 
 /// The data of an invoice or credit note.
@@ -178,6 +195,9 @@ pub struct InvoiceData {
     /// The account to pay to (IBAN).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub iban: Option<String>,
+    /// The direct debit, where it is paid by one (BG-19).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub direct_debit: Option<DirectDebit>,
     /// The terms of payment as text (BT-20).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub payment_terms: Option<String>,
@@ -193,6 +213,10 @@ pub struct InvoiceData {
 
 impl Object for InvoiceData {
     const TYPE: &'static str = "invoice_data";
+}
+
+impl Object for DirectDebit {
+    const TYPE: &'static str = "direct_debit";
 }
 
 impl Object for InvoiceContact {

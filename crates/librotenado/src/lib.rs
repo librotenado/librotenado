@@ -102,8 +102,8 @@ pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
 pub use invoice::{
-    Endpoint, InvoiceContact, InvoiceData, InvoiceLine, InvoiceParty, InvoiceSide, InvoiceTotals, ProposalAccounts,
-    ProposalError, VatBreakdown, VatCategory, de_tax_code, propose_booking,
+    DirectDebit, Endpoint, InvoiceContact, InvoiceData, InvoiceLine, InvoiceParty, InvoiceSide, InvoiceTotals,
+    ProposalAccounts, ProposalError, VatBreakdown, VatCategory, de_tax_code, propose_booking,
 };
 pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
 pub use names::Names;
