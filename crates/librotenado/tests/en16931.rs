@@ -246,3 +246,106 @@ mod data_transfer {
         assert!(text("belege.csv").contains(&format!("\"{}\"", read("03.01a-INVOICE_ubl.xml").number)));
     }
 }
+
+mod writing {
+    use super::*;
+
+    /// Reads a written XRechnung back.
+    fn again(xml: &str) -> TranslatedInvoice {
+        en16931::read(xml.as_bytes(), &CurrencyTable::v0_1()).unwrap()
+    }
+
+    /// Writing and reading again keeps every term of the model, in both syntaxes and across them.
+    #[test]
+    fn written_invoices_read_back_the_same() {
+        let currencies = CurrencyTable::v0_1();
+        let mut written = 0;
+        for name in [
+            "01.01a-INVOICE_ubl.xml",
+            "01.01a-INVOICE_uncefact.xml",
+            "01.21a-INVOICE_ubl.xml",
+            "01.21a-INVOICE_uncefact.xml",
+            "03.01a-INVOICE_ubl.xml",
+            "03.01a-INVOICE_uncefact.xml",
+            "03.06a-INVOICE_ubl.xml",
+        ] {
+            let original = read(name);
+            if let Err(error) = en16931::check_xrechnung(&original) {
+                println!("{name}: {error}");
+                continue;
+            }
+            let ubl = en16931::write_ubl(&original, &currencies).unwrap();
+            let cii = en16931::write_cii(&original, &currencies).unwrap();
+            // Written files go where LIBROTENADO_EXPORT asks, to check them with other tools.
+            if let Ok(dir) = std::env::var("LIBROTENADO_EXPORT") {
+                std::fs::write(format!("{dir}/{name}.ubl.xml"), &ubl).unwrap();
+                std::fs::write(format!("{dir}/{name}.cii.xml"), &cii).unwrap();
+            }
+            for xml in [ubl, cii] {
+                let back = again(&xml);
+                assert_eq!(
+                    (&back.number, back.date, back.kind),
+                    (&original.number, original.date, original.kind),
+                    "{name}"
+                );
+                assert_eq!(back.invoice, original.invoice, "{name}\n{xml}");
+            }
+            written += 1;
+        }
+        assert!(written >= 5, "most test invoices carry all terms XRechnung requires");
+    }
+
+    #[test]
+    fn a_credit_note_is_written_as_one() {
+        let currencies = CurrencyTable::v0_1();
+        let mut credit_note = read("03.01a-INVOICE_ubl.xml");
+        credit_note.kind = DocumentKind::CreditNote;
+        let ubl = en16931::write_ubl(&credit_note, &currencies).unwrap();
+        assert!(ubl.contains("<ubl:CreditNote") && ubl.contains("<cac:CreditNoteLine>"));
+        if let Ok(dir) = std::env::var("LIBROTENADO_EXPORT") {
+            std::fs::write(format!("{dir}/credit-note.ubl.xml"), &ubl).unwrap();
+        }
+        for xml in [ubl, en16931::write_cii(&credit_note, &currencies).unwrap()] {
+            let back = again(&xml);
+            assert_eq!(back.kind, DocumentKind::CreditNote);
+            assert_eq!(back.invoice, credit_note.invoice);
+        }
+    }
+
+    #[test]
+    fn missing_terms_are_named() {
+        let mut invoice = read("01.01a-INVOICE_ubl.xml");
+        invoice.invoice.buyer_reference = None;
+        invoice.invoice.seller.contact = None;
+        let error = en16931::check_xrechnung(&invoice).unwrap_err();
+        assert_eq!(error, en16931::WriteError::Missing(vec!["BT-10", "BT-41", "BT-42", "BT-43"]));
+    }
+}
+
+#[cfg(feature = "pdf")]
+#[test]
+fn an_xrechnung_attached_to_a_pdf_reads_back() {
+    use lopdf::{Document, Object, dictionary};
+    let mut pdf = Document::with_version("1.7");
+    let pages = pdf.new_object_id();
+    pdf.objects.insert(pages, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![], "Count" => 0 }));
+    let catalog = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+    pdf.trailer.set("Root", catalog);
+    let mut base = Vec::new();
+    pdf.save_to(&mut base).unwrap();
+
+    let original = read("03.01a-INVOICE_ubl.xml");
+    let cii = en16931::write_cii(&original, &CurrencyTable::v0_1()).unwrap();
+    let hybrid = en16931::attach_to_pdf(&base, &cii).unwrap();
+    let back = en16931::read_pdf(&hybrid, &CurrencyTable::v0_1()).unwrap();
+    assert_eq!((back.format, &back.invoice), ("en16931-cii", &original.invoice));
+    let hybrid = Document::load_mem(&hybrid).unwrap();
+    let catalog = hybrid.catalog().unwrap();
+    let spec = catalog.get(b"AF").unwrap().as_array().unwrap()[0].as_reference().unwrap();
+    let spec = hybrid.get_dictionary(spec).unwrap();
+    assert_eq!(spec.get(b"AFRelationship").unwrap().as_name().unwrap(), b"Alternative");
+    assert_eq!(spec.get(b"F").unwrap().as_str().unwrap(), b"xrechnung.xml");
+    let metadata = hybrid.get_object(catalog.get(b"Metadata").unwrap().as_reference().unwrap()).unwrap();
+    let xmp = String::from_utf8(metadata.as_stream().unwrap().content.clone()).unwrap();
+    assert!(xmp.contains("<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>"));
+}

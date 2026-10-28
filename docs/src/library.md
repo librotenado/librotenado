@@ -59,7 +59,8 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
   report positions.
 - **Electronic invoices.** `en16931::read` translates XRechnung and other EN 16931 invoices in UBL or CII,
   `en16931::read_pdf` the XML in a ZUGFeRD or Factur-X PDF (feature `pdf`, on by default), into a document's
-  `InvoiceData`; `propose_booking` proposes a booking with German tax codes.
+  `InvoiceData`; `propose_booking` proposes a booking with German tax codes. `en16931::write_ubl` and `write_cii`
+  write XRechnung 3.0, `en16931::attach_to_pdf` makes a ZUGFeRD PDF of it.
 - **Tax audits.** `gobd::export` writes the books of one owner for a period as CSV files with an `index.xml`
   for the German data transfer (Z3), with account names from `Names::v0_1("de")`.
 - **German reports.** Postings carry tax codes (`TaxTable::de()`); `EventSet::period_report` fills the VAT return

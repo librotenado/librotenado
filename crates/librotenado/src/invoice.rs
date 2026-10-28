@@ -52,12 +52,50 @@ pub struct InvoiceParty {
     /// A national tax number.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub tax_number: Option<String>,
+    /// The street of the address (BT-35, BT-50).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub street: Option<String>,
+    /// The postcode of the address (BT-38, BT-53).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub postcode: Option<String>,
+    /// The city of the address (BT-37, BT-52).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub city: Option<String>,
     /// The country of the address.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub country: Option<Country>,
+    /// Whom to contact (BG-6, BG-9).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub contact: Option<InvoiceContact>,
+    /// The electronic address invoices are sent to (BT-34, BT-49).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub endpoint: Option<Endpoint>,
     /// The organisation or person of the books this party is (spec part 0008), once known.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub party: Option<PartyId>,
+}
+
+/// A contact of a party on an invoice.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InvoiceContact {
+    /// A person or department (BT-41, BT-56).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub name: Option<String>,
+    /// A telephone number (BT-42, BT-57).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub phone: Option<String>,
+    /// An e-mail address (BT-43, BT-58).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub email: Option<String>,
+}
+
+/// An electronic address: its scheme (e.g. `EM` for e-mail, `0204` for a Leitweg-ID) and the address.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Endpoint {
+    /// The scheme, as the code list of the Electronic Address Scheme names it.
+    pub scheme: String,
+    /// The address.
+    pub address: String,
 }
 
 /// The VAT of one category and rate on an invoice.
@@ -80,8 +118,20 @@ pub struct VatBreakdown {
 /// A line of an invoice.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InvoiceLine {
+    /// The line's identifier (BT-126).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub id: Option<String>,
     /// What was supplied.
     pub name: String,
+    /// How much (BT-129).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub quantity: Option<Decimal>,
+    /// The unit of the quantity, a code of UN/ECE Recommendation 20 (BT-130), e.g. `C62` one, `HUR` hour.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub unit: Option<String>,
+    /// The net price per unit in units of the currency, which may have more places than money (BT-146).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub price: Option<Decimal>,
     /// The net amount of the line.
     pub net: Money,
     /// Its VAT category.
@@ -122,9 +172,15 @@ pub struct InvoiceData {
     /// The reference the buyer asked for, e.g. a routing identifier of a public authority (Leitweg-ID).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub buyer_reference: Option<String>,
+    /// How it is paid, a code of UNTDID 4461 (BT-81), e.g. `58` SEPA credit transfer.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub payment_means: Option<String>,
     /// The account to pay to (IBAN).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub iban: Option<String>,
+    /// The terms of payment as text (BT-20).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub payment_terms: Option<String>,
     /// The VAT per category and rate, at least one.
     #[serde(deserialize_with = "crate::non_empty")]
     pub taxes: Vec<VatBreakdown>,
@@ -137,6 +193,14 @@ pub struct InvoiceData {
 
 impl Object for InvoiceData {
     const TYPE: &'static str = "invoice_data";
+}
+
+impl Object for InvoiceContact {
+    const TYPE: &'static str = "invoice_contact";
+}
+
+impl Object for Endpoint {
+    const TYPE: &'static str = "endpoint";
 }
 
 impl Object for InvoiceParty {

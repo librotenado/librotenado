@@ -41,13 +41,15 @@ the business terms (BT) it takes them from are named in brackets.
 | Member | Content |
 |---|---|
 | `currency` | the currency of the invoice (BT-5) |
-| `seller`, `buyer` | the parties (type `invoice_party`): `name` (BT-27, BT-44), and where stated `vat_id` (BT-31, BT-48), `tax_number` (BT-32), `country` (BT-40, BT-55), and `party` – the organisation or person of the books it is (part 0008), once known |
+| `seller`, `buyer` | the parties (type `invoice_party`): `name` (BT-27, BT-44), and where stated `vat_id` (BT-31, BT-48), `tax_number` (BT-32), `street`, `postcode`, `city`, `country` (BG-5, BG-8), `contact` (type `invoice_contact`: `name`, `phone`, `email`, BG-6, BG-9), `endpoint` (type `endpoint`: `scheme` and `address`, BT-34, BT-49), and `party` – the organisation or person of the books it is (part 0008), once known |
 | `due_date` | when payment is due (BT-9) |
 | `delivery_date` | when the supply was made (BT-72) |
 | `buyer_reference` | the reference the buyer asked for, e.g. the Leitweg-ID of a German public authority (BT-10) |
+| `payment_means` | how it is paid, a code of UNTDID 4461, e.g. `58` SEPA credit transfer (BT-81) |
 | `iban` | the account to pay to (BT-84) |
+| `payment_terms` | the terms of payment as text (BT-20) |
 | `taxes` | the VAT per category and rate (BG-23, type `vat_breakdown`), at least one: `category`, `rate` in percent where the category has one, `base` and `tax` as money, and `exemption` where stated (BT-116 to BT-120) |
-| `lines` | the lines (BG-25, type `invoice_line`): `name`, `net` as money, `category`, `rate` (BT-153, BT-131, BT-151, BT-152); absent when not recorded |
+| `lines` | the lines (BG-25, type `invoice_line`): `id`, `name`, `quantity` and `unit` (UN/ECE Rec. 20), `price` per unit as a decimal number, `net` as money, `category`, `rate` (BT-126, BT-153, BT-129, BT-130, BT-146, BT-131, BT-151, BT-152); absent when not recorded |
 | `totals` | type `invoice_totals`: `net` (BT-109), `tax` (BT-110), `gross` (BT-112), `due` (BT-115) |
 
 The VAT categories are the codes EN 16931 uses (UNCL 5305): `S` standard or reduced rate, `Z` zero rate, `E` exempt,
@@ -71,6 +73,24 @@ its profiles MINIMUM and BASIC WL (BMF letter of 15 October 2024, III C 2 - S 72
 The paths of the business terms in both syntaxes follow the open syntax bindings of Peppol BIS Billing 3.0
 ([OpenPEPPOL](https://docs.peppol.eu/poacc/billing/3.0/)) and of the XRechnung visualisation (KoSIT). The reference
 library is tested with the XRechnung test suite of KoSIT and a credit note of CEN/TC 434.
+
+## Writing XRechnung and ZUGFeRD
+
+From the data of a document an implementation writes the invoice it issues: as **XRechnung 3.0** in UBL or in CII,
+and – attaching the CII to a PDF/A-3 – as a **ZUGFeRD / Factur-X** hybrid of the profile XRECHNUNG. Before writing,
+it checks that the data carries what XRechnung requires beyond EN 16931: the buyer reference (BT-10), the means of
+payment (BT-81) and, for a transfer, the IBAN (BT-84), the seller's address, contact and VAT or tax number, the
+electronic addresses of both parties (BT-34, BT-49), the buyer's city, postcode and country, lines with identifier,
+quantity, unit and price, and a reason for every amount that is exempt or not taxed (BT-120). It names what is missing
+instead of writing an invalid invoice.
+
+In the PDF the XML is the embedded file `xrechnung.xml`, related to the document as its `Alternative`, listed in the
+catalogue's associated files (`AF`) and embedded files, and described in the XMP metadata with the Factur-X schema
+(`fx:ConformanceLevel` XRECHNUNG). The PDF itself – fonts, colours, output intent of PDF/A-3 – is the implementation's.
+
+The reference library writes both syntaxes from every test invoice of the KoSIT test suite that carries the terms
+XRechnung requires, reads them back to the same data, and the files validate against the schemas of UBL 2.1 and of CII
+D16B shipped with the XRechnung validator configuration of KoSIT.
 
 ## Booking proposals
 
@@ -132,7 +152,11 @@ Formats in version 0.1 (names are lower case; more follow with their translation
   invoicing period (BG-14), prepaid amounts, VAT in a second currency (BT-6, BT-111), payment terms (BT-20).
 - Reverse charge and intra-Community acquisitions at the reduced rate: the proposal assumes 19 %; rates other than
   19 % and 7 % get no tax code.
-- Translating outgoing invoices from the model into XRechnung and ZUGFeRD.
+- Validating written invoices against the business rules of EN 16931 and XRechnung (the schematron of the KoSIT
+  validator) – so far against the XML schemas only.
+- Allowances and charges on the document level, which writing does not support yet; profiles of ZUGFeRD other than
+  XRECHNUNG (EN 16931, EXTENDED); the file name `xrechnung.xml` of the profile XRECHNUNG, to be verified against the
+  ZUGFeRD specification.
 - Correcting the data of a recorded document by a later event.
 - Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
   may be quoted in a specification under CC BY; this part names their identifiers only.

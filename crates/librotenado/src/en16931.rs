@@ -5,8 +5,8 @@
 use roxmltree::{Document as Xml, Node};
 
 use crate::{
-    Country, Currency, CurrencyTable, Date, Decimal, DocumentKind, InvoiceData, InvoiceLine, InvoiceParty,
-    InvoiceTotals, Money, VatBreakdown, VatCategory,
+    Country, Currency, CurrencyTable, Date, Decimal, DocumentKind, Endpoint, InvoiceContact, InvoiceData, InvoiceLine,
+    InvoiceParty, InvoiceTotals, Money, VatBreakdown, VatCategory,
 };
 
 const UBL_INVOICE: &str = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
@@ -170,6 +170,12 @@ fn rate(value: Option<String>, category: VatCategory, term: &'static str) -> Res
     Ok(rate.filter(|r| rated || !r.is_zero()))
 }
 
+/// An electronic address from an element with a `schemeID`.
+fn endpoint(node: Option<Node>) -> Option<Endpoint> {
+    let node = node?;
+    Some(Endpoint { scheme: node.attribute("schemeID")?.to_owned(), address: node.text()?.trim().to_owned() })
+}
+
 fn country(value: Option<String>) -> Option<Country> {
     value.and_then(|v| v.parse().ok())
 }
@@ -203,11 +209,21 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
         let name = text(party, &["PartyLegalEntity", "RegistrationName"])
             .or_else(|| text(party, &["PartyName", "Name"]))
             .ok_or(TranslationError::Missing("BT-27/BT-44"))?;
+        let contact = at(party, &["Contact"]).map(|c| InvoiceContact {
+            name: text(c, &["Name"]),
+            phone: text(c, &["Telephone"]),
+            email: text(c, &["ElectronicMail"]),
+        });
         Ok(InvoiceParty {
             name,
             vat_id: tax_id(true),
             tax_number: tax_id(false),
+            street: text(party, &["PostalAddress", "StreetName"]),
+            postcode: text(party, &["PostalAddress", "PostalZone"]),
+            city: text(party, &["PostalAddress", "CityName"]),
             country: country(text(party, &["PostalAddress", "Country", "IdentificationCode"])),
+            contact,
+            endpoint: endpoint(at(party, &["EndpointID"])),
             party: None,
         })
     };
@@ -233,8 +249,13 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
     let lines = all(root, line_name)
         .map(|line| {
             let category = category(&required(line, &["Item", "ClassifiedTaxCategory", "ID"], "BT-151")?, "BT-151")?;
+            let quantity = at(line, &[if credit_note { "CreditedQuantity" } else { "InvoicedQuantity" }]);
             Ok(InvoiceLine {
+                id: text(line, &["ID"]),
                 name: required(line, &["Item", "Name"], "BT-153")?,
+                quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
+                unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
+                price: text(line, &["Price", "PriceAmount"]).map(|p| decimal(&p, "BT-146")).transpose()?,
                 net: amount(line, &["LineExtensionAmount"], "BT-131")?,
                 category,
                 rate: rate(text(line, &["Item", "ClassifiedTaxCategory", "Percent"]), category, "BT-152")?,
@@ -254,7 +275,9 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
             due_date: due.map(|d| date(&d, "BT-9")).transpose()?,
             delivery_date: text(root, &["Delivery", "ActualDeliveryDate"]).map(|d| date(&d, "BT-72")).transpose()?,
             buyer_reference: text(root, &["BuyerReference"]),
+            payment_means: text(root, &["PaymentMeans", "PaymentMeansCode"]),
             iban: text(root, &["PaymentMeans", "PayeeFinancialAccount", "ID"]),
+            payment_terms: text(root, &["PaymentTerms", "Note"]),
             taxes,
             lines,
             totals: InvoiceTotals {
@@ -285,11 +308,21 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
                 .and_then(|id| id.text())
                 .map(|t| t.trim().to_owned())
         };
+        let contact = at(party, &["DefinedTradeContact"]).map(|c| InvoiceContact {
+            name: text(c, &["PersonName"]).or_else(|| text(c, &["DepartmentName"])),
+            phone: text(c, &["TelephoneUniversalCommunication", "CompleteNumber"]),
+            email: text(c, &["EmailURIUniversalCommunication", "URIID"]),
+        });
         Ok(InvoiceParty {
             name: required(party, &["Name"], "BT-27/BT-44")?,
             vat_id: registration(&["VA", "VAT"]),
             tax_number: registration(&["FC"]),
+            street: text(party, &["PostalTradeAddress", "LineOne"]),
+            postcode: text(party, &["PostalTradeAddress", "PostcodeCode"]),
+            city: text(party, &["PostalTradeAddress", "CityName"]),
             country: country(text(party, &["PostalTradeAddress", "CountryID"])),
+            contact,
+            endpoint: endpoint(at(party, &["URIUniversalCommunication", "URIID"])),
             party: None,
         })
     };
@@ -315,8 +348,15 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
                 &tax.and_then(|t| text(t, &["CategoryCode"])).ok_or(TranslationError::Missing("BT-151"))?,
                 "BT-151",
             )?;
+            let quantity = at(line, &["SpecifiedLineTradeDelivery", "BilledQuantity"]);
             Ok(InvoiceLine {
+                id: text(line, &["AssociatedDocumentLineDocument", "LineID"]),
                 name: required(line, &["SpecifiedTradeProduct", "Name"], "BT-153")?,
+                quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
+                unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
+                price: text(line, &["SpecifiedLineTradeAgreement", "NetPriceProductTradePrice", "ChargeAmount"])
+                    .map(|p| decimal(&p, "BT-146"))
+                    .transpose()?,
                 net: amount(
                     line,
                     &[
@@ -363,7 +403,9 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
                 "BT-72",
             )?,
             buyer_reference: text(agreement, &["BuyerReference"]),
+            payment_means: text(settlement, &["SpecifiedTradeSettlementPaymentMeans", "TypeCode"]),
             iban: means.and_then(|m| text(m, &["IBANID"]).or_else(|| text(m, &["ProprietaryID"]))),
+            payment_terms: text(settlement, &["SpecifiedTradePaymentTerms", "Description"]),
             taxes,
             lines,
             totals: InvoiceTotals {
@@ -374,4 +416,568 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
             },
         },
     })
+}
+
+/// The specification identifier (BT-24) of XRechnung 3.0.
+pub const XRECHNUNG: &str = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
+/// The business process (BT-23) of Peppol BIS Billing 3.0, which XRechnung uses.
+const PROCESS: &str = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+
+/// Why an invoice cannot be written as XRechnung.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum WriteError {
+    /// Terms XRechnung requires are missing, by their identifiers.
+    #[error("missing for XRechnung: {}", .0.join(", "))]
+    Missing(Vec<&'static str>),
+    /// The lines do not add up to the net total: allowances and charges on the document are not supported yet.
+    #[error("the lines do not add up to the net total")]
+    Lines,
+    /// A currency the currency table does not divide by decimals.
+    #[error("currency {0} is not in the currency table")]
+    Currency(String),
+}
+
+/// Checks that an invoice carries what XRechnung 3.0 requires beyond EN 16931 and the model's own terms.
+pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), WriteError> {
+    let data = &invoice.invoice;
+    let mut missing = Vec::new();
+    let mut need = |present: bool, term: &'static str| {
+        if !present {
+            missing.push(term);
+        }
+    };
+    let (seller, buyer) = (&data.seller, &data.buyer);
+    need(data.buyer_reference.is_some(), "BT-10");
+    need(data.payment_means.is_some(), "BT-81");
+    need(seller.street.is_some(), "BT-35");
+    need(seller.city.is_some(), "BT-37");
+    need(seller.postcode.is_some(), "BT-38");
+    need(seller.country.is_some(), "BT-40");
+    let contact = seller.contact.as_ref();
+    need(contact.is_some_and(|c| c.name.is_some()), "BT-41");
+    need(contact.is_some_and(|c| c.phone.is_some()), "BT-42");
+    need(contact.is_some_and(|c| c.email.is_some()), "BT-43");
+    need(seller.vat_id.is_some() || seller.tax_number.is_some(), "BT-31/BT-32");
+    need(seller.endpoint.is_some(), "BT-34");
+    need(buyer.endpoint.is_some(), "BT-49");
+    need(buyer.city.is_some(), "BT-52");
+    need(buyer.postcode.is_some(), "BT-53");
+    need(buyer.country.is_some(), "BT-55");
+    if matches!(data.payment_means.as_deref(), Some("30" | "58")) {
+        need(data.iban.is_some(), "BT-84");
+    }
+    need(!data.lines.is_empty(), "BG-25");
+    for line in &data.lines {
+        need(line.id.is_some(), "BT-126");
+        need(line.quantity.is_some(), "BT-129");
+        need(line.unit.is_some(), "BT-130");
+        need(line.price.is_some(), "BT-146");
+    }
+    for tax in &data.taxes {
+        let exempt = !matches!(tax.category, VatCategory::Standard | VatCategory::ZeroRated);
+        need(!exempt || tax.exemption.is_some(), "BT-120");
+    }
+    missing.dedup();
+    if !missing.is_empty() {
+        return Err(WriteError::Missing(missing));
+    }
+    let lines: i128 = data.lines.iter().map(|l| l.net.base_units()).sum();
+    if lines != data.totals.net.base_units() {
+        return Err(WriteError::Lines);
+    }
+    Ok(())
+}
+
+/// Writes XML with indentation.
+struct Writer {
+    out: String,
+    depth: usize,
+}
+
+impl Writer {
+    fn new() -> Self {
+        Writer { out: String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"), depth: 0 }
+    }
+
+    fn open(&mut self, tag: &str, attributes: &str) {
+        self.out.push_str(&format!("{}<{tag}{attributes}>\n", "  ".repeat(self.depth)));
+        self.depth += 1;
+    }
+
+    fn close(&mut self, tag: &str) {
+        self.depth -= 1;
+        self.out.push_str(&format!("{}</{tag}>\n", "  ".repeat(self.depth)));
+    }
+
+    fn leaf(&mut self, tag: &str, attributes: &str, value: &str) {
+        self.out.push_str(&format!("{}<{tag}{attributes}>{}</{tag}>\n", "  ".repeat(self.depth), escape(value)));
+    }
+
+    fn some(&mut self, tag: &str, value: Option<&str>) {
+        if let Some(value) = value {
+            self.leaf(tag, "", value);
+        }
+    }
+}
+
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn attribute(name: &str, value: &str) -> String {
+    format!(" {name}=\"{}\"", escape(value))
+}
+
+/// Money as written in EN 16931: base units at the currency's decimals, `11900` EUR as `119.00`.
+fn written(money: &Money, decimals: u32) -> String {
+    let units = money.base_units();
+    let sign = if units < 0 { "-" } else { "" };
+    let digits = units.unsigned_abs().to_string();
+    if decimals == 0 {
+        return format!("{sign}{digits}");
+    }
+    let places = decimals as usize;
+    let digits = format!("{digits:0>width$}", width = places + 1);
+    let (int, frac) = digits.split_at(digits.len() - places);
+    format!("{sign}{int}.{frac}")
+}
+
+fn category_code(category: VatCategory) -> &'static str {
+    match category {
+        VatCategory::Standard => "S",
+        VatCategory::ZeroRated => "Z",
+        VatCategory::Exempt => "E",
+        VatCategory::ReverseCharge => "AE",
+        VatCategory::IntraCommunity => "K",
+        VatCategory::Export => "G",
+        VatCategory::NotSubject => "O",
+        VatCategory::CanaryIslands => "L",
+        VatCategory::CeutaMelilla => "M",
+    }
+}
+
+/// The rate as written: the category's rate, 0 for exempt categories, none for amounts not subject to VAT.
+fn written_rate(category: VatCategory, rate: Option<Decimal>) -> Option<String> {
+    match category {
+        VatCategory::NotSubject => None,
+        _ => Some(rate.map_or_else(|| "0".to_owned(), |r| r.to_string())),
+    }
+}
+
+fn type_code(kind: DocumentKind) -> &'static str {
+    if kind == DocumentKind::CreditNote { "381" } else { "380" }
+}
+
+fn iso(date: Date) -> String {
+    date.to_string()
+}
+
+fn compact(date: Date) -> String {
+    date.to_string().replace('-', "")
+}
+
+/// Writes an invoice or credit note as XRechnung 3.0 in the UBL syntax.
+pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
+    check_xrechnung(invoice)?;
+    let data = &invoice.invoice;
+    let code = data.currency.as_str();
+    let decimals = currencies
+        .get(&data.currency)
+        .and_then(|d| d.decimals())
+        .ok_or_else(|| WriteError::Currency(code.to_owned()))?;
+    let amount = |m: &Money| written(m, decimals);
+    let currency = attribute("currencyID", code);
+    let credit_note = invoice.kind == DocumentKind::CreditNote;
+    let root = if credit_note { "ubl:CreditNote" } else { "ubl:Invoice" };
+    let namespace = if credit_note { UBL_CREDIT_NOTE } else { UBL_INVOICE };
+    let mut x = Writer::new();
+    x.open(
+        root,
+        &format!(
+            "{}{}{}",
+            attribute("xmlns:ubl", namespace),
+            attribute("xmlns:cac", "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"),
+            attribute("xmlns:cbc", "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"),
+        ),
+    );
+    x.leaf("cbc:CustomizationID", "", XRECHNUNG);
+    x.leaf("cbc:ProfileID", "", PROCESS);
+    x.leaf("cbc:ID", "", &invoice.number);
+    x.leaf("cbc:IssueDate", "", &iso(invoice.date));
+    if !credit_note && let Some(due) = data.due_date {
+        x.leaf("cbc:DueDate", "", &iso(due));
+    }
+    x.leaf(if credit_note { "cbc:CreditNoteTypeCode" } else { "cbc:InvoiceTypeCode" }, "", type_code(invoice.kind));
+    x.leaf("cbc:DocumentCurrencyCode", "", code);
+    x.some("cbc:BuyerReference", data.buyer_reference.as_deref());
+    for (tag, party) in [("cac:AccountingSupplierParty", &data.seller), ("cac:AccountingCustomerParty", &data.buyer)] {
+        x.open(tag, "");
+        x.open("cac:Party", "");
+        if let Some(endpoint) = &party.endpoint {
+            x.leaf("cbc:EndpointID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
+        }
+        x.open("cac:PostalAddress", "");
+        x.some("cbc:StreetName", party.street.as_deref());
+        x.some("cbc:CityName", party.city.as_deref());
+        x.some("cbc:PostalZone", party.postcode.as_deref());
+        x.open("cac:Country", "");
+        x.some("cbc:IdentificationCode", party.country.as_ref().map(Country::as_str));
+        x.close("cac:Country");
+        x.close("cac:PostalAddress");
+        for (id, scheme) in [(&party.vat_id, "VAT"), (&party.tax_number, "FC")] {
+            if let Some(id) = id {
+                x.open("cac:PartyTaxScheme", "");
+                x.leaf("cbc:CompanyID", "", id);
+                x.open("cac:TaxScheme", "");
+                x.leaf("cbc:ID", "", scheme);
+                x.close("cac:TaxScheme");
+                x.close("cac:PartyTaxScheme");
+            }
+        }
+        x.open("cac:PartyLegalEntity", "");
+        x.leaf("cbc:RegistrationName", "", &party.name);
+        x.close("cac:PartyLegalEntity");
+        if let Some(contact) = &party.contact {
+            x.open("cac:Contact", "");
+            x.some("cbc:Name", contact.name.as_deref());
+            x.some("cbc:Telephone", contact.phone.as_deref());
+            x.some("cbc:ElectronicMail", contact.email.as_deref());
+            x.close("cac:Contact");
+        }
+        x.close("cac:Party");
+        x.close(tag);
+    }
+    if let Some(delivery) = data.delivery_date {
+        x.open("cac:Delivery", "");
+        x.leaf("cbc:ActualDeliveryDate", "", &iso(delivery));
+        x.close("cac:Delivery");
+    }
+    if let Some(means) = &data.payment_means {
+        x.open("cac:PaymentMeans", "");
+        x.leaf("cbc:PaymentMeansCode", "", means);
+        if credit_note && let Some(due) = data.due_date {
+            x.leaf("cbc:PaymentDueDate", "", &iso(due));
+        }
+        if let Some(iban) = &data.iban {
+            x.open("cac:PayeeFinancialAccount", "");
+            x.leaf("cbc:ID", "", iban);
+            x.close("cac:PayeeFinancialAccount");
+        }
+        x.close("cac:PaymentMeans");
+    }
+    if let Some(terms) = &data.payment_terms {
+        x.open("cac:PaymentTerms", "");
+        x.leaf("cbc:Note", "", terms);
+        x.close("cac:PaymentTerms");
+    }
+    x.open("cac:TaxTotal", "");
+    x.leaf("cbc:TaxAmount", &currency, &amount(&data.totals.tax));
+    for tax in &data.taxes {
+        x.open("cac:TaxSubtotal", "");
+        x.leaf("cbc:TaxableAmount", &currency, &amount(&tax.base));
+        x.leaf("cbc:TaxAmount", &currency, &amount(&tax.tax));
+        x.open("cac:TaxCategory", "");
+        x.leaf("cbc:ID", "", category_code(tax.category));
+        x.some("cbc:Percent", written_rate(tax.category, tax.rate).as_deref());
+        x.some("cbc:TaxExemptionReason", tax.exemption.as_deref());
+        x.open("cac:TaxScheme", "");
+        x.leaf("cbc:ID", "", "VAT");
+        x.close("cac:TaxScheme");
+        x.close("cac:TaxCategory");
+        x.close("cac:TaxSubtotal");
+    }
+    x.close("cac:TaxTotal");
+    x.open("cac:LegalMonetaryTotal", "");
+    x.leaf("cbc:LineExtensionAmount", &currency, &amount(&data.totals.net));
+    x.leaf("cbc:TaxExclusiveAmount", &currency, &amount(&data.totals.net));
+    x.leaf("cbc:TaxInclusiveAmount", &currency, &amount(&data.totals.gross));
+    x.leaf("cbc:PayableAmount", &currency, &amount(&data.totals.due));
+    x.close("cac:LegalMonetaryTotal");
+    let (line_tag, quantity_tag) = if credit_note {
+        ("cac:CreditNoteLine", "cbc:CreditedQuantity")
+    } else {
+        ("cac:InvoiceLine", "cbc:InvoicedQuantity")
+    };
+    for line in &data.lines {
+        x.open(line_tag, "");
+        x.some("cbc:ID", line.id.as_deref());
+        let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
+        x.leaf(quantity_tag, &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
+        x.leaf("cbc:LineExtensionAmount", &currency, &amount(&line.net));
+        x.open("cac:Item", "");
+        x.leaf("cbc:Name", "", &line.name);
+        x.open("cac:ClassifiedTaxCategory", "");
+        x.leaf("cbc:ID", "", category_code(line.category));
+        x.some("cbc:Percent", written_rate(line.category, line.rate).as_deref());
+        x.open("cac:TaxScheme", "");
+        x.leaf("cbc:ID", "", "VAT");
+        x.close("cac:TaxScheme");
+        x.close("cac:ClassifiedTaxCategory");
+        x.close("cac:Item");
+        x.open("cac:Price", "");
+        x.leaf("cbc:PriceAmount", &currency, &line.price.map(|p| p.to_string()).unwrap_or_default());
+        x.close("cac:Price");
+        x.close(line_tag);
+    }
+    x.close(root);
+    Ok(x.out)
+}
+
+/// Writes an invoice or credit note as XRechnung 3.0 in the UN/CEFACT CII syntax – also the XML a ZUGFeRD or
+/// Factur-X PDF carries in its profile XRECHNUNG.
+pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
+    check_xrechnung(invoice)?;
+    let data = &invoice.invoice;
+    let code = data.currency.as_str();
+    let decimals = currencies
+        .get(&data.currency)
+        .and_then(|d| d.decimals())
+        .ok_or_else(|| WriteError::Currency(code.to_owned()))?;
+    let amount = |m: &Money| written(m, decimals);
+    let mut x = Writer::new();
+    x.open(
+        "rsm:CrossIndustryInvoice",
+        &format!(
+            "{}{}{}{}",
+            attribute("xmlns:rsm", CII),
+            attribute(
+                "xmlns:ram",
+                "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
+            ),
+            attribute("xmlns:qdt", "urn:un:unece:uncefact:data:standard:QualifiedDataType:100"),
+            attribute("xmlns:udt", "urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100"),
+        ),
+    );
+    x.open("rsm:ExchangedDocumentContext", "");
+    x.open("ram:BusinessProcessSpecifiedDocumentContextParameter", "");
+    x.leaf("ram:ID", "", PROCESS);
+    x.close("ram:BusinessProcessSpecifiedDocumentContextParameter");
+    x.open("ram:GuidelineSpecifiedDocumentContextParameter", "");
+    x.leaf("ram:ID", "", XRECHNUNG);
+    x.close("ram:GuidelineSpecifiedDocumentContextParameter");
+    x.close("rsm:ExchangedDocumentContext");
+    x.open("rsm:ExchangedDocument", "");
+    x.leaf("ram:ID", "", &invoice.number);
+    x.leaf("ram:TypeCode", "", type_code(invoice.kind));
+    x.open("ram:IssueDateTime", "");
+    x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(invoice.date));
+    x.close("ram:IssueDateTime");
+    x.close("rsm:ExchangedDocument");
+    x.open("rsm:SupplyChainTradeTransaction", "");
+    for line in &data.lines {
+        x.open("ram:IncludedSupplyChainTradeLineItem", "");
+        x.open("ram:AssociatedDocumentLineDocument", "");
+        x.some("ram:LineID", line.id.as_deref());
+        x.close("ram:AssociatedDocumentLineDocument");
+        x.open("ram:SpecifiedTradeProduct", "");
+        x.leaf("ram:Name", "", &line.name);
+        x.close("ram:SpecifiedTradeProduct");
+        x.open("ram:SpecifiedLineTradeAgreement", "");
+        x.open("ram:NetPriceProductTradePrice", "");
+        x.leaf("ram:ChargeAmount", "", &line.price.map(|p| p.to_string()).unwrap_or_default());
+        x.close("ram:NetPriceProductTradePrice");
+        x.close("ram:SpecifiedLineTradeAgreement");
+        x.open("ram:SpecifiedLineTradeDelivery", "");
+        let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
+        x.leaf("ram:BilledQuantity", &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
+        x.close("ram:SpecifiedLineTradeDelivery");
+        x.open("ram:SpecifiedLineTradeSettlement", "");
+        x.open("ram:ApplicableTradeTax", "");
+        x.leaf("ram:TypeCode", "", "VAT");
+        x.leaf("ram:CategoryCode", "", category_code(line.category));
+        x.some("ram:RateApplicablePercent", written_rate(line.category, line.rate).as_deref());
+        x.close("ram:ApplicableTradeTax");
+        x.open("ram:SpecifiedTradeSettlementLineMonetarySummation", "");
+        x.leaf("ram:LineTotalAmount", "", &amount(&line.net));
+        x.close("ram:SpecifiedTradeSettlementLineMonetarySummation");
+        x.close("ram:SpecifiedLineTradeSettlement");
+        x.close("ram:IncludedSupplyChainTradeLineItem");
+    }
+    x.open("ram:ApplicableHeaderTradeAgreement", "");
+    x.some("ram:BuyerReference", data.buyer_reference.as_deref());
+    for (tag, party) in [("ram:SellerTradeParty", &data.seller), ("ram:BuyerTradeParty", &data.buyer)] {
+        x.open(tag, "");
+        x.leaf("ram:Name", "", &party.name);
+        if let Some(contact) = &party.contact {
+            x.open("ram:DefinedTradeContact", "");
+            x.some("ram:PersonName", contact.name.as_deref());
+            if let Some(phone) = &contact.phone {
+                x.open("ram:TelephoneUniversalCommunication", "");
+                x.leaf("ram:CompleteNumber", "", phone);
+                x.close("ram:TelephoneUniversalCommunication");
+            }
+            if let Some(email) = &contact.email {
+                x.open("ram:EmailURIUniversalCommunication", "");
+                x.leaf("ram:URIID", "", email);
+                x.close("ram:EmailURIUniversalCommunication");
+            }
+            x.close("ram:DefinedTradeContact");
+        }
+        x.open("ram:PostalTradeAddress", "");
+        x.some("ram:PostcodeCode", party.postcode.as_deref());
+        x.some("ram:LineOne", party.street.as_deref());
+        x.some("ram:CityName", party.city.as_deref());
+        x.some("ram:CountryID", party.country.as_ref().map(Country::as_str));
+        x.close("ram:PostalTradeAddress");
+        if let Some(endpoint) = &party.endpoint {
+            x.open("ram:URIUniversalCommunication", "");
+            x.leaf("ram:URIID", &attribute("schemeID", &endpoint.scheme), &endpoint.address);
+            x.close("ram:URIUniversalCommunication");
+        }
+        for (id, scheme) in [(&party.tax_number, "FC"), (&party.vat_id, "VA")] {
+            if let Some(id) = id {
+                x.open("ram:SpecifiedTaxRegistration", "");
+                x.leaf("ram:ID", &attribute("schemeID", scheme), id);
+                x.close("ram:SpecifiedTaxRegistration");
+            }
+        }
+        x.close(tag);
+    }
+    x.close("ram:ApplicableHeaderTradeAgreement");
+    x.open("ram:ApplicableHeaderTradeDelivery", "");
+    if let Some(delivery) = data.delivery_date {
+        x.open("ram:ActualDeliverySupplyChainEvent", "");
+        x.open("ram:OccurrenceDateTime", "");
+        x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(delivery));
+        x.close("ram:OccurrenceDateTime");
+        x.close("ram:ActualDeliverySupplyChainEvent");
+    }
+    x.close("ram:ApplicableHeaderTradeDelivery");
+    x.open("ram:ApplicableHeaderTradeSettlement", "");
+    x.leaf("ram:InvoiceCurrencyCode", "", code);
+    if let Some(means) = &data.payment_means {
+        x.open("ram:SpecifiedTradeSettlementPaymentMeans", "");
+        x.leaf("ram:TypeCode", "", means);
+        if let Some(iban) = &data.iban {
+            x.open("ram:PayeePartyCreditorFinancialAccount", "");
+            x.leaf("ram:IBANID", "", iban);
+            x.close("ram:PayeePartyCreditorFinancialAccount");
+        }
+        x.close("ram:SpecifiedTradeSettlementPaymentMeans");
+    }
+    for tax in &data.taxes {
+        x.open("ram:ApplicableTradeTax", "");
+        x.leaf("ram:CalculatedAmount", "", &amount(&tax.tax));
+        x.leaf("ram:TypeCode", "", "VAT");
+        x.some("ram:ExemptionReason", tax.exemption.as_deref());
+        x.leaf("ram:BasisAmount", "", &amount(&tax.base));
+        x.leaf("ram:CategoryCode", "", category_code(tax.category));
+        x.some("ram:RateApplicablePercent", written_rate(tax.category, tax.rate).as_deref());
+        x.close("ram:ApplicableTradeTax");
+    }
+    if data.payment_terms.is_some() || data.due_date.is_some() {
+        x.open("ram:SpecifiedTradePaymentTerms", "");
+        x.some("ram:Description", data.payment_terms.as_deref());
+        if let Some(due) = data.due_date {
+            x.open("ram:DueDateDateTime", "");
+            x.leaf("udt:DateTimeString", &attribute("format", "102"), &compact(due));
+            x.close("ram:DueDateDateTime");
+        }
+        x.close("ram:SpecifiedTradePaymentTerms");
+    }
+    x.open("ram:SpecifiedTradeSettlementHeaderMonetarySummation", "");
+    x.leaf("ram:LineTotalAmount", "", &amount(&data.totals.net));
+    x.leaf("ram:TaxBasisTotalAmount", "", &amount(&data.totals.net));
+    x.leaf("ram:TaxTotalAmount", &attribute("currencyID", code), &amount(&data.totals.tax));
+    x.leaf("ram:GrandTotalAmount", "", &amount(&data.totals.gross));
+    x.leaf("ram:DuePayableAmount", "", &amount(&data.totals.due));
+    x.close("ram:SpecifiedTradeSettlementHeaderMonetarySummation");
+    x.close("ram:ApplicableHeaderTradeSettlement");
+    x.close("rsm:SupplyChainTradeTransaction");
+    x.close("rsm:CrossIndustryInvoice");
+    Ok(x.out)
+}
+
+/// Attaches an invoice in CII to a PDF, as ZUGFeRD and Factur-X carry it: an embedded file `xrechnung.xml`
+/// (profile XRECHNUNG) related to the document as its alternative, listed in the catalogue's associated files and
+/// embedded files, and described in the document's XMP metadata. The PDF must already be a PDF/A-3 – its fonts,
+/// colours and output intent are the caller's; this adds the invoice to it.
+#[cfg(feature = "pdf")]
+pub fn attach_to_pdf(pdf: &[u8], cii: &str) -> std::result::Result<Vec<u8>, TranslationError> {
+    use lopdf::{Dictionary, Object, Stream, StringFormat, dictionary};
+    const NAME: &str = "xrechnung.xml";
+    let pdf_error = |e: lopdf::Error| TranslationError::Pdf(e.to_string());
+    let mut document = lopdf::Document::load_mem(pdf).map_err(pdf_error)?;
+    let text = |s: &str| Object::String(s.as_bytes().to_vec(), StringFormat::Literal);
+
+    let size = i64::try_from(cii.len()).map_err(|_| TranslationError::Pdf("the invoice is too large".into()))?;
+    let mut file = Stream::new(
+        dictionary! { "Type" => "EmbeddedFile", "Subtype" => Object::Name(b"text/xml".to_vec()), "Params" => dictionary! { "Size" => size } },
+        cii.as_bytes().to_vec(),
+    );
+    file.compress().map_err(pdf_error)?;
+    let file = document.add_object(file);
+    let spec = document.add_object(dictionary! {
+        "Type" => "Filespec",
+        "F" => text(NAME),
+        "UF" => text(NAME),
+        "Desc" => text("XRechnung"),
+        "AFRelationship" => "Alternative",
+        "EF" => dictionary! { "F" => file, "UF" => file },
+    });
+
+    let catalog_id = document.trailer.get(b"Root").and_then(Object::as_reference).map_err(pdf_error)?;
+    // The XMP metadata: the Factur-X description added to what the document has.
+    let xmp = facturx_xmp(
+        document
+            .get_dictionary(catalog_id)
+            .ok()
+            .and_then(|c| c.get(b"Metadata").and_then(Object::as_reference).ok())
+            .and_then(|id| document.get_object(id).ok())
+            .and_then(|o| o.as_stream().ok())
+            .and_then(|s| s.decompressed_content().ok().or_else(|| Some(s.content.clone())))
+            .and_then(|bytes| String::from_utf8(bytes).ok()),
+    );
+    let metadata =
+        document.add_object(Stream::new(dictionary! { "Type" => "Metadata", "Subtype" => "XML" }, xmp.into_bytes()));
+
+    let catalog = document.get_object_mut(catalog_id).and_then(Object::as_dict_mut).map_err(pdf_error)?;
+    let mut associated = catalog.get(b"AF").and_then(Object::as_array).cloned().unwrap_or_default();
+    associated.push(Object::Reference(spec));
+    catalog.set("AF", associated);
+    catalog.set("Metadata", metadata);
+    let mut names = catalog.get(b"Names").and_then(Object::as_dict).cloned().unwrap_or_else(|_| Dictionary::new());
+    let mut embedded =
+        names.get(b"EmbeddedFiles").and_then(Object::as_dict).cloned().unwrap_or_else(|_| Dictionary::new());
+    let mut entries = embedded.get(b"Names").and_then(Object::as_array).cloned().unwrap_or_default();
+    entries.push(text(NAME));
+    entries.push(Object::Reference(spec));
+    embedded.set("Names", entries);
+    names.set("EmbeddedFiles", embedded);
+    catalog.set("Names", names);
+
+    let mut out = Vec::new();
+    document.save_to(&mut out).map_err(|e| TranslationError::Pdf(e.to_string()))?;
+    Ok(out)
+}
+
+/// XMP metadata with the Factur-X description of an attached XRechnung, inserted into `existing` where there is one.
+#[cfg(feature = "pdf")]
+fn facturx_xmp(existing: Option<String>) -> String {
+    const DESCRIPTION: &str = r#"<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+<fx:DocumentType>INVOICE</fx:DocumentType>
+<fx:DocumentFileName>xrechnung.xml</fx:DocumentFileName>
+<fx:Version>1.0</fx:Version>
+<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>
+</rdf:Description>
+<rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+<pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+<pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
+<pdfaSchema:prefix>fx</pdfaSchema:prefix>
+<pdfaSchema:property><rdf:Seq>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentFileName</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The name of the embedded XML document</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentType</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The type of the hybrid document</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>Version</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The version of the XML schema</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>ConformanceLevel</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The conformance level of the embedded XML document</pdfaProperty:description></rdf:li>
+</rdf:Seq></pdfaSchema:property>
+</rdf:li></rdf:Bag></pdfaExtension:schemas>
+</rdf:Description>
+"#;
+    match existing.filter(|x| x.contains("</rdf:RDF>")) {
+        Some(xmp) => xmp.replacen("</rdf:RDF>", &format!("{DESCRIPTION}</rdf:RDF>"), 1),
+        None => format!(
+            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n{DESCRIPTION}</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>"
+        ),
+    }
 }
