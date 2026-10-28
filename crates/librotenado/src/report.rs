@@ -146,6 +146,12 @@ impl ReportMapping {
             .expect("the published mapping is valid")
     }
 
+    /// The German income statement on a cash basis of 2026 (Anlage EÜR, § 4 Abs. 3 EStG).
+    pub fn de_euer_2026() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-euer-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
     /// The German income statement on a cash basis of 2025 (Anlage EÜR, § 4 Abs. 3 EStG).
     pub fn de_euer_2025() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/reports/de-euer-2025.json"))
@@ -499,7 +505,7 @@ mod tests {
         ]);
         let report = set
             .period_report(
-                &ReportMapping::de_euer_2025(),
+                &ReportMapping::de_euer_2026(),
                 &TaxTable::de(),
                 &Chart::v0_1(),
                 &party(1),
@@ -520,10 +526,16 @@ mod tests {
         let chart = Chart::v0_1();
         let parents = EventSet::new().account_parents(&chart);
         let refined: std::collections::BTreeSet<&AccountId> = parents.values().collect();
-        let euer = ReportMapping::de_euer_2025();
-        for account in chart.accounts.iter().filter(|a| a.kind == AccountKind::Expense && !refined.contains(&a.id)) {
-            assert!(euer.position(&account.id, &parents, false).is_some(), "{} has no line", account.id);
+        for euer in [ReportMapping::de_euer_2025(), ReportMapping::de_euer_2026()] {
+            let expenses = chart.accounts.iter().filter(|a| a.kind == AccountKind::Expense && !refined.contains(&a.id));
+            for account in expenses {
+                assert!(euer.position(&account.id, &parents, false).is_some(), "{} has no line", account.id);
+            }
         }
+        // The form of 2026 has the Kennzahlen of 2025.
+        let (old, new) = (ReportMapping::de_euer_2025(), ReportMapping::de_euer_2026());
+        assert_eq!((new.version.as_str(), new.valid_from), ("2026", "2026-01-01".parse().unwrap()));
+        assert_eq!((&old.accounts, &old.taxes, &old.vat_settlement), (&new.accounts, &new.taxes, &new.vat_settlement));
     }
 
     #[test]

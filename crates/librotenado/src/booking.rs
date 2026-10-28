@@ -199,6 +199,24 @@ impl Booking {
         }
     }
 
+    /// Whether this booking cancels `original`: its postings are the original's in the same order, with the same
+    /// owners, accounts, tax codes and exchange rates and the opposite amounts. Notes, date and text do not count.
+    pub fn cancels(&self, original: &Booking) -> bool {
+        self.postings.len() == original.postings.len()
+            && self.postings.iter().zip(&original.postings).all(|(reversal, posting)| {
+                let exchange = match (&reversal.exchange, &posting.exchange) {
+                    (None, None) => true,
+                    (Some(r), Some(p)) => r.rate == p.rate && r.amount == -p.amount.clone(),
+                    _ => false,
+                };
+                reversal.owner == posting.owner
+                    && reversal.account == posting.account
+                    && reversal.tax == posting.tax
+                    && reversal.amount == -posting.amount.clone()
+                    && exchange
+            })
+    }
+
     /// The booking that cancels this one: same accounts, opposite amounts. A reversal of a transaction across books
     /// names a transaction of its own; it is left out here, to be set by whoever reverses the other sides too.
     pub fn reversed(&self, date: Date, text: String) -> Booking {

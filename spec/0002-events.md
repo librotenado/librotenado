@@ -82,8 +82,23 @@ with `prev`. An implementation MUST report, and MUST NOT silently resolve:
 - **Gap** – missing positions (events that have not arrived yet).
 - **Broken link** – an event whose `prev` is not the device's previous event.
 
-Conflicts in the content of the books – such as reversing a booking twice or reversing one that does not exist – go
-to a review list in the same way; resolving them is a new event, never a change to an old one.
+Conflicts in the content of the books go to a review list in the same way; resolving them is a new event, never a
+change to an old one.
+
+## Bookings and reversals
+
+A booking is never changed; it is cancelled by a reversal (part 0001). An implementation MUST report, and MUST NOT
+silently resolve:
+
+- **Invalid booking** – a booking or reversal that breaks the rules of part 0001: fewer than two postings, a posting
+  of zero, postings that do not balance for an owner in a currency, converted or not.
+- **Unknown reversal** – a reversal of an event that is not a recorded booking: it may not have arrived yet, or it is
+  a reversal itself.
+- **Double reversal** – a further reversal of a booking that is reversed already; the first in the agreed order
+  cancels it.
+- **Reversal mismatch** – a reversal whose postings are not those of the booking with the opposite amounts: the same
+  owners, accounts, tax codes and exchange rates in the same order, the amounts and converted amounts negated. Notes,
+  the date and the text may differ.
 
 ## Accounts of the books
 

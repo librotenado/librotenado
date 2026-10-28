@@ -226,7 +226,7 @@ pub struct Person {
 }
 
 /// A code of a configuration: the country in lower case, `-`, and a name of `a-z`, `0-9` and `-`
-/// (`de-cash-basis`, `de-small-business`). What it means is listed per country in the specification.
+/// (`de-cash-basis`, `de-small-business`, `de-skr03`). What it means is listed per country in the specification.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RegimeCode(String);
 
@@ -279,6 +279,10 @@ pub struct Configuration {
     /// The month, 1 to 12, on whose first day the owner's financial year begins.
     #[serde(deserialize_with = "month")]
     pub year_start: u8,
+    /// The national chart of accounts the owner works with (`de-skr03`), whose translation valid on a date applies;
+    /// left out when none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub chart: Option<RegimeCode>,
     /// How profit is determined (`de-cash-basis`, `de-double-entry`); left out when none is – a private household.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub accounting: Option<RegimeCode>,

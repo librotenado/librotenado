@@ -20,6 +20,14 @@ closed periods.
 - [0002 Events](spec/0002-events.md), [0010 Audit](spec/0010-audit.md): closing an owner's books up to a date
   (`period_closed`) with the state it was decided on and the software the figures were derived with; events it had
   not seen, and bookings or configurations written later into the closed period, are for review.
+- [0002 Events](spec/0002-events.md): the review of bookings and reversals as rules of the protocol – invalid
+  bookings, reversals of what is not a recorded booking, double reversals, and reversals that do not cancel exactly.
+- [0008 Parties](spec/0008-parties.md): the configuration names the national chart an owner works with (`chart`,
+  `de-skr03`, `de-skr04`), so that every device shows the same.
+- [0009 Reports](spec/0009-reports.md): the Anlage EÜR of 2026 (BMF letter of 1 September 2026), with the
+  Kennzahlen of 2025; the German names of its fields in the wording of the form of 2026.
+- Library: `EventSet::review_bookings`, `BookingProblem`, `Booking::cancels`, `Configuration::chart`,
+  `ReportMapping::de_euer_2026`.
 - Library: `BooksId`, `Payload::BooksFounded`, `EventSet::books`, `EventSet::review_books`, `Transaction`,
   `TransactionId`, `Booking::transaction`, `review_transactions`, `Configuration`, `VatScheme`, `VatBasis`,
   `ReturnPeriod`, `RegimeCode`, `Payload::OwnerConfigured`, `EventSet::configuration`, `Closing`,

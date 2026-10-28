@@ -313,6 +313,43 @@ pub enum DocumentProblem {
     },
 }
 
+/// Something about the bookings and reversals of a set of books that needs review: never resolved silently.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BookingProblem {
+    /// A booking or reversal that breaks the rules of a booking.
+    #[error("event {event}: {error}")]
+    Invalid {
+        /// The event.
+        event: EventHash,
+        /// The rule it breaks.
+        error: crate::BookingError,
+    },
+    /// A reversal of an event that is not a recorded booking – perhaps not arrived yet, or a reversal itself.
+    #[error("event {event} reverses {reverses}, which is not a recorded booking")]
+    UnknownReversal {
+        /// The reversal.
+        event: EventHash,
+        /// The event it names.
+        reverses: EventHash,
+    },
+    /// A further reversal of a booking that is reversed already.
+    #[error("event {event} reverses {reverses}, which is reversed already")]
+    DoubleReversal {
+        /// The further reversal.
+        event: EventHash,
+        /// The booking.
+        reverses: EventHash,
+    },
+    /// A reversal whose postings are not the booking's with the opposite amounts.
+    #[error("event {event} does not cancel {reverses}")]
+    ReversalMismatch {
+        /// The reversal.
+        event: EventHash,
+        /// The booking.
+        reverses: EventHash,
+    },
+}
+
 /// Something in a set of events that does not fit a clean chain per device.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ChainProblem {
@@ -638,6 +675,35 @@ impl EventSet {
         problems
     }
 
+    /// Checks the bookings and reversals: each valid, each reversal cancelling a recorded booking exactly, and no
+    /// booking reversed more than once – the first reversal in the agreed order counts.
+    pub fn review_bookings(&self) -> Vec<BookingProblem> {
+        let mut problems = Vec::new();
+        let mut reversed: BTreeSet<EventHash> = BTreeSet::new();
+        for (hash, event) in self.ordered() {
+            let (booking, reverses) = match &event.payload {
+                Payload::BookingRecorded { booking } => (booking, None),
+                Payload::BookingReversed { reverses, booking } => (booking, Some(*reverses)),
+                _ => continue,
+            };
+            if let Err(error) = booking.validate() {
+                problems.push(BookingProblem::Invalid { event: hash, error });
+            }
+            let Some(reverses) = reverses else { continue };
+            let Some(Payload::BookingRecorded { booking: original }) = self.get(&reverses).map(|e| &e.payload) else {
+                problems.push(BookingProblem::UnknownReversal { event: hash, reverses });
+                continue;
+            };
+            if !reversed.insert(reverses) {
+                problems.push(BookingProblem::DoubleReversal { event: hash, reverses });
+            }
+            if !booking.cancels(original) {
+                problems.push(BookingProblem::ReversalMismatch { event: hash, reverses });
+            }
+        }
+        problems
+    }
+
     /// Checks every device's chain: one event per position, no gaps, each event pointing to its predecessor.
     pub fn verify(&self) -> Vec<ChainProblem> {
         // Per device, per position: the events found there (more than one is a fork).
@@ -755,6 +821,43 @@ mod tests {
     fn first_as_value(set: &EventSet) -> serde_json::Value {
         let (hash, _) = set.ordered()[0];
         serde_json::from_slice(set.canonical(&hash).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn reversals_cancel_a_recorded_booking_once_and_exactly() {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let mut write = |set: &mut EventSet, payload: Payload| {
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            set.insert(Event { time: clock.now(1_000 + seq), seq, prev, payload }).0
+        };
+        let recorded = write(&mut set, Payload::BookingRecorded { booking: booking(10) });
+        let reversal = booking(10).reversed("2026-10-25".parse().unwrap(), "wrong".into());
+        let first = write(&mut set, Payload::BookingReversed { reverses: recorded, booking: reversal.clone() });
+        assert!(set.review_bookings().is_empty());
+        let again = write(&mut set, Payload::BookingReversed { reverses: recorded, booking: reversal.clone() });
+        let wrong = write(&mut set, Payload::BookingReversed { reverses: recorded, booking: booking(-7) });
+        let of_reversal = write(&mut set, Payload::BookingReversed { reverses: first, booking: booking(10) });
+        let mut unbalanced = booking(10);
+        unbalanced.postings.pop();
+        let invalid = write(&mut set, Payload::BookingRecorded { booking: unbalanced });
+        assert_eq!(
+            set.review_bookings(),
+            vec![
+                BookingProblem::DoubleReversal { event: again, reverses: recorded },
+                BookingProblem::DoubleReversal { event: wrong, reverses: recorded },
+                BookingProblem::ReversalMismatch { event: wrong, reverses: recorded },
+                BookingProblem::UnknownReversal { event: of_reversal, reverses: first },
+                BookingProblem::Invalid { event: invalid, error: crate::BookingError::TooFewPostings },
+            ]
+        );
+        // Notes, date and text of a reversal do not count; accounts and tax codes do.
+        let mut noted = reversal.clone();
+        noted.postings[0].note = Some("typo".into());
+        assert!(noted.cancels(&booking(10)));
+        let mut taxed = reversal;
+        taxed.postings[0].tax = Some("de-out-19".parse().unwrap());
+        assert!(!taxed.cancels(&booking(10)));
     }
 
     #[test]

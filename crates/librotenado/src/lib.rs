@@ -105,7 +105,9 @@ pub use clock::{Clock, DeviceId, Hlc};
 pub use date::Date;
 pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
-pub use event::{AccountProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload};
+pub use event::{
+    AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload,
+};
 pub use filing::{Derivation, Filing, FilingId, FilingKind, FilingProblem, FilingState, ReportContent};
 pub use invoice::{
     AllowanceCharge, Classification, CreditTransfer, Delivery, DirectDebit, Endpoint, Identifier, InvoiceContact,

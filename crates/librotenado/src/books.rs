@@ -562,6 +562,8 @@ mod tests {
         assert!(with("year_start", serde_json::json!(13)).is_err());
         assert!(with("accounting", serde_json::json!("DE-cash")).is_err());
         assert!(with("accounting", serde_json::Value::Null).is_err());
+        assert_eq!(with("chart", serde_json::json!("de-skr03")).unwrap().chart.unwrap().as_str(), "de-skr03");
+        assert!(with("chart", serde_json::json!("SKR03")).is_err());
         let mut private = json.clone();
         private.as_object_mut().unwrap().remove("accounting");
         private.as_object_mut().unwrap().remove("vat");

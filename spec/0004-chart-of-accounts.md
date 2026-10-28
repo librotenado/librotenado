@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.2, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
+Version 0.3, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -53,7 +53,8 @@ A translation is an object of type `chart_translation`:
   accounts map onto the same harmonised account, the harmonised chart is coarser than the national one: the model
   has to grow before that national chart is complete. Implementations report such accounts.
 
-Translations are versioned together with the national chart and tested with published cases per country (OPEN:
+Which national chart an owner works with is part of its configuration (`chart`, part 0008). Translations are
+versioned together with the national chart and tested with published cases per country (OPEN:
 which charts may be published, see the whitepaper).
 
 ## The chart of version 0.1

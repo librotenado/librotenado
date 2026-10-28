@@ -86,6 +86,7 @@ configuration (type `configuration`):
 | `from` | the first day it applies |
 | `currency` | the functional currency the owner's statements are in (part 0001) |
 | `year_start` | the month, 1 to 12, on whose first day the owner's financial year begins |
+| `chart` | the national chart of accounts the owner works with, as a code (`de-skr03`); its translation valid on a date (part 0004) applies; absent when none |
 | `accounting` | how profit is determined, as a code (below); absent when the owner determines none – a private household |
 | `vat` | how the owner is treated for VAT (type `vat_scheme`, below); absent when it is not liable – not an entrepreneur |
 
@@ -104,6 +105,7 @@ does not interpret it. A financial year that begins on another day than the firs
 |---|---|---|
 | `currency` | `EUR` | the euro ([§ 244 HGB](https://www.gesetze-im-internet.de/hgb/__244.html)) |
 | `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)) |
+| `chart` | `de-skr03`, `de-skr04` | DATEV's standard charts SKR 03 and SKR 04 (part 0004) – common, not prescribed |
 | `accounting` | `de-cash-basis` | income over expenses ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html)), reported in the Anlage EÜR |
 | `accounting` | `de-double-entry` | double-entry bookkeeping ([§§ 238 ff. HGB](https://www.gesetze-im-internet.de/hgb/__238.html), [§ 141 AO](https://www.gesetze-im-internet.de/ao_1977/__141.html)), profit by comparing net assets (§ 4 Abs. 1, § 5 EStG) |
 | `vat.scheme` | `de-regular` | VAT charged and deducted under the general rules of the [UStG](https://www.gesetze-im-internet.de/ustg_1980/) |

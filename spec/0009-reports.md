@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.2, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.3, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
@@ -73,6 +73,7 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
 |---|---|---|
 | Balance sheet, HGB § 266 | [`de-hgb-266-2026.json`](data/reports/de-hgb-266-2026.json) | [§ 266 HGB](https://www.gesetze-im-internet.de/hgb/__266.html) |
 | Profit and loss account by nature of expense, HGB § 275 Abs. 2 | [`de-hgb-275-gkv-2026.json`](data/reports/de-hgb-275-gkv-2026.json) | [§ 275 HGB](https://www.gesetze-im-internet.de/hgb/__275.html) |
+| Income statement on a cash basis 2026 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2026.json`](data/reports/de-euer-2026.json) | BMF letter of 1 September 2026, IV C 6 - S 2142/00024/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2026-09-01-anlage-EUER-2026.html)) |
 | Income statement on a cash basis 2025 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2025.json`](data/reports/de-euer-2025.json) | BMF letter of 29 August 2025, IV C 6 - S 2142/00023/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-08-29-anlage-EUER-2025.html)) |
 | VAT return 2026 (Umsatzsteuer-Voranmeldung) | [`de-ustva-2026.json`](data/reports/de-ustva-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00039/007/036, form USt 1 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-vordruckmuster-USt-voranmeldung-2026.html)) |
 
@@ -82,7 +83,8 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
   grants – are written `aktiv.extra.…` and `passiv.extra.…`; a German set of books does not use those accounts.
 - **Names of the positions** stand in the translation data (part 0001) under `<report>/<position>`: the German names
   of the HGB positions are the wording of the law, those of the VAT return and the Anlage EÜR the wording of the
-  official forms of the BMF letters named above (`de-ustva/81`, `de-euer/2.280`).
+  official forms of the BMF letters named above (`de-ustva/81`, `de-euer/2.280`) – of the latest year where a form
+  refers to its own lines (`Übertrag in Zeile 77`).
 - **Fields of the VAT return** are its Kennzahlen (`81`, `66`, …). The fields the form computes or asks for directly –
   the totals, the advance payment (Kz 83), the special advance payment (Kz 39), the yes/no questions – are not part of
   the mapping.
@@ -92,7 +94,9 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
   `vat_settlement`; withdrawals and contributions of the proprietor by the side of their account. The EÜR counts
   receipts and payments when they occur (§ 11 EStG), so a set of books that determines its profit this way dates its
   bookings when paid. The lines the form computes – totals, the profit, its corrections – are not part of the
-  mapping.
+  mapping. The form of 2026 has the Kennzahlen of 2025; it adds one line without a Kennzahl of its own – a reserve
+  for the valuation of animals, carried over from the Anlage LuF – and the lines after it move down by one, so the
+  mapping of 2026 is that of 2025.
 - Every account of the harmonised chart 0.1 that is an asset, a liability or equity has a position of § 266; every
   account of income or expense one of § 275 Abs. 2; every account of expense a line of the Anlage EÜR.
 
