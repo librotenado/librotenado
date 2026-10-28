@@ -268,6 +268,7 @@ mod tests {
                 posting("44571", -19_000, Some("de-out-19")),
             ],
             documents: vec![],
+            transaction: None,
         };
         record(&mut set, &mut clock, Payload::BookingRecorded { booking });
         let (from, to) = ("2026-03-01".parse().unwrap(), "2026-03-31".parse().unwrap());

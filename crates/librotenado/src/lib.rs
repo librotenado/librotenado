@@ -75,6 +75,7 @@ pub(crate) fn safe_u64<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
 
 mod balance;
 mod booking;
+mod books;
 mod canonical;
 mod chart;
 mod clock;
@@ -95,6 +96,9 @@ mod tax;
 
 pub use balance::{BalanceError, Balances};
 pub use booking::{AccountId, Booking, BookingError, Exchange, Posting};
+pub use books::{
+    BooksId, BooksProblem, Closing, ClosingProblem, Transaction, TransactionId, TransactionProblem, review_transactions,
+};
 pub use canonical::{CanonicalError, MAX_SAFE_INTEGER, canonicalize, to_canonical_vec};
 pub use chart::{Account, AccountKind, Chart, ChartError, ChartTranslation, TranslationError};
 pub use clock::{Clock, DeviceId, Hlc};
@@ -112,7 +116,10 @@ pub use invoice::{
 pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
-pub use party::{Country, Organisation, PartyId, Person, Registration, Role, RoleKind, Shares, TaxId};
+pub use party::{
+    Configuration, Country, Organisation, PartyId, Person, RegimeCode, Registration, ReturnPeriod, Role, RoleKind,
+    Shares, TaxId, VatBasis, VatScheme,
+};
 pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use tax::{TaxCode, TaxCodeDefinition, TaxDirection, TaxTable};
 
@@ -149,6 +156,15 @@ pub enum ParseError {
     /// A filing identity that is not a UUID in lower case.
     #[error("not a filing id: {0:?}")]
     Filing(String),
+    /// An identity of a set of books that is not a UUID in lower case.
+    #[error("not a books id: {0:?}")]
+    Books(String),
+    /// A transaction identity that is not a UUID in lower case.
+    #[error("not a transaction id: {0:?}")]
+    Transaction(String),
+    /// A code of a configuration that is not a country in lower case, `-` and a name.
+    #[error("not a configuration code: {0:?}")]
+    RegimeCode(String),
     /// A hash that is not `sha256:` and 64 lower-case hexadecimal digits.
     #[error("not a hash: {0:?}")]
     Hash(String),

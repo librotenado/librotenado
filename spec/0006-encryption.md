@@ -1,6 +1,6 @@
 # 0006 Encryption
 
-Version 0.2, draft – not yet implemented. Everything here is a proposal for discussion.
+Version 0.3, draft – not yet implemented. Everything here is a proposal for discussion.
 
 Books are end-to-end encrypted between the people and devices that share them. Whoever relays events – a relay run
 by anyone – stores and forwards them without being able to read them. A backend that processes books in plain text
@@ -40,7 +40,7 @@ orderer accepts – only those signed by a member with the right to make them �
 
 ## What a relay sees
 
-An event travels in an **envelope**: the books it belongs to, an identifier to route and deduplicate it by, the key
+An event travels in an **envelope**: the books it belongs to (their identity, part 0002), an identifier to route and deduplicate it by, the key
 it is encrypted with (by its position in the key chain), and the ciphertext of its canonical encoding (part 0003).
 The event's hash is computed over the plain text and is visible only to members. Originals travel the same way.
 

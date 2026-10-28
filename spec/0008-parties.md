@@ -1,7 +1,7 @@
 # 0008 Parties
 
-Version 0.2, draft. Implemented in the reference library (`Organisation`, `Person`, event kinds
-`organisation_described`, `person_described`, `owner_added`, `owner_removed`).
+Version 0.3, draft. Implemented in the reference library (`Organisation`, `Person`, event kinds
+`organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`; `Configuration`).
 
 **A set of books always belongs to at least one organisation or natural person** – its owners – and every posting
 names the owner whose books it is in (part 0001). Who they are decides which law applies, which national chart and
@@ -74,6 +74,49 @@ Later versions add kinds; an implementation keeps a role of a kind it does not k
 - **Shares** – shares held of a nominal amount the organisation does not have, or more of them than it has.
 - **Not an owner** – a posting (part 0001) in the books of an organisation or person that is not an owner.
 
+## Configuration
+
+How an owner keeps its books depends on who it is and changes over time – a small business grows out of the VAT
+exemption, a sole trader moves from cash basis to double entry. `owner_configured` records it from a date on, as a
+configuration (type `configuration`):
+
+| Member | Content |
+|---|---|
+| `owner` | the organisation or person (an owner of the books) |
+| `from` | the first day it applies |
+| `currency` | the functional currency the owner's statements are in (part 0001) |
+| `year_start` | the month, 1 to 12, on whose first day the owner's financial year begins |
+| `accounting` | how profit is determined, as a code (below); absent when the owner determines none – a private household |
+| `vat` | how the owner is treated for VAT (type `vat_scheme`, below); absent when it is not liable – not an entrepreneur |
+
+A VAT scheme is `scheme`, a code (below), `basis` – `accrual` when VAT is due on what was agreed, `cash` when on what
+was received – and `period`, the period of advance returns: `month`, `quarter`, or `year` when there are none, only
+the annual return.
+
+A configuration applies from `from` until the next configuration of the same owner; of two with the same `from`, the
+later in the agreed order of events (part 0002) applies. Codes are the country in lower case, `-`, and 1 to 61
+characters of `a-z`, `0-9` and `-`, like tax codes (part 0001); an implementation keeps a code it does not know but
+does not interpret it. A financial year that begins on another day than the first of a month is OPEN.
+
+### Germany
+
+| Member | Code or value | Meaning |
+|---|---|---|
+| `currency` | `EUR` | the euro ([§ 244 HGB](https://www.gesetze-im-internet.de/hgb/__244.html)) |
+| `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)) |
+| `accounting` | `de-cash-basis` | income over expenses ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html)), reported in the Anlage EÜR |
+| `accounting` | `de-double-entry` | double-entry bookkeeping ([§§ 238 ff. HGB](https://www.gesetze-im-internet.de/hgb/__238.html), [§ 141 AO](https://www.gesetze-im-internet.de/ao_1977/__141.html)), profit by comparing net assets (§ 4 Abs. 1, § 5 EStG) |
+| `vat.scheme` | `de-regular` | VAT charged and deducted under the general rules of the [UStG](https://www.gesetze-im-internet.de/ustg_1980/) |
+| `vat.scheme` | `de-small-business` | no VAT charged, no input VAT deducted ([§ 19 UStG](https://www.gesetze-im-internet.de/ustg_1980/__19.html)) |
+| `vat.basis` | `accrual` | on agreed consideration ([§ 16 Abs. 1 UStG](https://www.gesetze-im-internet.de/ustg_1980/__16.html)) |
+| `vat.basis` | `cash` | on consideration received ([§ 20 UStG](https://www.gesetze-im-internet.de/ustg_1980/__20.html)) |
+| `vat.period` | `month`, `quarter`, `year` | advance returns per month or quarter, or none after an exemption by the tax office ([§ 18 Abs. 2 UStG](https://www.gesetze-im-internet.de/ustg_1980/__18.html)) |
+
+An implementation MUST report, and MUST NOT silently resolve:
+
+- **Not configured** – a posting in the books of an owner, dated before the owner's first configuration.
+- **Configuration of a non-owner** – a configuration for an organisation or person that is not an owner of the books.
+
 ## Personal data
 
 Persons are personal data. The protocol carries what accounting and filings need and no more; who may read the books
@@ -82,9 +125,8 @@ is a matter of encryption (part 0006).
 ## Open points
 
 - The registries of codes: legal forms, registers, tax schemes – per country, with sources.
-- Further data an organisation's books depend on: the financial year, the period of VAT returns, the applicable VAT
-  regime (e.g. small businesses), the accounting standard – and whether they belong to the organisation or to the
-  books.
+- Further data the books depend on beyond the configuration: accounting standards beyond Germany (IFRS, national
+  GAAP), a financial year that does not begin on the first of a month, codes of further countries.
 - Addresses, and the parties of documents (sellers, buyers, part 0005).
 - Relations between organisations: groups, holdings, branches.
 - Capital that is not divided into shares: the contributions of partners in a partnership, the assets of a

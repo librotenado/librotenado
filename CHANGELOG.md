@@ -2,6 +2,31 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.3.0 – unreleased
+
+Sets of books as a whole: their identity, transactions shared between them, how each owner keeps its books, and
+closed periods.
+
+- [0002 Events](spec/0002-events.md): every set of books is founded with an identity (`books_founded`), named in the
+  envelope of encrypted events (part 0006); not founded or founded twice is for review.
+- [0001 Base types](spec/0001-base-types.md), [0002 Events](spec/0002-events.md): a booking may name a `transaction`
+  it shares with bookings in other sets of books – a bill split between a business and its owner's private books –,
+  with the identities of those sets; whoever holds several checks that the sides exist, name each other, have the
+  same date and are reversed alike.
+- [0008 Parties](spec/0008-parties.md): how an owner keeps its books from a date on (`owner_configured`):
+  functional currency, start of the financial year, accounting and VAT scheme with basis and period of advance
+  returns, with the codes for Germany; a posting before an owner's first configuration and a configuration of a
+  non-owner are for review.
+- [0002 Events](spec/0002-events.md), [0010 Audit](spec/0010-audit.md): closing an owner's books up to a date
+  (`period_closed`) with the state it was decided on and the software the figures were derived with; events it had
+  not seen, and bookings or configurations written later into the closed period, are for review.
+- Library: `BooksId`, `Payload::BooksFounded`, `EventSet::books`, `EventSet::review_books`, `Transaction`,
+  `TransactionId`, `Booking::transaction`, `review_transactions`, `Configuration`, `VatScheme`, `VatBasis`,
+  `ReturnPeriod`, `RegimeCode`, `Payload::OwnerConfigured`, `EventSet::configuration`, `Closing`,
+  `Payload::PeriodClosed`, `EventSet::closings`, `EventSet::closed_until`, `EventSet::review_closings`; new problems
+  `PartyProblem::NotConfigured`, `PartyProblem::ConfigurationOfNonOwner`, `BooksProblem`, `TransactionProblem`,
+  `ClosingProblem`.
+
 ## 0.2.0 – 2026-10-28
 
 German law: e-invoices after EN 16931 in full, the reports and the E-Bilanz, the GoBD export, foreign currency,

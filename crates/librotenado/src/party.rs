@@ -5,7 +5,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Money, Object, ParseError};
+use crate::{Currency, Date, Money, Object, ParseError};
 
 /// The identity of an organisation or a person: a UUID in its one form (spec part 0001). It carries no meaning.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -223,6 +223,114 @@ pub struct Person {
     /// Their roles in organisations; left out when none.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub roles: Vec<Role>,
+}
+
+/// A code of a configuration: the country in lower case, `-`, and a name of `a-z`, `0-9` and `-`
+/// (`de-cash-basis`, `de-small-business`). What it means is listed per country in the specification.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RegimeCode(String);
+
+impl RegimeCode {
+    /// The code as text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for RegimeCode {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // The form of a tax code.
+        match s.parse::<crate::TaxCode>() {
+            Ok(_) => Ok(RegimeCode(s.to_owned())),
+            Err(_) => Err(ParseError::RegimeCode(s.to_owned())),
+        }
+    }
+}
+
+impl fmt::Display for RegimeCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Serialize for RegimeCode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for RegimeCode {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?.parse().map_err(de::Error::custom)
+    }
+}
+
+/// How an owner keeps its books from a date on, until its next configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Configuration {
+    /// The organisation or person, an owner of the books.
+    pub owner: PartyId,
+    /// The first day it applies.
+    pub from: Date,
+    /// The functional currency the owner's statements are in.
+    pub currency: Currency,
+    /// The month, 1 to 12, on whose first day the owner's financial year begins.
+    #[serde(deserialize_with = "month")]
+    pub year_start: u8,
+    /// How profit is determined (`de-cash-basis`, `de-double-entry`); left out when none is – a private household.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub accounting: Option<RegimeCode>,
+    /// How the owner is treated for VAT; left out when it is not liable.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub vat: Option<VatScheme>,
+}
+
+fn month<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
+    let month = u8::deserialize(deserializer)?;
+    if (1..=12).contains(&month) { Ok(month) } else { Err(de::Error::custom("a month is 1 to 12")) }
+}
+
+/// How an owner is treated for VAT.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct VatScheme {
+    /// The scheme (`de-regular`, `de-small-business`).
+    pub scheme: RegimeCode,
+    /// When VAT is due.
+    pub basis: VatBasis,
+    /// The period of advance returns.
+    pub period: ReturnPeriod,
+}
+
+/// When VAT is due: on what was agreed, or on what was received.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VatBasis {
+    /// On the consideration agreed – with the invoice or the supply.
+    Accrual,
+    /// On the consideration received – with the payment.
+    Cash,
+}
+
+/// The period of advance VAT returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReturnPeriod {
+    /// Every month.
+    Month,
+    /// Every quarter.
+    Quarter,
+    /// None: only the annual return.
+    Year,
+}
+
+impl Object for Configuration {
+    const TYPE: &'static str = "configuration";
+}
+
+impl Object for VatScheme {
+    const TYPE: &'static str = "vat_scheme";
 }
 
 impl Object for Organisation {

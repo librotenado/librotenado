@@ -337,8 +337,13 @@ mod tests {
         let mut set = EventSet::new();
         let mut clock = Clock::new("a".parse().unwrap());
         for (ms, postings) in bookings.into_iter().enumerate() {
-            let booking =
-                Booking { date: "2026-03-15".parse().unwrap(), text: "test".into(), postings, documents: vec![] };
+            let booking = Booking {
+                date: "2026-03-15".parse().unwrap(),
+                text: "test".into(),
+                postings,
+                documents: vec![],
+                transaction: None,
+            };
             booking.validate().unwrap();
             let (seq, prev) = set.chain_head(&"a".parse().unwrap());
             set.insert(Event { time: clock.now(ms as u64), seq, prev, payload: Payload::BookingRecorded { booking } });

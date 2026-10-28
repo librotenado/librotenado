@@ -35,6 +35,7 @@ fn booking(text: &str, account: &str, cents: i128) -> Booking {
             },
         ],
         documents: vec![],
+        transaction: None,
     }
 }
 

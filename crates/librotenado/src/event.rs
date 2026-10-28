@@ -12,8 +12,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Account, AccountId, Booking, Chart, ContentHash, Currency, DeviceId, Document, DocumentId, Filing, FilingId, Hlc,
-    Money, Object, ObjectError, Organisation, ParseError, PartyId, Person, canonical, from_root, to_root,
+    Account, AccountId, Booking, BooksId, Chart, Closing, Configuration, ContentHash, Currency, Date, DeviceId,
+    Document, DocumentId, Filing, FilingId, Hlc, Money, Object, ObjectError, Organisation, ParseError, PartyId, Person,
+    canonical, from_root, to_root,
 };
 
 /// The SHA-256 hash of an event's canonical encoding – its identity. Written as `sha256:` and 64 lower-case
@@ -51,6 +52,11 @@ impl<'de> Deserialize<'de> for EventHash {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Payload {
+    /// The set of books was founded under this identity – its first event (spec part 0002).
+    BooksFounded {
+        /// The identity of the books.
+        books: BooksId,
+    },
     /// An organisation was described, or its description changed (spec part 0008).
     OrganisationDescribed {
         /// The organisation; a later description with the same identity replaces an earlier one.
@@ -70,6 +76,11 @@ pub enum Payload {
     OwnerRemoved {
         /// The organisation or person.
         owner: PartyId,
+    },
+    /// How an owner keeps its books from a date on (spec part 0008).
+    OwnerConfigured {
+        /// The configuration; it applies until the owner's next one.
+        configuration: Configuration,
     },
     /// The books use this harmonised chart of accounts (spec part 0004).
     ChartSelected {
@@ -98,6 +109,11 @@ pub enum Payload {
     DocumentRecorded {
         /// The document.
         document: Document,
+    },
+    /// An owner's books were closed up to a date (spec part 0002).
+    PeriodClosed {
+        /// The closing.
+        closing: Closing,
     },
     /// A filing was derived from the books and is ready to be submitted (spec part 0007).
     FilingPrepared {
@@ -172,6 +188,12 @@ impl Event {
     }
 }
 
+/// The state of a list of events in the agreed order: the hash of the canonical encoding of their hashes.
+pub(crate) fn state_of(hashes: &[EventHash]) -> ContentHash {
+    let hashes: Vec<String> = hashes.iter().map(|hash| hash.to_string()).collect();
+    ContentHash::of(&canonical::to_canonical_vec(&hashes).expect("an array of strings"))
+}
+
 /// Deserialises `prev`, which is always written – `null` for the first event of a device, never left out.
 fn written<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<EventHash>, D::Error> {
     Option::deserialize(deserializer)
@@ -243,6 +265,22 @@ pub enum PartyProblem {
         organisation: PartyId,
         /// The nominal amount.
         nominal: Money,
+    },
+    /// A posting in the books of an owner, dated before the owner's first configuration.
+    #[error("event {event} posts in the books of {owner} before they are configured")]
+    NotConfigured {
+        /// The event with the booking.
+        event: EventHash,
+        /// The owner named in the posting.
+        owner: PartyId,
+    },
+    /// A configuration for an organisation or person that is not an owner of the books.
+    #[error("event {event} configures {owner}, who is not an owner")]
+    ConfigurationOfNonOwner {
+        /// The event with the configuration.
+        event: EventHash,
+        /// The organisation or person.
+        owner: PartyId,
     },
     /// A posting in the books of someone who is not an owner of the books.
     #[error("event {event} posts in the books of {owner}, who is not an owner")]
@@ -482,9 +520,25 @@ impl EventSet {
         owners
     }
 
-    /// Checks the parties: the books belong to at least one organisation or person, every owner is described,
-    /// every organisation a person has a role in is described, the shares held fit the shares an organisation has,
-    /// and every posting is in the books of an owner.
+    /// The configuration of `owner` that applies on `date`: the one with the latest `from` on or before it, and of
+    /// two with the same `from` the later in the agreed order.
+    pub fn configuration(&self, owner: &PartyId, date: Date) -> Option<&Configuration> {
+        let mut applies: Option<&Configuration> = None;
+        for (_, event) in self.ordered() {
+            if let Payload::OwnerConfigured { configuration } = &event.payload
+                && configuration.owner == *owner
+                && configuration.from <= date
+                && applies.is_none_or(|a| a.from <= configuration.from)
+            {
+                applies = Some(configuration);
+            }
+        }
+        applies
+    }
+
+    /// Checks the parties: the books belong to at least one organisation or person, every owner is described and
+    /// configured before its first posting, only owners are configured, every organisation a person has a role in is
+    /// described, the shares held fit the shares an organisation has, and every posting is in the books of an owner.
     pub fn review_parties(&self) -> Vec<PartyProblem> {
         let (organisations, persons) = self.parties();
         let owners = self.owners();
@@ -524,12 +578,31 @@ impl EventSet {
                 problems.push(PartyProblem::Shares { organisation: organisation.clone(), nominal });
             }
         }
+        // Per owner: the first day a configuration applies from.
+        let mut first_configured: BTreeMap<&PartyId, Date> = BTreeMap::new();
+        for (hash, event) in self.ordered() {
+            if let Payload::OwnerConfigured { configuration } = &event.payload {
+                if !owners.contains(&&configuration.owner) {
+                    problems.push(PartyProblem::ConfigurationOfNonOwner {
+                        event: hash,
+                        owner: configuration.owner.clone(),
+                    });
+                }
+                let from = first_configured.entry(&configuration.owner).or_insert(configuration.from);
+                *from = (*from).min(configuration.from);
+            }
+        }
         for (hash, event) in self.ordered() {
             if let Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } = &event.payload {
                 let mut named: Vec<&PartyId> = booking.postings.iter().map(|p| &p.owner).collect();
+                named.sort();
                 named.dedup();
-                for owner in named.into_iter().filter(|o| !owners.contains(o)) {
-                    problems.push(PartyProblem::NotAnOwner { event: hash, owner: owner.clone() });
+                for owner in named {
+                    if !owners.contains(&owner) {
+                        problems.push(PartyProblem::NotAnOwner { event: hash, owner: owner.clone() });
+                    } else if first_configured.get(owner).is_none_or(|from| booking.date < *from) {
+                        problems.push(PartyProblem::NotConfigured { event: hash, owner: owner.clone() });
+                    }
                 }
             }
         }
@@ -539,8 +612,8 @@ impl EventSet {
     /// The state of the books: the SHA-256 hash of the canonical encoding of the array of all event hashes in the
     /// agreed order. Whatever is derived from the books – a filing, a report – records the state it was derived from.
     pub fn state(&self) -> ContentHash {
-        let hashes: Vec<String> = self.ordered().iter().map(|(hash, _)| hash.to_string()).collect();
-        ContentHash::of(&canonical::to_canonical_vec(&hashes).expect("an array of strings"))
+        let hashes: Vec<EventHash> = self.ordered().iter().map(|(hash, _)| *hash).collect();
+        state_of(&hashes)
     }
 
     /// Checks the documents: each recorded once, and every document a booking is based on recorded. Whether the
@@ -630,6 +703,7 @@ mod tests {
                 },
             ],
             documents: vec![],
+            transaction: None,
         }
     }
 

@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Currency, Date, Decimal, DocumentId, Money, Object, ParseError, PartyId, TaxCode};
+use crate::{Currency, Date, Decimal, DocumentId, Money, Object, ParseError, PartyId, TaxCode, Transaction};
 
 /// The identity of an account: a UUID (RFC 9562) in its one form, lower case `8-4-4-4-12` hexadecimal digits, e.g.
 /// `0192f1e4-7a3c-7b1e-9c2d-5e8f0a1b2c3d`. It carries no meaning – what an account is follows from its kind, parent
@@ -98,6 +98,10 @@ pub struct Booking {
     /// The documents it is based on (receipts, invoices, statements); left out of JSON when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub documents: Vec<DocumentId>,
+    /// The business transaction it shares with bookings in other sets of books (spec part 0002); left out when it
+    /// is recorded in these books only.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub transaction: Option<Transaction>,
 }
 
 impl Object for Exchange {
@@ -195,7 +199,8 @@ impl Booking {
         }
     }
 
-    /// The booking that cancels this one: same accounts, opposite amounts.
+    /// The booking that cancels this one: same accounts, opposite amounts. A reversal of a transaction across books
+    /// names a transaction of its own; it is left out here, to be set by whoever reverses the other sides too.
     pub fn reversed(&self, date: Date, text: String) -> Booking {
         let postings = self
             .postings
@@ -209,7 +214,7 @@ impl Booking {
                 exchange: p.exchange.as_ref().map(|e| Exchange { rate: e.rate, amount: -e.amount.clone() }),
             })
             .collect();
-        Booking { date, text, postings, documents: self.documents.clone() }
+        Booking { date, text, postings, documents: self.documents.clone(), transaction: None }
     }
 }
 
@@ -248,8 +253,13 @@ pub(crate) mod tests {
     /// An invoice in dollars: it balances in dollars and, converted, in euros (GoBD Rz. 94, § 256a HGB).
     #[test]
     fn foreign_currency_balances_converted_too() {
-        let booking =
-            |postings| Booking { date: "2026-10-28".parse().unwrap(), text: "".into(), postings, documents: vec![] };
+        let booking = |postings| Booking {
+            date: "2026-10-28".parse().unwrap(),
+            text: "".into(),
+            postings,
+            documents: vec![],
+            transaction: None,
+        };
         let invoice = booking(vec![converted(1, 10_000, "0.9213", 9_213), converted(2, -10_000, "0.9213", -9_213)]);
         assert_eq!(invoice.validate(), Ok(()));
         assert_eq!(invoice.postings[0].functional().base_units(), 9_213);
@@ -309,7 +319,13 @@ pub(crate) mod tests {
     }
 
     fn booking(postings: Vec<Posting>) -> Booking {
-        Booking { date: "2026-10-24".parse().unwrap(), text: "test".into(), postings, documents: vec![] }
+        Booking {
+            date: "2026-10-24".parse().unwrap(),
+            text: "test".into(),
+            postings,
+            documents: vec![],
+            transaction: None,
+        }
     }
 
     #[test]

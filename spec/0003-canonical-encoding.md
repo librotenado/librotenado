@@ -1,6 +1,6 @@
 # 0003 Canonical encoding
 
-Version 0.2, draft. Implemented in the reference library (`canonicalize`, `to_canonical_vec`, `EventSet::receive`).
+Version 0.3, draft. Implemented in the reference library (`canonicalize`, `to_canonical_vec`, `EventSet::receive`).
 
 Every implementation must compute the same hash for the same event. The protocol therefore defines one byte-exact
 encoding: the **JSON Canonicalization Scheme** ([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)), restricted to
@@ -55,6 +55,8 @@ Every object of the protocol has a **type**, defined in its part:
 | `payment_card` | 0005 | | `allowance_charge` | 0005 |
 | `supporting_document` | 0005 | | `classification` | 0005 |
 | `item_attribute` | 0005 | | `exchange` | 0001 |
+| `transaction` | 0002 | | `closing` | 0002 |
+| `configuration` | 0008 | | `vat_scheme` | 0008 |
 
 The type is written as the member `type` exactly where the context does not determine it, and nowhere else:
 
