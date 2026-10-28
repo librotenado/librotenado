@@ -110,6 +110,7 @@ mod tests {
             account: account(n),
             amount: Money::new(units, eur()).unwrap(),
             note: None,
+            tax: None,
         };
         Booking {
             date: date.parse().unwrap(),

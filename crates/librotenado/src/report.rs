@@ -1,0 +1,330 @@
+// SPDX-License-Identifier: MIT
+//! Report mappings (spec part 0009): how the harmonised accounts and the tax codes of a set of books fall into the
+//! positions of a national report – a balance sheet, a VAT return – in one version of that report.
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    AccountId, BalanceError, Chart, Country, Date, EventSet, Object, PartyId, Payload, TaxCode, TaxDirection, TaxTable,
+};
+
+/// Whether a mapping has been reviewed by tax advisers of its country.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MappingStatus {
+    /// Not yet reviewed.
+    Draft,
+    /// Reviewed.
+    Reviewed,
+}
+
+/// The accounts that hold VAT, for a report computed from tax codes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VatAccounts {
+    /// Accounts of VAT owed: collected, and owed by the recipient (reverse charge). Their refinements count, too.
+    pub output: Vec<AccountId>,
+    /// Accounts of deductible VAT. Their refinements count, too.
+    pub input: Vec<AccountId>,
+}
+
+/// Which fields of a report a tax code fills.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaxRule {
+    /// The tax code.
+    pub tax: TaxCode,
+    /// The field for the net amounts: postings with the code on accounts that hold no VAT.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub base: Option<String>,
+    /// The field for VAT owed: postings with the code on output VAT accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub output: Option<String>,
+    /// The field for deductible VAT: postings with the code on input VAT accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub input: Option<String>,
+}
+
+/// How the harmonised chart and the tax codes fall into one version of a national report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportMapping {
+    /// The report, e.g. `de-ustva`, `de-hgb-266`.
+    pub report: String,
+    /// The country.
+    pub country: Country,
+    /// The version of the report, e.g. a year or a taxonomy version.
+    pub version: String,
+    /// The first day of the periods it applies to.
+    pub valid_from: Date,
+    /// The harmonised chart it maps, as `name/version`.
+    pub into: String,
+    /// Whether tax advisers have reviewed it.
+    pub status: MappingStatus,
+    /// Account → position. A mapping holds for the account and every account that refines it, unless a refinement
+    /// has its own; left out when the report is computed from tax codes alone.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "crate::non_empty_map")]
+    pub accounts: BTreeMap<AccountId, String>,
+    /// Account → position for a credit balance, where it differs (a bank account in overdraft).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "crate::non_empty_map")]
+    pub credit_accounts: BTreeMap<AccountId, String>,
+    /// The accounts that hold VAT; with `taxes`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub vat_accounts: Option<VatAccounts>,
+    /// The fields each tax code fills.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub taxes: Vec<TaxRule>,
+}
+
+impl Object for ReportMapping {
+    const TYPE: &'static str = "report_mapping";
+}
+
+impl ReportMapping {
+    /// The German VAT return of 2026 (Umsatzsteuer-Voranmeldung), from tax codes (`spec/data/reports/`).
+    pub fn de_ustva_2026() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-ustva-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The German balance sheet of 2026 (HGB § 266).
+    pub fn de_hgb_266_2026() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-266-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The German profit and loss account of 2026, by nature of expense (HGB § 275 Abs. 2).
+    pub fn de_hgb_275_gkv_2026() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-275-gkv-2026.json"))
+            .expect("the published mapping is valid")
+    }
+
+    /// The position of an account: its own mapping or the nearest of the accounts it refines; for a credit balance
+    /// the credit mapping, where there is one.
+    pub fn position(
+        &self,
+        account: &AccountId,
+        parents: &BTreeMap<AccountId, AccountId>,
+        credit: bool,
+    ) -> Option<&str> {
+        if credit && let Some(position) = nearest(&self.credit_accounts, account, parents) {
+            return Some(position);
+        }
+        nearest(&self.accounts, account, parents)
+    }
+}
+
+/// The mapping of an account or of the nearest account it refines.
+fn nearest<'m>(
+    map: &'m BTreeMap<AccountId, String>,
+    account: &AccountId,
+    parents: &BTreeMap<AccountId, AccountId>,
+) -> Option<&'m str> {
+    ancestry(account, parents).into_iter().find_map(|id| map.get(id)).map(String::as_str)
+}
+
+/// An account and the accounts it refines, nearest first.
+fn ancestry<'a>(account: &'a AccountId, parents: &'a BTreeMap<AccountId, AccountId>) -> Vec<&'a AccountId> {
+    let mut chain = vec![account];
+    while let Some(parent) = parents.get(chain[chain.len() - 1]) {
+        if chain.len() > parents.len() {
+            break; // a cycle; the review of accounts reports it
+        }
+        chain.push(parent);
+    }
+    chain
+}
+
+impl EventSet {
+    /// The fields of a report computed from tax codes – a VAT return – for `owner`, over the bookings dated from
+    /// `from` to `to` inclusive. Amounts are in base units and positive as the form expects them: net amounts and
+    /// VAT owed of sales as credit, net amounts of purchases and deductible VAT as debit.
+    pub fn tax_report(
+        &self,
+        mapping: &ReportMapping,
+        taxes: &TaxTable,
+        chart: &Chart,
+        owner: &PartyId,
+        from: Date,
+        to: Date,
+    ) -> Result<BTreeMap<String, i128>, BalanceError> {
+        let parents = self.account_parents(chart);
+        let none = VatAccounts { output: vec![], input: vec![] };
+        let vat = mapping.vat_accounts.as_ref().unwrap_or(&none);
+        let within = |account: &AccountId, roots: &[AccountId]| {
+            ancestry(account, &parents).into_iter().any(|id| roots.contains(id))
+        };
+        let mut fields: BTreeMap<String, i128> = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            let booking = match &event.payload {
+                Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
+                _ => continue,
+            };
+            if booking.date < from || booking.date > to {
+                continue;
+            }
+            for posting in booking.postings.iter().filter(|p| p.owner == *owner) {
+                let Some(code) = &posting.tax else { continue };
+                let Some(rule) = mapping.taxes.iter().find(|rule| rule.tax == *code) else { continue };
+                let units = posting.amount.base_units();
+                let (field, amount) = if within(&posting.account, &vat.output) {
+                    (rule.output.as_ref(), -units)
+                } else if within(&posting.account, &vat.input) {
+                    (rule.input.as_ref(), units)
+                } else {
+                    let sales = taxes.get(code).is_some_and(|d| d.direction == TaxDirection::Output);
+                    (rule.base.as_ref(), if sales { -units } else { units })
+                };
+                if let Some(field) = field {
+                    let sum = fields.entry(field.clone()).or_default();
+                    *sum = sum.checked_add(amount).ok_or(BalanceError::Overflow)?;
+                }
+            }
+        }
+        Ok(fields)
+    }
+
+    /// The positions of a report computed from accounts – a balance sheet, a profit and loss account – for `owner`
+    /// on `until`: per position, the sum of the balances of the accounts that fall into it, in base units, debit
+    /// positive. Accounts without a position are left out.
+    pub fn account_report(
+        &self,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        until: Option<Date>,
+    ) -> Result<BTreeMap<String, i128>, BalanceError> {
+        let parents = self.account_parents(chart);
+        let mut positions: BTreeMap<String, i128> = BTreeMap::new();
+        for (party, account, _, units) in self.balances(until)?.iter() {
+            if party != owner {
+                continue;
+            }
+            if let Some(position) = mapping.position(account, &parents, units < 0) {
+                let sum = positions.entry(position.to_owned()).or_default();
+                *sum = sum.checked_add(units).ok_or(BalanceError::Overflow)?;
+            }
+        }
+        Ok(positions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Booking, ChartTranslation, Clock, Event, Money, Posting, party::tests::party};
+
+    /// A posting of `units` cents for owner 1 on the PCG account `number`, with an optional tax code.
+    fn posting(number: &str, units: i128, tax: Option<&str>) -> Posting {
+        Posting {
+            owner: party(1),
+            account: ChartTranslation::fr_pcg().accounts[number].clone(),
+            amount: Money::new(units, "EUR".parse().unwrap()).unwrap(),
+            note: None,
+            tax: tax.map(|t| t.parse().unwrap()),
+        }
+    }
+
+    fn books(bookings: Vec<Vec<Posting>>) -> EventSet {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        for (ms, postings) in bookings.into_iter().enumerate() {
+            let booking =
+                Booking { date: "2026-03-15".parse().unwrap(), text: "test".into(), postings, documents: vec![] };
+            booking.validate().unwrap();
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            set.insert(Event { time: clock.now(ms as u64), seq, prev, payload: Payload::BookingRecorded { booking } });
+        }
+        set
+    }
+
+    #[test]
+    fn a_vat_return_from_tax_codes() {
+        let set = books(vec![
+            // A sale: 1,000 + 190 VAT.
+            vec![
+                posting("411", 119_000, None),
+                posting("706", -100_000, Some("de-out-19")),
+                posting("44571", -19_000, Some("de-out-19")),
+            ],
+            // A purchase: 200 + 38 VAT.
+            vec![
+                posting("6064", 20_000, Some("de-in-19")),
+                posting("44566", 3_800, Some("de-in-19")),
+                posting("401", -23_800, None),
+            ],
+            // A service from another EU country, reverse charge: 500, VAT owed and deducted.
+            vec![
+                posting("6226", 50_000, Some("de-in-13b-eu-service")),
+                posting("4452", -9_500, Some("de-in-13b-eu-service")),
+                posting("44566", 9_500, Some("de-in-13b-eu-service")),
+                posting("401", -50_000, None),
+            ],
+        ]);
+        let report = set
+            .tax_report(
+                &ReportMapping::de_ustva_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-03-01".parse().unwrap(),
+                "2026-03-31".parse().unwrap(),
+            )
+            .unwrap();
+        let field = |kz: &str| report.get(kz).copied().unwrap_or(0);
+        assert_eq!(field("81"), 100_000, "net sales at 19 %");
+        assert_eq!(field("66"), 3_800, "deductible VAT from invoices");
+        assert_eq!((field("46"), field("47"), field("67")), (50_000, 9_500, 9_500), "reverse charge");
+        assert_eq!(report.len(), 5, "81, 66, 46, 47, 67");
+    }
+
+    #[test]
+    fn every_account_of_the_chart_has_a_german_position() {
+        use crate::AccountKind::*;
+        let chart = Chart::v0_1();
+        let parents = EventSet::new().account_parents(&chart);
+        let (bs, gkv) = (ReportMapping::de_hgb_266_2026(), ReportMapping::de_hgb_275_gkv_2026());
+        let refined: std::collections::BTreeSet<&AccountId> = parents.values().collect();
+        for account in chart.accounts.iter().filter(|a| !refined.contains(&a.id)) {
+            let mapping = match account.kind {
+                Asset | Liability | Equity => &bs,
+                Income | Expense => &gkv,
+                Memo => continue,
+            };
+            assert!(mapping.position(&account.id, &parents, false).is_some(), "{} has no position", account.id);
+        }
+        let pcg = ChartTranslation::fr_pcg();
+        let position =
+            |m: &ReportMapping, n: &str, credit| m.position(&pcg.accounts[n], &parents, credit).map(str::to_owned);
+        assert_eq!(position(&bs, "5121", false), Some("aktiv.B.IV".into()));
+        assert_eq!(position(&bs, "5121", true), Some("passiv.C.2".into()));
+        assert_eq!(position(&bs, "44566", false), Some("aktiv.B.II.4".into()));
+        assert_eq!(position(&gkv, "6411", false), Some("gkv.6.a".into()));
+        assert_eq!(position(&gkv, "706", false), Some("gkv.1".into()));
+    }
+
+    #[test]
+    fn positions_follow_the_nearest_mapping_and_the_credit_side() {
+        let pcg = ChartTranslation::fr_pcg();
+        let mut accounts = BTreeMap::new();
+        accounts.insert(pcg.accounts["51"].clone(), "aktiv.B.IV".to_owned());
+        accounts.insert(pcg.accounts["41"].clone(), "aktiv.B.II.1".to_owned());
+        let mut credit_accounts = BTreeMap::new();
+        credit_accounts.insert(pcg.accounts["512"].clone(), "passiv.C.2".to_owned());
+        let mapping = ReportMapping {
+            report: "test".into(),
+            country: "DE".parse().unwrap(),
+            version: "1".into(),
+            valid_from: "2026-01-01".parse().unwrap(),
+            into: "librotenado/0.1".into(),
+            status: MappingStatus::Draft,
+            accounts,
+            credit_accounts,
+            vat_accounts: None,
+            taxes: vec![],
+        };
+        let set = books(vec![vec![posting("4111", 5_000, None), posting("5121", -5_000, None)]]);
+        let report = set.account_report(&mapping, &Chart::v0_1(), &party(1), None).unwrap();
+        assert_eq!(report.get("aktiv.B.II.1"), Some(&5_000), "4111 refines 41");
+        assert_eq!(report.get("passiv.C.2"), Some(&-5_000), "an overdrawn bank account is a liability");
+    }
+}

@@ -5,7 +5,7 @@ Version 0.1 – a draft, not yet stable. Normative statements will use the key w
 
 | Part | Content | State |
 |---|---|---|
-| [0001 Base types](0001-base-types.md) | amounts, currencies, dates, accounts, bookings | draft, implemented |
+| [0001 Base types](0001-base-types.md) | amounts, currencies, dates, accounts, bookings, tax codes | draft, implemented |
 | [0002 Events and synchronisation](0002-events.md) | events, hybrid logical clocks, chains per device, merging; the accounts of a set of books | draft, implemented |
 | [0003 Canonical encoding](0003-canonical-encoding.md) | a byte-exact encoding every implementation can hash (RFC 8785); objects and their types | draft, implemented |
 | [0004 Chart of accounts](0004-chart-of-accounts.md) | the harmonised chart: hierarchy with attributes; national charts as translations | draft, implemented (form; the accounts themselves follow) |
@@ -13,5 +13,6 @@ Version 0.1 – a draft, not yet stable. Normative statements will use the key w
 | [0006 Encryption](0006-encryption.md) | end-to-end encryption: an ordered list of members and keys, a books key per member, a chain of keys | draft, proposal |
 | [0007 Filings](0007-filings.md) | submissions to authorities: derived from a state of the books, never changed; adapters over HTTPS | draft, proposal |
 | [0008 Parties](0008-parties.md) | the organisations and persons books belong to: legal form, registers, tax numbers, roles and shares | draft, implemented |
+| [0009 Reports](0009-reports.md) | report mappings per country and version: HGB balance sheet and profit and loss account, VAT return | draft, implemented |
 
 The reasoning behind the protocol is in the [whitepaper](https://github.com/librotenado/whitepaper).

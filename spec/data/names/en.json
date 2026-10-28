@@ -875,5 +875,12 @@
   "01a182f7-2143-7079-b0f0-1ad9c0ab072c": "Result awaiting allocation",
   "01a182f7-2144-7c22-9b43-52be9a38d0c0": "Balance sheet",
   "01a182f7-2145-7351-b0f0-548a57054ddf": "Opening balance sheet",
-  "01a182f7-2146-725a-a5e3-c7f4359c3b74": "Closing balance sheet"
+  "01a182f7-2146-725a-a5e3-c7f4359c3b74": "Closing balance sheet",
+  "01a18309-5705-7154-a735-a3101ffa92b3": "Shares in affiliated companies",
+  "01a18309-5706-77d6-a742-581269f98578": "Trade receivables from affiliated companies",
+  "01a18309-5707-7495-81b3-f77cd15b7940": "Trade receivables from companies linked by participating interests",
+  "01a18309-5708-71c6-8a38-3d88741250a7": "Trade payables to affiliated companies",
+  "01a18309-5709-7fdb-aef2-45f9621a6427": "Trade payables to companies linked by participating interests",
+  "01a18309-570a-79dd-b43a-ce19bfc829fb": "Shares in affiliated companies held as current assets",
+  "01a18309-570b-740f-bcb7-72a936d42633": "Reserve for shares in a controlling or majority-holding company"
 }}

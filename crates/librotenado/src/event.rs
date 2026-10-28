@@ -583,8 +583,8 @@ mod tests {
             date: "2026-10-24".parse().unwrap(),
             text: "groceries".into(),
             postings: vec![
-                Posting { owner: party(1), account: account(1), amount: money(base_units), note: None },
-                Posting { owner: party(1), account: account(2), amount: money(-base_units), note: None },
+                Posting { owner: party(1), account: account(1), amount: money(base_units), note: None, tax: None },
+                Posting { owner: party(1), account: account(2), amount: money(-base_units), note: None, tax: None },
             ],
             documents: vec![],
         }

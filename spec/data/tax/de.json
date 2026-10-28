@@ -1,0 +1,22 @@
+{"type": "tax_table", "country": "DE", "valid_from": "2026-01-01", "codes": [
+  {"code": "de-out-19", "direction": "output", "rate": "19", "law": "UStG § 12 Abs. 1"},
+  {"code": "de-out-7", "direction": "output", "rate": "7", "law": "UStG § 12 Abs. 2"},
+  {"code": "de-out-0", "direction": "output", "rate": "0", "law": "UStG § 12 Abs. 3"},
+  {"code": "de-out-ig-supply", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. b, § 6a"},
+  {"code": "de-out-export", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. a, § 6; § 4 Nr. 2 bis 7"},
+  {"code": "de-out-exempt", "direction": "output", "law": "UStG § 4 Nr. 8 bis 29"},
+  {"code": "de-out-small-business", "direction": "output", "law": "UStG § 19 Abs. 1"},
+  {"code": "de-out-13b", "direction": "output", "law": "UStG § 13b Abs. 5"},
+  {"code": "de-out-eu-service", "direction": "output", "law": "UStG § 3a Abs. 2, § 18b Satz 1 Nr. 2"},
+  {"code": "de-out-not-taxable", "direction": "output", "law": "UStG § 1 Abs. 1 Nr. 1 – place of supply abroad"},
+  {"code": "de-out-triangular", "direction": "output", "law": "UStG § 25b"},
+  {"code": "de-in-19", "direction": "input", "rate": "19", "law": "UStG § 15 Abs. 1 Satz 1 Nr. 1, § 12 Abs. 1"},
+  {"code": "de-in-7", "direction": "input", "rate": "7", "law": "UStG § 15 Abs. 1 Satz 1 Nr. 1, § 12 Abs. 2"},
+  {"code": "de-in-ig-acquisition-19", "direction": "input", "rate": "19", "law": "UStG § 1a, § 15 Abs. 1 Satz 1 Nr. 3"},
+  {"code": "de-in-ig-acquisition-7", "direction": "input", "rate": "7", "law": "UStG § 1a, § 15 Abs. 1 Satz 1 Nr. 3"},
+  {"code": "de-in-13b-eu-service", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 1, § 15 Abs. 1 Satz 1 Nr. 4"},
+  {"code": "de-in-13b-domestic", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 2 Nr. 1, 2, 4 bis 12, § 15 Abs. 1 Satz 1 Nr. 4"},
+  {"code": "de-in-13b-real-estate", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 2 Nr. 3, § 15 Abs. 1 Satz 1 Nr. 4"},
+  {"code": "de-in-import-vat", "direction": "input", "law": "UStG § 15 Abs. 1 Satz 1 Nr. 2"},
+  {"code": "de-in-no-deduction", "direction": "input", "law": "UStG § 15 Abs. 2"}
+]}

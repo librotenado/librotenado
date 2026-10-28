@@ -56,6 +56,9 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
   filings record.
 - **The chart comes with the library.** `Chart::v0_1()` is the harmonised chart, `ChartTranslation::fr_pcg()` the
   French PCG translated into it, `Names::v0_1("en")` and `Names::v0_1("fr")` name its accounts.
+- **German reports.** Postings carry tax codes (`TaxTable::de()`); `EventSet::tax_report` fills the VAT return of
+  2026 (`ReportMapping::de_ustva_2026()`), `EventSet::account_report` the HGB balance sheet and profit and loss
+  account (`ReportMapping::de_hgb_266_2026()`, `de_hgb_275_gkv_2026()`).
 - **Balances are derived.** `EventSet::balances(until)` sums the postings per owner, account and currency;
   `EventSet::trial_balance(chart, until)` rolls them up the hierarchy. `CurrencyTable::v0_1()` says how each currency
   divides, for formatting.

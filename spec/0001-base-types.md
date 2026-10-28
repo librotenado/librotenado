@@ -112,7 +112,8 @@ RECOMMENDED for new accounts.
 A booking (type `booking`) is an object with `date`, `text`, `postings` and, if it is based on documents,
 `documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003).
 A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
-remark, `note` – for example why there is no document for it; absent if none, never empty. `owner` is the
+remark, `note` – for example why there is no document for it; absent if none, never empty – and, if it is treated for
+VAT, `tax`, a tax code (below). `owner` is the
 organisation or person whose books the posting is in (part 0008); every posting has one. A positive amount is a
 debit, a negative amount a credit.
 
@@ -122,5 +123,23 @@ stay balanced on their own, while one booking can concern several owners – an 
 and its owner's private books, both resting on the same document. A booking that converts between currencies
 therefore books each currency against an exchange account.
 
-A booking is never changed. It is cancelled by a reversal: a booking with the same accounts and the opposite
-amounts (part 0002).
+A booking is never changed. It is cancelled by a reversal: a booking with the same accounts, the same tax codes and
+the opposite amounts (part 0002).
+
+## Tax codes
+
+How a posting is treated for value added tax depends on the transaction, not on the account alone: the same account
+of services sold may carry sales at the standard rate, at a reduced rate, tax-exempt or abroad. Every posting
+therefore MAY carry a **tax code**, and each posting of a document – each line of an invoice – its own.
+Implementations propose a code by the kind of account or document; whoever books decides.
+
+A tax code is the country in lower case, `-`, and 1 to 61 characters of `a-z`, `0-9` and `-` (`de-out-19`). What a
+code means is reference data of its country, a root object of type `tax_table` with `country`, `valid_from` and
+`codes`; each code (type `tax_code`) has `code`, `direction` – `output` for sales, `input` for purchases –, `rate` in
+percent as a decimal number if it taxes at one, and `law`, the provisions it rests on.
+
+The German table is [`spec/data/tax/de.json`](data/tax/de.json): the rates of § 12 UStG, exempt supplies with and
+without deduction (§ 4 Nr. 1 to 7, § 4 Nr. 8 to 29), small businesses (§ 19), intra-Community supplies and
+acquisitions (§ 4 Nr. 1 Buchst. b, § 1a), reverse charge (§ 13b), import VAT and non-deductible input tax
+([UStG](https://www.gesetze-im-internet.de/ustg_1980/)). How the codes fill a VAT return is a report mapping (part
+0009).

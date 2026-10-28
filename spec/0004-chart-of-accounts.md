@@ -77,6 +77,11 @@ articles 1121-1 and 1231-80 to 1231-89):
 Each further national chart is translated against this chart, and the chart grows where it distinguishes more
 finely. The English names are the project's translation.
 
+The German balance sheet (HGB § 266, part 0009) already distinguishes more finely than the PCG: shares, receivables,
+payables and current securities of **affiliated companies** and of **companies linked by participating interests**,
+and the reserve for shares in a controlling company. The chart 0.1 has seven accounts for them, refining the PCG
+accounts 261, 411, 401, 503 and 106; they have no account of the PCG of their own.
+
 ## Balances
 
 The **balance** of an account, for one owner in one currency on a date, is the sum of the `base_units` of the postings

@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Currency, Date, DocumentId, Money, Object, ParseError, PartyId};
+use crate::{Currency, Date, DocumentId, Money, Object, ParseError, PartyId, TaxCode};
 
 /// The identity of an account: a UUID (RFC 9562) in its one form, lower case `8-4-4-4-12` hexadecimal digits, e.g.
 /// `0192f1e4-7a3c-7b1e-9c2d-5e8f0a1b2c3d`. It carries no meaning – what an account is follows from its kind, parent
@@ -58,6 +58,9 @@ pub struct Posting {
     /// A remark on the posting – for example why there is no document for it; left out when there is none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
     pub note: Option<String>,
+    /// How the posting is treated for VAT, as a tax code of its country (`de-out-19`); left out when it is not.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub tax: Option<TaxCode>,
 }
 
 /// A booking: a business transaction on a date, as postings that balance for every owner in every currency. One
@@ -139,6 +142,7 @@ impl Booking {
                 account: p.account.clone(),
                 amount: -p.amount.clone(),
                 note: None,
+                tax: p.tax.clone(),
             })
             .collect();
         Booking { date, text, postings, documents: self.documents.clone() }
@@ -156,7 +160,7 @@ pub(crate) mod tests {
 
     fn posting(n: u8, base_units: i128, currency: &str) -> Posting {
         let amount = Money::new(base_units, currency.parse().unwrap()).unwrap();
-        Posting { owner: crate::party::tests::party(1), account: account(n), amount, note: None }
+        Posting { owner: crate::party::tests::party(1), account: account(n), amount, note: None, tax: None }
     }
 
     #[test]

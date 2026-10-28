@@ -1,0 +1,22 @@
+{"type": "report_mapping", "report": "de-ustva", "country": "DE", "version": "2026", "valid_from": "2026-01-01", "into": "librotenado/0.1", "status": "draft", "vat_accounts": {"output": ["01a182f7-1f45-7412-9f33-a92ab4fa7d37", "01a182f7-1f3a-7013-91df-7f6e0476852a"], "input": ["01a182f7-1f3f-727e-8cb7-7ad4a5dec582"]},
+ "taxes": [
+  {"tax": "de-out-19", "base": "81"},
+  {"tax": "de-out-7", "base": "86"},
+  {"tax": "de-out-0", "base": "87"},
+  {"tax": "de-out-ig-supply", "base": "41"},
+  {"tax": "de-out-export", "base": "43"},
+  {"tax": "de-out-exempt", "base": "48"},
+  {"tax": "de-out-small-business", "base": "48"},
+  {"tax": "de-out-13b", "base": "60"},
+  {"tax": "de-out-eu-service", "base": "21"},
+  {"tax": "de-out-not-taxable", "base": "45"},
+  {"tax": "de-out-triangular", "base": "42"},
+  {"tax": "de-in-19", "input": "66"},
+  {"tax": "de-in-7", "input": "66"},
+  {"tax": "de-in-ig-acquisition-19", "base": "89", "input": "61"},
+  {"tax": "de-in-ig-acquisition-7", "base": "93", "input": "61"},
+  {"tax": "de-in-13b-eu-service", "base": "46", "output": "47", "input": "67"},
+  {"tax": "de-in-13b-domestic", "base": "84", "output": "85", "input": "67"},
+  {"tax": "de-in-13b-real-estate", "base": "73", "output": "74", "input": "67"},
+  {"tax": "de-in-import-vat", "input": "62"}
+]}

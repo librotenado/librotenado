@@ -13,6 +13,7 @@
 - [0006 Encryption (proposal)](spec/0006-encryption.md)
 - [0007 Filings (proposal)](spec/0007-filings.md)
 - [0008 Parties](spec/0008-parties.md)
+- [0009 Reports](spec/0009-reports.md)
 
 # Reference library
 

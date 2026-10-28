@@ -12,9 +12,16 @@ Specification and library share one version. Until 1.0, any version may change w
   `spec/data/chart.json` – six roots by kind, one account for every account of the French PCG (version of
   1 January 2026), groups of mixed kind split – with the translation `fr-pcg` and names in English and French; the
   kind `memo` for commitments and the opening and closing balance sheet.
-- [0001 Base types](spec/0001-base-types.md): translation data as root objects of type `names`.
+- [0001 Base types](spec/0001-base-types.md): translation data as root objects of type `names`; tax codes on
+  postings, per country in a `tax_table` – the German one in `spec/data/tax/de.json`.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): seven accounts the HGB distinguishes and the PCG does not
+  (affiliated companies, companies linked by participating interests, reserve for shares in a controlling company).
+- [0009 Reports](spec/0009-reports.md): report mappings per country and version, from accounts and from tax codes; the
+  German balance sheet (HGB § 266), profit and loss account (§ 275 Abs. 2) and VAT return of 2026, as drafts for
+  review by tax advisers.
 - Library: `CurrencyTable::v0_1()`, `EventSet::balances`, `EventSet::trial_balance`, `Balances`, `Chart::v0_1()`,
-  `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`.
+  `ChartTranslation::fr_pcg()`, `Names`, `AccountKind::Memo`, `TaxCode`, `TaxTable`, `ReportMapping`,
+  `EventSet::tax_report`, `EventSet::account_report`.
 
 ## 0.1.0 – 2026-10-28
 

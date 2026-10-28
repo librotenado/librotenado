@@ -8,6 +8,24 @@
 //! accounts with translations of national charts, documents with their originals, and the organisations and persons
 //! the books belong to.
 
+/// Deserialises an optional member that, when present, is not `null` – absent is the one form of "none".
+pub(crate) fn present<'de, D: serde::Deserializer<'de>, T: serde::Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
+
+/// Deserialises a map that, when present, is not empty – absent is the one form of "none".
+pub(crate) fn non_empty_map<'de, D, K, V>(deserializer: D) -> Result<std::collections::BTreeMap<K, V>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    K: serde::Deserialize<'de> + Ord,
+    V: serde::Deserialize<'de>,
+{
+    let map = <std::collections::BTreeMap<K, V> as serde::Deserialize>::deserialize(deserializer)?;
+    if map.is_empty() { Err(serde::de::Error::custom("an empty map is left out, not written")) } else { Ok(map) }
+}
+
 /// Deserialises an optional text that, when present, is neither `null` nor empty – absent is the one form of "none".
 pub(crate) fn present_text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
     let text = <String as serde::Deserialize>::deserialize(deserializer)?;
@@ -68,6 +86,8 @@ mod money;
 mod names;
 mod object;
 mod party;
+mod report;
+mod tax;
 
 pub use balance::{BalanceError, Balances};
 pub use booking::{AccountId, Booking, BookingError, Posting};
@@ -82,6 +102,8 @@ pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Mo
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{Country, Organisation, PartyId, Person, Registration, Role, RoleKind, Shares, TaxId};
+pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts};
+pub use tax::{TaxCode, TaxCodeDefinition, TaxDirection, TaxTable};
 
 /// A value in the protocol that could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -110,6 +132,9 @@ pub enum ParseError {
     /// A country that is not two upper-case letters (ISO 3166-1 alpha-2).
     #[error("not a country code: {0:?}")]
     Country(String),
+    /// A tax code that is not a country in lower case, `-` and a name.
+    #[error("not a tax code: {0:?}")]
+    TaxCode(String),
     /// A hash that is not `sha256:` and 64 lower-case hexadecimal digits.
     #[error("not a hash: {0:?}")]
     Hash(String),
