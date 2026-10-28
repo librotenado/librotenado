@@ -1,0 +1,117 @@
+# 0001 Base types
+
+Version 0.1, draft. Implemented in the reference library (`crates/librotenado`).
+
+## Money
+
+Money (type `money`, part 0003) is an amount in a currency, counted in the currency's smallest unit, its
+**base unit**:
+`{"currency": "EUR", "base_units": "-1240"}` is −12.40 euros.
+
+- `base_units` is an integer written as a string in decimal: an optional `-`, then `0` or a digit `1`–`9` followed
+  by digits (`"0"`, `"1240"`, `"-5"`). Every amount has this one form; a reader MUST reject any other – leading
+  zeros, `+`, `"-0"`, a decimal point, a JSON number – so the same amount always has the same bytes and the same
+  hash (part 0003).
+- It is a string because amounts in some currencies exceed what JSON numbers carry exactly (2^53 − 1, part 0003):
+  one ether is 10^18 wei. An implementation MUST accept magnitudes up to 10^38 − 1 and MUST reject an amount it
+  cannot represent rather than round it.
+- Money MUST NOT be represented as a binary floating-point number. Sums are exact. Rounding to the base unit happens
+  before an amount enters the books; how and when to round is a rule of the law that applies.
+- Reading, checking and summing amounts does not need to know how the currency divides.
+
+## Currencies
+
+A currency is identified by its code:
+
+- three upper-case letters: a currency of [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) by its
+  alphabetic code (`"EUR"`, `"CHF"`, `"JPY"`);
+- `x-` followed by 1 to 62 characters of `a-z`, `0-9` and `-`: a currency defined outside ISO 4217 – crypto assets,
+  vouchers, bonus points, fictional currencies (`"x-btc"`, `"x-galleon"`).
+
+The two forms cannot collide. A code in common use that ISO 4217 has not assigned is written in the second form:
+Bitcoin is `x-btc`, not `BTC` – ISO 4217 could assign `BTC` one day, as the first two letters of its codes are
+usually the country (BT is Bhutan, whose currency is BTN). Whether a code denotes an existing currency is a question
+of the reference data.
+
+### Definitions
+
+How a currency divides into its base unit is **reference data**, published in versions with the protocol and not
+part of any amount. A definition (type `currency`, part 0003) is `{"code": …, "subdivisions": […]}`: from the unit
+down, how many of the next smaller stage one stage contains.
+
+| Currency | `subdivisions` | Stages | Base units per unit |
+|---|---|---|---|
+| `EUR` | `[100]` | euro, cent | 100 |
+| `JPY` | `[]` | yen | 1 |
+| `x-btc` | `[100000000]` | bitcoin, satoshi | 10^8 |
+| `x-eth` | `[1000000000, 1000000000]` | ether, gwei, wei | 10^18 |
+| `x-galleon` | `[17, 29]` | Galleon, Sickle, Knut | 493 |
+
+- Every entry is an integer from 2 to 2^53 − 1, so it is exact as a JSON number (part 0003); a larger division
+  needs an intermediate stage, as for ether. Base units per unit – the product of the entries – MUST NOT exceed
+  10^38, the range of amounts.
+- An ISO 4217 currency is divided as ISO 4217 gives it ("minor unit"): once by 10^minor unit, or not at all if
+  that is 0.
+- Money converts to and from decimal numbers (below) when a unit is a power of ten base units – EUR, JPY, ether –,
+  not for Galleons.
+- Later versions may add other members to a definition. Software that does not understand a definition ignores it:
+  it still reads, checks and sums amounts in the currency, but MUST NOT convert or format them by guessing; it
+  shows the base units.
+
+### Names
+
+Names are not part of a definition, as they differ by language. Stage `n` is the unit after `n` subdivisions:
+stage 0 is the unit itself, the last stage the base unit. Translation data names stage `n` by the key `<code>/<n>`:
+`EUR/0` euro, `EUR/1` cent; `x-galleon/0` Galleon, `x-galleon/1` Sickle, `x-galleon/2` Knut. The `/` cannot occur
+in a code, so keys are unambiguous.
+
+OPEN:
+
+- The table of definitions for version 0.1, from the ISO 4217 list of its maintenance agency, and the definitions
+  of common currencies outside it (`x-btc`, `x-eth`, …); the divisions of bitcoin and ether above are common
+  usage, not yet sourced.
+- ISO 4217 lists the Malagasy ariary (MGA) and the Mauritanian ouguiya (MRU) with two decimal places, although each
+  divides in theory into five subunits; the table follows ISO 4217. Source so far:
+  [Wikipedia, ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) – to be verified against the standard.
+- Units without a minor unit in ISO 4217, such as gold (XAU), and a validity period per definition (DEM,
+  replaced by the euro).
+- The form of translation data, and whether the names of ISO 4217 currencies and their subunits can be taken from
+  [Unicode CLDR](https://cldr.unicode.org), including plural forms.
+
+## Decimal numbers
+
+Prices per unit, quantities, exchange and tax rates are not money and may have more places than a currency
+(fuel at 1.799 euros per litre). They are decimal numbers m · 10^−s with an integer m and 0 ≤ s ≤ 18, written as
+a string in their one form: the smallest s, an optional `-`, the integer part without leading zeros and, only if
+s > 0, `.` and the places, the last of which is not `0` (`"1.799"`, `"0.19"`, `"-2.5"`, `"100"`). A reader MUST
+reject any other form (`"1.50"`, `"01.5"`, `".5"`, `"-0"`). Version 0.1 defines the type; later parts use it.
+
+## Dates
+
+A date is a day of the Gregorian calendar written `YYYY-MM-DD`, years 0001 to 9999, without time or time zone.
+
+## Accounts
+
+An account is identified by a UUID ([RFC 9562](https://www.rfc-editor.org/rfc/rfc9562)) in its one form: lower-case
+hexadecimal digits in groups of 8-4-4-4-12 (`"0192f1e4-7a3c-7b1e-9c2d-5e8f0a1b2c3d"`). A reader MUST reject
+upper-case digits. The identity carries no meaning, so it never has to change: what an account is follows from the
+chart of accounts (part 0004), its name from translation data. Any version of UUID is accepted; version 7 is
+RECOMMENDED for new accounts.
+
+## Bookings
+
+A booking (type `booking`) is an object with `date`, `text`, `postings` and, if it is based on documents,
+`documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003).
+A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
+remark, `note` – for example why there is no document for it; absent if none, never empty. `owner` is the
+organisation or person whose books the posting is in (part 0008); every posting has one. A positive amount is a
+debit, a negative amount a credit.
+
+A booking MUST have at least two postings, MUST NOT contain a posting of zero, and MUST balance **for every owner in
+every currency**: the `base_units` of the postings of one owner in one currency sum to zero. Each owner's books thus
+stay balanced on their own, while one booking can concern several owners – an internet bill split between a business
+and its owner's private books, both resting on the same document. A booking that converts between currencies
+therefore books each currency against an exchange account.
+
+A booking is never changed. It is cancelled by a reversal: a booking with the same accounts and the opposite
+amounts (part 0002).

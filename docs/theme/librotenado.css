@@ -1,0 +1,52 @@
+/* SPDX-License-Identifier: MIT */
+/* The brand kit on mdBook: Atkinson Hyperlegible Next and Mono (OFL, bundled from brand/fonts), Ink and Blue on
+   light, Blue light on dark. Colours from brand/README.md; Night as page background on dark. */
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegibleNext-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 400; font-style: italic; font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegibleNext-Italic.ttf") format("truetype"); }
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 600; font-style: normal; font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegibleNext-SemiBold.ttf") format("truetype"); }
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegibleNext-Bold.ttf") format("truetype"); }
+@font-face { font-family: "Atkinson Hyperlegible Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("../fonts/AtkinsonHyperlegibleMono-Regular.ttf") format("truetype"); }
+
+:root {
+  --mono-font: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+html, body { font-family: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+.light {
+  --bg: #FFFFFF;
+  --fg: #14213D;
+  --sidebar-bg: #F4F6FA;
+  --sidebar-fg: #14213D;
+  --sidebar-active: #1F5FAD;
+  --links: #1F5FAD;
+  --inline-code-color: #14213D;
+  --theme-popup-bg: #F4F6FA;
+  --quote-bg: #F4F6FA;
+  --quote-border: #A9B6C8;
+  --table-header-bg: #F4F6FA;
+  --table-alternate-bg: #FFFFFF;
+  --icons: #4A5D70;
+  --icons-hover: #14213D;
+}
+.navy {
+  --bg: #0E1729;
+  --fg: #F4F6FA;
+  --sidebar-bg: #14213D;
+  --sidebar-fg: #F4F6FA;
+  --sidebar-active: #7FB2F0;
+  --links: #7FB2F0;
+  --inline-code-color: #F4F6FA;
+  --theme-popup-bg: #14213D;
+  --quote-bg: #14213D;
+  --quote-border: #4A5D70;
+  --table-header-bg: #14213D;
+  --table-alternate-bg: #0E1729;
+  --icons: #A9B6C8;
+  --icons-hover: #F4F6FA;
+}
+.menu-title { font-weight: 600; }

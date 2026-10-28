@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT
+# The documentation at librotenado.dev: the specification (included from spec/, not copied), a guide to the library
+# and the API documentation. Built by docs/build.sh.
+[book]
+title = "librotenado"
+description = "The open protocol for accounting data in Europe – specification and reference library"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+additional-css = ["theme/librotenado.css"]
+git-repository-url = "https://github.com/librotenado/librotenado"
+edit-url-template = "https://github.com/librotenado/librotenado/edit/main/{path}"
+site-url = "/"
+cname = "librotenado.dev"
+no-section-label = true
+
+[output.html.search]
+enable = true

@@ -1,0 +1,5 @@
+.DS_Store
+/target
+/docs/book
+/docs/src/fonts
+/docs/theme/favicon.*

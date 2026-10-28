@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MIT
+# Format, lints and tests of the library; the licence check (REUSE); a sign-off (DCO) on every commit of a pull
+# request. Actions are pinned by commit, with the version as a comment.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - run: cargo test --locked
+
+  licences:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: fsfe/reuse-action@9a55738c6490d015afe69ad187520395d2b7a1fa # v6.0.0
+
+  sign-off:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Every commit carries a Signed-off-by line (DCO)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=$(git rev-list --no-merges "$BASE..$HEAD" | while read -r c; do
+            git log -1 --format=%B "$c" | grep -q '^Signed-off-by: ' || echo "$c"; done)
+          if [ -n "$missing" ]; then echo "Commits without sign-off (git commit -s):"; echo "$missing"; exit 1; fi
