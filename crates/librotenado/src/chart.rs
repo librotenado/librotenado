@@ -78,14 +78,14 @@ impl ChartTranslation {
     }
 
     /// The translation of the DATEV standard chart SKR 03 (process structure), valid for 2026, into the harmonised
-    /// chart 0.1 (`spec/data/translations/de-skr03.json`) – coarser than SKR 03 for now (spec part 0004).
+    /// chart 0.1 (`spec/data/translations/de-skr03.json`), reversible (spec part 0004).
     pub fn de_skr03() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/translations/de-skr03.json"))
             .expect("the published translation is valid")
     }
 
     /// The translation of the DATEV standard chart SKR 04 (closing statement structure), valid for 2026, into the
-    /// harmonised chart 0.1 (`spec/data/translations/de-skr04.json`) – coarser than SKR 04 for now.
+    /// harmonised chart 0.1 (`spec/data/translations/de-skr04.json`), reversible.
     pub fn de_skr04() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/translations/de-skr04.json"))
             .expect("the published translation is valid")
@@ -364,6 +364,7 @@ mod tests {
         ] {
             assert_eq!(translation.validate(&chart), Ok(()), "{}", translation.chart);
             assert!(translation.accounts.len() > 1_200, "{}", translation.chart);
+            assert!(translation.coarser_accounts().is_empty(), "{} is reversible", translation.chart);
             let at = |n: &str| &translation.accounts[n];
             let position = |m: &crate::ReportMapping, n: &str| m.position(at(n), &parents, false).map(str::to_owned);
             assert_eq!(position(&bs, cash), Some("aktiv.B.IV".into()));
