@@ -22,6 +22,9 @@ Specification and library share one version. Until 1.0, any version may change w
   German balance sheet (HGB § 266), profit and loss account (§ 275 Abs. 2) and VAT return of 2026 and the Anlage EÜR
   of 2025, as drafts for review by tax advisers; reports over a period combine tax codes, accounts and the settlement
   of VAT with the tax office. The chart grows by twenty accounts the Anlage EÜR distinguishes.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): translations of DATEV's standard charts SKR 03 and SKR 04,
+  valid for 2026 (`de-skr03`, `de-skr04`), every account of classes 0 to 8 in its HGB position – drafts, coarser than
+  SKR for now.
 - [0007 Filings](spec/0007-filings.md): filings derived from the books – VAT return, income statement on a cash
   basis, annual accounts (E-Bilanz) – with the content of their reports, the events of preparing, submitting,
   accepting and rejecting them, their review, and the REST interface of adapters such as the German one for ELSTER.

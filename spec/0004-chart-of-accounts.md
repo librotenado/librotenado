@@ -85,7 +85,32 @@ accounts 261, 411, 401, 503 and 106; they have no account of the PCG of their ow
 finely still – vehicle costs, business entertainment and gifts by their deductible part, home office, telecommunications
 apart from postage, legal and tax advice, low-value assets and others: twenty further accounts.
 
-## Balances
+## The German standard charts
+
+Most German books keep DATEV's standard charts: **SKR 03**, ordered by process, and **SKR 04**, ordered by the
+closing statements. Their translations into the chart 0.1 – [`de-skr03`](data/translations/de-skr03.json) and
+[`de-skr04`](data/translations/de-skr04.json) – follow the lists DATEV publishes free of charge, valid for 2026
+(Art.-Nr. 11174 and 11175, [DATEV-Kontenrahmen 2026](https://www.datev.de/hilfe/0907817)). They hold account numbers
+and harmonised accounts only, none of DATEV's wording. A chart of accounts is not a work protected by copyright
+(Kammergericht Berlin, judgment of 13 February 1987, 5 U 4910/84, as reported by
+[standardkontenrahmen.de](https://www.standardkontenrahmen.de/urheberrecht)).
+
+- **Every account with a number of classes 0 to 8 is translated**, about 1,300 per chart; the statistical accounts of
+  class 9 and the personal accounts of debtors and creditors (five digits) are not.
+- **SKR 04 by its ranges.** Its number ranges follow § 266 and § 275 Abs. 2 HGB; each account takes the harmonised
+  account of its HGB position whose name it shares, otherwise the position's general account. Cash, bank, trade
+  receivables and payables, and the VAT accounts map onto the accounts the reports read (part 0009); an account
+  "– Restlaufzeit …" takes the account it splits by remaining term.
+- **SKR 03 by SKR 04.** An SKR 03 account takes the harmonised account of the SKR 04 account with the same name – nine
+  in ten have one –, the others their HGB position by their own label.
+- Every translated account falls into a position of the balance sheet or the profit and loss account; the tests check
+  cash, bank, receivables, payables, VAT and sales in both charts.
+- **Coarser than SKR for now.** Several SKR accounts map onto one harmonised account – the VAT accounts by rate, the
+  bank accounts, the private accounts of a sole proprietor onto the proprietor's capital account –, so the
+  translations are not yet reversible. The chart grows by them in a later version, each SKR account then refining the
+  harmonised account it maps onto today. Like the report mappings, the translations are drafts until tax advisers have
+  reviewed them.
+
 
 The **balance** of an account, for one owner in one currency on a date, is the sum of the `base_units` of the postings
 of that owner on that account in that currency, in all bookings – recorded and reversing – dated on or before that date
@@ -98,7 +123,10 @@ accounts are the **trial balance**, from which reports are derived.
 
 ## Open points
 
-- Further national charts, starting with Germany's standard charts – whether a translation of them may be published.
+- Whether the database right (§§ 87a ff. UrhG) protects DATEV's standard charts as a whole, which the judgment of
+  1987 predates; the translations take numbers and their place in the statements, not DATEV's texts.
+- Growing the chart by the accounts of SKR 03 and SKR 04, with names in all languages, so that the translations
+  become reversible; tax codes that DATEV's automatic accounts imply (`AM`, `AV`); the branch charts (SKR 49 …).
 - The accounts of the PCG as a template rather than a harmonisation: grouping them by concept across countries
   (statement items, tax treatment) once a second chart shows where they meet.
 - The PCG lists its suspense accounts as a range, "471 à 473"; the translation maps 471 only.

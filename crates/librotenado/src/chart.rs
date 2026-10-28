@@ -76,6 +76,20 @@ impl ChartTranslation {
         crate::from_root(include_bytes!("../../../spec/data/translations/fr-pcg.json"))
             .expect("the published translation is valid")
     }
+
+    /// The translation of the DATEV standard chart SKR 03 (process structure), valid for 2026, into the harmonised
+    /// chart 0.1 (`spec/data/translations/de-skr03.json`) – coarser than SKR 03 for now (spec part 0004).
+    pub fn de_skr03() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/translations/de-skr03.json"))
+            .expect("the published translation is valid")
+    }
+
+    /// The translation of the DATEV standard chart SKR 04 (closing statement structure), valid for 2026, into the
+    /// harmonised chart 0.1 (`spec/data/translations/de-skr04.json`) – coarser than SKR 04 for now.
+    pub fn de_skr04() -> Self {
+        crate::from_root(include_bytes!("../../../spec/data/translations/de-skr04.json"))
+            .expect("the published translation is valid")
+    }
 }
 
 impl Object for Account {
@@ -323,5 +337,47 @@ mod tests {
 
         t.accounts.insert("9999".into(), id(99));
         assert_eq!(t.validate(&c), Err(TranslationError::UnknownAccount("9999".into(), id(99))));
+    }
+
+    /// The German standard charts land where German books need them: cash, bank, VAT, receivables, payables and
+    /// sales in the HGB positions, VAT in the accounts the VAT return reads.
+    #[test]
+    fn the_german_standard_charts() {
+        let chart = Chart::v0_1();
+        let parents = crate::EventSet::new().account_parents(&chart);
+        let (bs, gkv) = (crate::ReportMapping::de_hgb_266_2026(), crate::ReportMapping::de_hgb_275_gkv_2026());
+        let ustva = crate::ReportMapping::de_ustva_2026();
+        let vat = ustva.vat_accounts.as_ref().unwrap();
+        let holds = |roots: &[AccountId], account: &AccountId| {
+            let mut next = Some(account);
+            while let Some(a) = next {
+                if roots.contains(a) {
+                    return true;
+                }
+                next = parents.get(a);
+            }
+            false
+        };
+        for (translation, cash, bank, receivables, payables, input, output, sales) in [
+            (ChartTranslation::de_skr03(), "1000", "1200", "1400", "1600", "1576", "1776", "8400"),
+            (ChartTranslation::de_skr04(), "1600", "1800", "1200", "3300", "1406", "3806", "4400"),
+        ] {
+            assert_eq!(translation.validate(&chart), Ok(()), "{}", translation.chart);
+            assert!(translation.accounts.len() > 1_200, "{}", translation.chart);
+            let at = |n: &str| &translation.accounts[n];
+            let position = |m: &crate::ReportMapping, n: &str| m.position(at(n), &parents, false).map(str::to_owned);
+            assert_eq!(position(&bs, cash), Some("aktiv.B.IV".into()));
+            assert_eq!(position(&bs, bank), Some("aktiv.B.IV".into()));
+            assert_eq!(bs.position(at(bank), &parents, true), Some("passiv.C.2"), "an overdraft");
+            assert_eq!(position(&bs, receivables), Some("aktiv.B.II.1".into()));
+            assert_eq!(position(&bs, payables), Some("passiv.C.4".into()));
+            assert_eq!(position(&gkv, sales), Some("gkv.1".into()));
+            assert!(holds(&vat.input, at(input)) && holds(&vat.output, at(output)), "{}", translation.chart);
+            // Every account falls into a position of the balance sheet or the profit and loss account.
+            for (number, account) in &translation.accounts {
+                let placed = bs.position(account, &parents, false).or(gkv.position(account, &parents, false));
+                assert!(placed.is_some(), "{} {number}", translation.chart);
+            }
+        }
     }
 }
