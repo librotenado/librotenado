@@ -2,6 +2,20 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.6.0 – 2026-10-29
+
+What books need to be shared between devices and people: the parties they deal with, how invoices are written, and
+invoice numbers no two devices write twice.
+
+- [0008 Parties](spec/0008-parties.md): organisations and persons carry how to reach them (`contact`: address, whom
+  to contact, telephone, e-mail, electronic address, buyer reference); customers and suppliers are parties of the
+  books like owners, with an empty legal form where it is not known.
+- [0008 Parties](spec/0008-parties.md): `invoicing_configured` – an owner's prefix of invoice numbers, days until
+  due and account – and `series_assigned` – each device's series of invoice numbers for an owner, so that devices
+  offline never write the same number; a series assigned to several devices is for review.
+- Library: `Contact`, `Invoicing`, `Series`, `Payload::InvoicingConfigured`, `Payload::SeriesAssigned`,
+  `EventSet::invoicing`, `EventSet::series`, `PartyProblem::SeriesTaken`; `Organisation::contact`, `Person::contact`.
+
 ## 0.5.0 – 2026-10-29
 
 End-to-end encryption, so that books travel between devices through relays that cannot read them.
