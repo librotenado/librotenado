@@ -67,6 +67,11 @@ impl Chart {
     pub fn v0_1() -> Self {
         crate::from_root(include_bytes!("../../../spec/data/chart.json")).expect("the published chart is valid")
     }
+
+    /// The opening balance sheet of the chart 0.1, a memo account: the other side of opening balances (part 0004).
+    pub fn opening_balances_v0_1() -> AccountId {
+        "01a182f7-2145-7351-b0f0-548a57054ddf".parse().expect("an account identity")
+    }
 }
 
 impl ChartTranslation {
@@ -234,6 +239,13 @@ impl ChartTranslation {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn opening_balances_are_a_memo_account_of_the_chart() {
+        let chart = Chart::v0_1();
+        let account = chart.get(&Chart::opening_balances_v0_1()).expect("in the chart");
+        assert_eq!(account.kind, AccountKind::Memo);
+    }
     use super::*;
 
     use crate::booking::tests::account as id;

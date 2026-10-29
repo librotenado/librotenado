@@ -6,6 +6,8 @@ Specification and library share one version. Until 1.0, any version may change w
 
 - [0009 Reports](spec/0009-reports.md): English names of the positions of the German reports – the HGB statements,
   the VAT return and the Anlage EÜR –, a translation of their own; the German wording is the one that counts.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): opening balances are booked against the opening balance
+  sheet, a memo account (`Chart::opening_balances_v0_1`); balances carry on between years by themselves.
 
 ## 0.3.0 – 2026-10-29
 

@@ -21,6 +21,12 @@ Assets and expenses normally have a debit balance, liabilities, equity and incom
 positive). **Memo** accounts stand outside the balance sheet and the result – commitments given and received, the
 opening and closing balance sheet – and have no normal side.
 
+**Opening balances** – what a bank account, the cash or a debt amounts to on the day a set of books starts – are
+booked once, dated that day, against the opening balance sheet (`01a182f7-2145-7351-b0f0-548a57054ddf` in the chart
+0.1), a memo account: so they count in balances but in no result and no report over a period. Balances are the sums
+of all bookings up to a date (part 0001), so they carry on from one year to the next by themselves; no closing and
+reopening booking is needed between years. How the result of a year moves into equity on a balance sheet is **OPEN**.
+
 Names are not part of an account, as they differ by language: translation data names an account by its `id`. The
 identity carries no meaning – no path, no name – so moving an account in the hierarchy or renaming it changes
 nothing that refers to it. Accounts that a set of books opens itself – each bank account, each customer – refine
