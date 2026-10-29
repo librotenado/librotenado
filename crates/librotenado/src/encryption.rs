@@ -1043,9 +1043,12 @@ mod tests {
         let text = code.to_string();
         assert_eq!((text.len(), text.matches('-').count()), (53 + 13, 13));
         assert_eq!(text.to_lowercase().replace('0', "o").parse::<RecoveryCode>().unwrap(), code);
+        // A character one value off changes a byte by 8 in its top bits – the sum modulo 32 sees it. (A change by a
+        // multiple of 4 there would not be seen: the check character catches many slips, not all.)
         let mut wrong = text.clone().into_bytes();
         let i = wrong.iter().position(|b| *b != b'-').unwrap();
-        wrong[i] = if wrong[i] == b'2' { b'3' } else { b'2' };
+        let value = CROCKFORD.iter().position(|d| *d == wrong[i]).unwrap();
+        wrong[i] = CROCKFORD[value ^ 1];
         assert!(String::from_utf8(wrong).unwrap().parse::<RecoveryCode>().is_err());
     }
 }
