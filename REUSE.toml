@@ -15,7 +15,7 @@ SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haft
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = ["spec/**", "docs/src/**"]
+path = ["spec/**", "docs/*.md"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
@@ -23,13 +23,13 @@ SPDX-License-Identifier = "CC-BY-4.0"
 # Copies of the artwork from librotenado/brand – kept as they are, under its licence. Name and brand are not licensed
 # for other products – see brand/README.md.
 [[annotations]]
-path = ["brand/svg/**", "brand/web/**"]
+path = ["brand/svg/**", "brand/web/**", "docs/assets/*.svg", "docs/assets/favicon.ico"]
 precedence = "override"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G."
 SPDX-License-Identifier = "CC-BY-ND-4.0"
 
 [[annotations]]
-path = "brand/fonts/**"
+path = ["brand/fonts/**", "docs/assets/fonts/**"]
 precedence = "override"
 SPDX-FileCopyrightText = ["2020-2024 The Atkinson Hyperlegible Next Project Authors", "2020-2024 The Atkinson Hyperlegible Mono Project Authors"]
 SPDX-License-Identifier = "OFL-1.1"
@@ -52,4 +52,11 @@ SPDX-License-Identifier = "EUPL-1.2"
 path = ["crates/librotenado/tests/data/camt/**", "crates/librotenado/tests/data/bank/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
+SPDX-License-Identifier = "MIT"
+
+# A template of Just the Docs, changed in one place (see its comment).
+[[annotations]]
+path = "docs/_includes/components/footer.html"
+precedence = "override"
+SPDX-FileCopyrightText = ["2016 Patrick Marsceill", "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"]
 SPDX-License-Identifier = "MIT"

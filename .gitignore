@@ -1,6 +1,8 @@
 .DS_Store
 /target
-/docs/book
-/docs/src/fonts
-/docs/theme/favicon.*
-/docs/src/spec/data
+# Written by docs/prepare.sh and Jekyll
+/docs/spec
+/docs/changelog.md
+/docs/_includes/quickstart.rs
+/docs/_site
+/_site

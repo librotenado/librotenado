@@ -1,3 +1,10 @@
+---
+title: Home
+nav_order: 1
+redirect_from:
+  - /introduction.html
+---
+
 # librotenado
 
 **The open protocol for accounting data in Europe** – one model for bookings, receipts, invoices, reports and
@@ -22,7 +29,7 @@ This is the documentation of version 0.7, a draft. Everything may change before 
 | If you want to … | read |
 |---|---|
 | understand why the protocol exists | the [whitepaper](https://github.com/librotenado/whitepaper) |
-| know what an implementation must do | the [specification](spec/overview.md), starting with [0001](spec/0001-base-types.md) and [0002](spec/0002-events.md) |
+| know what an implementation must do | the [specification](spec/README.md), starting with [0001](spec/0001-base-types.md) and [0002](spec/0002-events.md) |
 | build on the Rust library | [Getting started](library.md) and the [API documentation](api/librotenado/index.html) |
 | contribute | [CONTRIBUTING.md](https://github.com/librotenado/librotenado/blob/main/CONTRIBUTING.md) |
 

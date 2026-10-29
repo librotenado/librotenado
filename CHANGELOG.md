@@ -2,6 +2,11 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## Unreleased
+
+- The documentation at librotenado.dev is built with Jekyll and Just the Docs, as falkOSS projects build theirs;
+  the addresses stay, the old introduction and overview forward.
+
 ## 0.7.2 – 2026-10-29
 
 No change to the protocol or the library's interface.

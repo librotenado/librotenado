@@ -1,3 +1,8 @@
+---
+title: Getting started with the library
+nav_order: 3
+---
+
 # Getting started with the library
 
 `librotenado` is the reference library in Rust (MIT). It implements the parts of the specification marked as
@@ -18,8 +23,8 @@ A laptop and a phone each record a booking. They exchange their events – in an
 end up with the same books. Each event is identified by the hash of its canonical encoding, so every implementation,
 in any language, computes the same identifier.
 
-```rust,ignore
-{{#include ../../crates/librotenado/examples/quickstart.rs:4:}}
+```rust
+{% include quickstart.rs %}
 ```
 
 Run it from a checkout:

@@ -36,12 +36,12 @@ filings that the existing European formats translate into and out of.
 | [`brand/`](brand/) | copies from the brand kit, [librotenado/brand](https://github.com/librotenado/brand): lockups, icons, fonts | artwork CC BY-ND 4.0, fonts OFL-1.1; name and mark: see [brand/README.md](brand/README.md) |
 | `crates/librotenado` | the reference library in Rust: data model, events, merging – later formats and encryption | MIT |
 | `crates/librotenado/tests/data` | test invoices of the XRechnung test suite (KoSIT) and of CEN/TC 434 | Apache-2.0, EUPL-1.2 |
-| [`docs/`](docs/) | the documentation at [librotenado.dev](https://librotenado.dev) (mdBook; includes `spec/`, does not copy it) | text CC BY 4.0, build files MIT |
+| [`docs/`](docs/) | the documentation at [librotenado.dev](https://librotenado.dev) (Jekyll with Just the Docs; brings in `spec/` when it is built, does not copy it) | text CC BY 4.0, build files MIT |
 
 ```sh
 cargo test                         # Rust 1.94 or later
 cargo run --example quickstart     # two devices, one set of books
-docs/build.sh                      # the documentation into docs/book (needs mdBook)
+docs/prepare.sh                    # then Jekyll builds docs/ – see .github/workflows/docs.yml
 ```
 
 Changes per version are in [CHANGELOG.md](CHANGELOG.md).
