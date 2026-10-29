@@ -1,6 +1,6 @@
 # 0005 Documents
 
-Version 0.3, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+Version 0.4, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
 `propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kind `document_recorded`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of
@@ -161,7 +161,7 @@ The German tax codes follow from category, rate and side:
 | `S` 19 % / 7 % | `de-out-19` / `de-out-7` | `de-in-19` / `de-in-7` |
 | `Z` | `de-out-0` | – |
 | `E` | `de-out-exempt` | – |
-| `AE` | `de-out-13b` | `de-in-13b-domestic`, or `de-in-13b-eu-service` from a seller abroad, at 19 % |
+| `AE` | `de-out-13b`, or `de-out-eu-service` to a buyer abroad | `de-in-13b-domestic`, or `de-in-13b-eu-service` from a seller abroad, at 19 % |
 | `K` | `de-out-ig-supply` | `de-in-ig-acquisition-19` |
 | `G` | `de-out-export` | – |
 | `O` | `de-out-not-taxable` | – |

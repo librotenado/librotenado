@@ -680,29 +680,30 @@ impl ProposalAccounts {
     }
 }
 
-/// The German tax code (spec data `tax/de.json`) for an amount of a category and rate: `None` where the amount is
-/// not reported, or where the category does not tell enough (a rate other than 19 or 7 per cent).
+/// The German tax code (spec data `tax/de.json`) for an amount of a category and rate, with the country of the other
+/// party – the seller of a purchase, the buyer of a sale: `None` where the amount is not reported, or where the
+/// category does not tell enough (a rate other than 19 or 7 per cent).
 pub fn de_tax_code(
     category: VatCategory,
     rate: Option<Decimal>,
     side: InvoiceSide,
-    seller: Option<Country>,
+    other: Option<Country>,
 ) -> Option<TaxCode> {
+    let abroad = other.is_some_and(|c| c.as_str() != "DE");
     let percent = rate.map(|r| r.to_string());
     let code = match (side, category, percent.as_deref()) {
         (InvoiceSide::Sale, VatCategory::Standard, Some("19")) => "de-out-19",
         (InvoiceSide::Sale, VatCategory::Standard, Some("7")) => "de-out-7",
         (InvoiceSide::Sale, VatCategory::ZeroRated, _) => "de-out-0",
         (InvoiceSide::Sale, VatCategory::Exempt, _) => "de-out-exempt",
+        (InvoiceSide::Sale, VatCategory::ReverseCharge, _) if abroad => "de-out-eu-service",
         (InvoiceSide::Sale, VatCategory::ReverseCharge, _) => "de-out-13b",
         (InvoiceSide::Sale, VatCategory::IntraCommunity, _) => "de-out-ig-supply",
         (InvoiceSide::Sale, VatCategory::Export, _) => "de-out-export",
         (InvoiceSide::Sale, VatCategory::NotSubject, _) => "de-out-not-taxable",
         (InvoiceSide::Purchase, VatCategory::Standard, Some("19")) => "de-in-19",
         (InvoiceSide::Purchase, VatCategory::Standard, Some("7")) => "de-in-7",
-        (InvoiceSide::Purchase, VatCategory::ReverseCharge, _) if seller.is_some_and(|c| c.as_str() != "DE") => {
-            "de-in-13b-eu-service"
-        }
+        (InvoiceSide::Purchase, VatCategory::ReverseCharge, _) if abroad => "de-in-13b-eu-service",
         (InvoiceSide::Purchase, VatCategory::ReverseCharge, _) => "de-in-13b-domestic",
         (InvoiceSide::Purchase, VatCategory::IntraCommunity, _) => "de-in-ig-acquisition-19",
         _ => return None,
@@ -754,7 +755,11 @@ pub fn propose_booking(
     };
     let mut total: i128 = 0;
     for breakdown in &invoice.taxes {
-        let code = de_tax_code(breakdown.category, breakdown.rate, side, invoice.seller.country());
+        let other = match side {
+            InvoiceSide::Purchase => &invoice.seller,
+            InvoiceSide::Sale => &invoice.buyer,
+        };
+        let code = de_tax_code(breakdown.category, breakdown.rate, side, other.country());
         let (base, tax) = (breakdown.base.base_units(), breakdown.tax.base_units());
         post(&accounts.counter, sign * base, code.as_ref())?;
         let vat = match side {

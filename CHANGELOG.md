@@ -2,6 +2,12 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.4.1 – 2026-10-29
+
+- [0005 Documents](spec/0005-documents.md): a sale under reverse charge to a buyer abroad is a service to another EU
+  country (`de-out-eu-service`, § 3a Abs. 2 UStG), no longer a domestic one (`de-out-13b`); `de_tax_code` takes the
+  country of the other party of the invoice – the seller of a purchase, the buyer of a sale.
+
 ## 0.4.0 – 2026-10-29
 
 What the first release of spezado needs: English names of the German report positions, opening balances, and the

@@ -147,6 +147,17 @@ mod proposals {
     }
 
     #[test]
+    fn reverse_charge_sales_at_home_and_abroad() {
+        use librotenado::{VatCategory, de_tax_code};
+        let code = |country: &str| {
+            de_tax_code(VatCategory::ReverseCharge, None, InvoiceSide::Sale, Some(country.parse().unwrap()))
+                .map(|c| c.to_string())
+        };
+        assert_eq!(code("DE").as_deref(), Some("de-out-13b"));
+        assert_eq!(code("AT").as_deref(), Some("de-out-eu-service"));
+    }
+
+    #[test]
     fn a_sale_at_seven_per_cent() {
         let doc = document("01.01a-INVOICE_ubl.xml");
         let net = doc.invoice.as_ref().unwrap().totals.net.base_units();
