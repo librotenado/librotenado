@@ -19,7 +19,7 @@ An organisation – a company, an association, a foundation, a partnership – i
 |---|---|
 | `id` | its identity, a UUID (part 0001) |
 | `name` | its name as registered |
-| `legal_form` | its legal form as a code, e.g. `de-gmbh`, `de-ev`, `fr-sas` |
+| `legal_form` | its legal form as a code, e.g. `de-gmbh`, `de-ev`, `fr-sas`; empty when not known – a customer or supplier |
 | `country` | the country whose law it is formed under, ISO 3166-1 alpha-2 (`DE`) |
 | `registrations` | its entries in public registers (below); absent when none, never empty |
 | `tax_ids` | its tax numbers (below); absent when none, never empty |
