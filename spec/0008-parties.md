@@ -1,6 +1,6 @@
 # 0008 Parties
 
-Version 0.3, draft. Implemented in the reference library (`Organisation`, `Person`, event kinds
+Version 0.4, draft. Implemented in the reference library (`Organisation`, `Person`, event kinds
 `organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`; `Configuration`).
 
 **A set of books always belongs to at least one organisation or natural person** – its owners – and every posting

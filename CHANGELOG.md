@@ -2,7 +2,10 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
-## Unreleased
+## 0.4.0 – 2026-10-29
+
+What the first release of spezado needs: English names of the German report positions, opening balances, and the
+facts that move deadlines – the region whose public holidays apply and the permanent extension of VAT returns.
 
 - [0009 Reports](spec/0009-reports.md): English names of the positions of the German reports – the HGB statements,
   the VAT return and the Anlage EÜR –, a translation of their own; the German wording is the one that counts.

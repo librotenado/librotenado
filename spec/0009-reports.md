@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.3, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.4, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
