@@ -1,8 +1,9 @@
 # Getting started with the library
 
 `librotenado` is the reference library in Rust (MIT). It implements the parts of the specification marked as
-implemented: base types, events and merging, the canonical encoding, the form of the chart of accounts, and
-documents. The full API is in the [API documentation](api/librotenado/index.html).
+implemented: base types, events and merging, the canonical encoding, the chart of accounts with national charts as
+translations, documents and bank statements, filings, parties and their configuration, reports and the audit data
+transfer. The full API is in the [API documentation](api/librotenado/index.html).
 
 The crate is not yet published on crates.io; use it from Git:
 

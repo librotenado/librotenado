@@ -3,7 +3,7 @@
 **The open protocol for accounting data in Europe** – one model for bookings, receipts, invoices, reports and
 filings that the existing European formats translate into and out of.
 
-This is the documentation of version 0.2, a draft. Everything may change before 1.0.
+This is the documentation of version 0.4, a draft. Everything may change before 1.0.
 
 ## What it is
 
@@ -15,7 +15,7 @@ This is the documentation of version 0.2, a draft. Everything may change before 
 - **Made for synchronisation.** A set of books is a growing set of immutable events. Devices exchange events and merge
   them by union; what cannot be merged silently goes to a review list, never guessed.
 - **Open for everyone.** The specification is CC BY 4.0, the reference library MIT. Anyone may implement it,
-  including commercial vendors. The first implementation is [spezado](https://github.com/spezado/spezado).
+  including commercial vendors. The first implementation is [spezado](https://spezado.dev).
 
 ## How to read it
 
