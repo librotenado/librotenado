@@ -9,7 +9,7 @@ The crate is not yet published on crates.io; use it from Git:
 
 ```toml
 [dependencies]
-librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.6.0" }
+librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.7.0" }
 ```
 
 ## Two devices, one set of books
@@ -55,6 +55,10 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
 - **Books belong to someone.** `Organisation` and `Person` are described by events; `owner_added` binds them to
   the books. `EventSet::review_parties` reports books without owners, `EventSet::state` the state of the books that
   filings record.
+- **Filings go to adapters.** A `Filing` is derived from the books (`EventSet::report_content`) and recorded with
+  `filing_prepared`; a `Submission` – the filing, its `Filer` and whether it is a test – goes to an adapter, whose
+  `SubmissionStatus` carries the authority's receipts (`Receipt::original`) and becomes the next event
+  (`SubmissionStatus::payload`). `EventSet::filings` says where each filing stands (part 0007).
 - **The chart comes with the library.** `Chart::v0_1()` is the harmonised chart, `ChartTranslation::fr_pcg()` the
   French PCG translated into it, `Names::v0_1("de")`, `"en"` and `"fr"` name its accounts, tax codes and German
   report positions.

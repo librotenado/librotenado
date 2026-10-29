@@ -118,7 +118,10 @@ pub use encryption::{
 pub use event::{
     AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload,
 };
-pub use filing::{Derivation, Filing, FilingId, FilingKind, FilingProblem, FilingState, ReportContent};
+pub use filing::{
+    AdapterError, Derivation, Filer, Filing, FilingId, FilingKind, FilingProblem, FilingState, Receipt, ReportContent,
+    Submission, SubmissionError, SubmissionState, SubmissionStatus,
+};
 pub use invoice::{
     AllowanceCharge, Classification, CreditTransfer, Delivery, DirectDebit, Endpoint, Identifier, InvoiceContact,
     InvoiceData, InvoiceLine, InvoiceNote, InvoiceParty, InvoiceReferences, InvoiceSide, InvoiceTotals, ItemAttribute,

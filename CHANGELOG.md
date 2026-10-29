@@ -2,6 +2,18 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.7.0 – 2026-10-29
+
+The interface between an implementation and the adapters that submit filings to authorities, no longer a proposal.
+
+- [0007 Filings](spec/0007-filings.md): what implementation and adapter send each other as types – `submission`
+  (the filing, its filer as `organisation` or `person`, `test`), `submission_status`, `receipt` (bytes in base64url
+  without padding, as in part 0006) and `adapter_error` –; how a status becomes an event and a receipt a document;
+  an adapter refuses a submission whose filer is not the filing's. The implementation authenticates itself to the
+  adapter with a bearer token (RFC 6750).
+- Library: `Submission`, `Filer`, `SubmissionError`, `SubmissionStatus`, `SubmissionState`, `Receipt`,
+  `AdapterError`; `Submission::new`, `Submission::check`, `Receipt::original`, `SubmissionStatus::payload`.
+
 ## 0.6.0 – 2026-10-29
 
 What books need to be shared between devices and people: the parties they deal with, how invoices are written, and

@@ -7,8 +7,8 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::{
-    BalanceError, Chart, ContentHash, Country, Currency, Date, EventSet, Money, Object, ParseError, PartyId, Payload,
-    ReportMapping, TaxTable,
+    BalanceError, Bytes, Chart, ContentHash, Country, Currency, Date, DocumentId, EventSet, Money, Object,
+    Organisation, Original, ParseError, PartyId, Payload, Person, ReportMapping, TaxTable,
 };
 
 /// The identity of a filing: a UUID in lower case, like the identities of documents.
@@ -218,6 +218,149 @@ pub enum FilingState {
     Rejected,
 }
 
+/// The organisation or person filing, as an adapter needs it: with its tax identities. Written as an object with one
+/// member, `organisation` or `person`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Filer {
+    /// An organisation (spec part 0008).
+    Organisation(Organisation),
+    /// A person (spec part 0008).
+    Person(Person),
+}
+
+impl Filer {
+    /// The filer's identity.
+    pub fn id(&self) -> &PartyId {
+        match self {
+            Filer::Organisation(organisation) => &organisation.id,
+            Filer::Person(person) => &person.id,
+        }
+    }
+}
+
+/// What an implementation sends to an adapter: a prepared filing and who files it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Submission {
+    /// The filing, as prepared.
+    pub filing: Filing,
+    /// The organisation or person filing; the filing's `filer`.
+    pub filer: Filer,
+    /// A test submission the authority does not process.
+    pub test: bool,
+}
+
+impl Object for Submission {
+    const TYPE: &'static str = "submission";
+}
+
+impl Submission {
+    /// A submission of `filing` by `filer`, which must be the filing's filer.
+    pub fn new(filing: Filing, filer: Filer, test: bool) -> Result<Self, SubmissionError> {
+        let submission = Submission { filing, filer, test };
+        submission.check()?;
+        Ok(submission)
+    }
+
+    /// Checks what an adapter cannot submit: a filer other than the filing's.
+    pub fn check(&self) -> Result<(), SubmissionError> {
+        if self.filer.id() == &self.filing.filer {
+            Ok(())
+        } else {
+            Err(SubmissionError::Filer { filing: self.filing.filer.clone(), filer: self.filer.id().clone() })
+        }
+    }
+}
+
+/// Why a submission cannot be submitted.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SubmissionError {
+    /// The filer is not the filing's filer.
+    #[error("the filing is filed by {filing}, the submission names {filer}")]
+    Filer {
+        /// The filing's filer.
+        filing: PartyId,
+        /// The filer of the submission.
+        filer: PartyId,
+    },
+}
+
+/// Where a submitted filing stands at the authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubmissionState {
+    /// Submitted; the authority has not answered yet.
+    Submitted,
+    /// Accepted by the authority.
+    Accepted,
+    /// Rejected by the authority.
+    Rejected,
+}
+
+/// Something the authority returned – a confirmation of receipt, a protocol, a notice.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Receipt {
+    /// Its media type, for example `application/pdf`.
+    pub media_type: String,
+    /// Its file name.
+    pub name: String,
+    /// Its bytes.
+    pub content: Bytes,
+}
+
+impl Object for Receipt {
+    const TYPE: &'static str = "receipt";
+}
+
+impl Receipt {
+    /// The original of the document an implementation records it as (spec part 0005).
+    pub fn original(&self) -> Original {
+        Original { name: Some(self.name.clone()), ..Original::of(&self.content.0, &self.media_type) }
+    }
+}
+
+/// What an adapter answers about a submitted filing.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SubmissionStatus {
+    /// The filing.
+    pub filing: FilingId,
+    /// Where it stands.
+    pub state: SubmissionState,
+    /// What the authority returned; left out when nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub receipts: Vec<Receipt>,
+    /// How the authority explained a rejection; left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub message: Option<String>,
+}
+
+impl Object for SubmissionStatus {
+    const TYPE: &'static str = "submission_status";
+}
+
+impl SubmissionStatus {
+    /// The event that records this state, with the receipts recorded as `documents`.
+    pub fn payload(&self, documents: Vec<DocumentId>) -> Payload {
+        let filing = self.filing.clone();
+        match self.state {
+            SubmissionState::Submitted => Payload::FilingSubmitted { filing, documents },
+            SubmissionState::Accepted => Payload::FilingAccepted { filing, documents },
+            SubmissionState::Rejected => Payload::FilingRejected { filing, documents },
+        }
+    }
+}
+
+/// What an adapter answers with `4xx` or `5xx` when it cannot process a request.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AdapterError {
+    /// Why, in words.
+    pub message: String,
+}
+
+impl Object for AdapterError {
+    const TYPE: &'static str = "adapter_error";
+}
+
 /// Something about the filings that needs review.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FilingProblem {
@@ -316,5 +459,65 @@ mod tests {
         let unknown = "0192f1e4-0000-7000-8000-0000000000f2".parse::<FilingId>().unwrap();
         record(&mut set, &mut clock, Payload::FilingAccepted { filing: unknown.clone(), documents: vec![] });
         assert_eq!(set.review_filings(), [FilingProblem::Unknown(unknown)]);
+    }
+
+    /// A filing goes to an adapter as a submission with its filer; the adapter's answers become events.
+    #[test]
+    fn a_submission_and_its_status() {
+        let eur: Currency = "EUR".parse().unwrap();
+        let filing = Filing {
+            id: "0192f1e4-0000-7000-8000-0000000000f1".parse().unwrap(),
+            kind: FilingKind::VatReturn,
+            jurisdiction: "DE".parse().unwrap(),
+            filer: party(1),
+            from: "2026-03-01".parse().unwrap(),
+            to: "2026-03-31".parse().unwrap(),
+            basis: ContentHash::of(b"books"),
+            corrects: None,
+            content: vec![ReportContent {
+                report: "de-ustva".into(),
+                version: "2026".into(),
+                fields: [("81".to_owned(), Money::new(100_000, eur).unwrap())].into(),
+            }],
+        };
+        let filer = Filer::Organisation(crate::party::tests::organisation(1));
+        let submission = Submission::new(filing.clone(), filer.clone(), true).unwrap();
+        let json = String::from_utf8(crate::to_root(&submission).unwrap()).unwrap();
+        assert!(json.contains(r#""filer":{"organisation":{"#), "{json}");
+        assert_eq!(crate::from_root::<Submission>(json.as_bytes()).unwrap(), submission);
+
+        // Someone else cannot file it, and an adapter finds out when it checks what it received.
+        let other = Filer::Organisation(crate::party::tests::organisation(2));
+        let error = SubmissionError::Filer { filing: party(1), filer: party(2) };
+        assert_eq!(Submission::new(filing.clone(), other.clone(), true), Err(error.clone()));
+        assert_eq!(Submission { filing, filer: other, test: false }.check(), Err(error));
+
+        let status = SubmissionStatus {
+            filing: submission.filing.id.clone(),
+            state: SubmissionState::Accepted,
+            receipts: vec![Receipt {
+                media_type: "application/pdf".into(),
+                name: "protocol.pdf".into(),
+                content: Bytes(b"%PDF-1.7".to_vec()),
+            }],
+            message: None,
+        };
+        let json = String::from_utf8(crate::to_root(&status).unwrap()).unwrap();
+        assert!(json.contains(r#""content":"JVBERi0xLjc""#), "{json}");
+        assert_eq!(crate::from_root::<SubmissionStatus>(json.as_bytes()).unwrap(), status);
+        let original = status.receipts[0].original();
+        assert!(original.is(b"%PDF-1.7"));
+        assert_eq!(original.name.as_deref(), Some("protocol.pdf"));
+        let document: DocumentId = "0192f1e4-0000-7000-8000-0000000000d1".parse().unwrap();
+        assert_eq!(
+            status.payload(vec![document.clone()]),
+            Payload::FilingAccepted { filing: status.filing.clone(), documents: vec![document] }
+        );
+
+        // Empty receipts and messages are left out, not written.
+        let empty = r#"{"filing":"0192f1e4-0000-7000-8000-0000000000f1","message":"","state":"rejected","type":"submission_status"}"#;
+        assert!(crate::from_root::<SubmissionStatus>(empty.as_bytes()).is_err());
+        let error = AdapterError { message: "no certificate".into() };
+        assert_eq!(crate::to_root(&error).unwrap(), br#"{"message":"no certificate","type":"adapter_error"}"#);
     }
 }

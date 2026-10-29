@@ -1,7 +1,8 @@
 # 0007 Filings
 
-Version 0.2, draft. Filings and their events are implemented in the reference library (`Filing`,
-`EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`); the adapter interface is a proposal.
+Version 0.7, draft. Implemented in the reference library: filings and their events (`Filing`,
+`EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`) and what an implementation and an
+adapter send each other (`Submission`, `SubmissionStatus`, `Receipt`, `AdapterError`).
 
 Books end in filings: VAT returns, income statements, annual accounts, recapitulative statements. Every country has
 its own systems for them. librotenado defines one open interface; **adapters** connect it to the systems of each
@@ -62,14 +63,30 @@ the implementation itself – for example Germany's ERiC for ELSTER, which is no
 
 | Request | Body | Answer |
 |---|---|---|
-| `POST /filings` | a `submission`: `filing`, `filer` – the organisation or person (part 0008) with its tax identities – and `test`, `true` for a test submission the authority does not process | `202` and a `submission_status` |
+| `POST /filings` | a `submission` | `202` and a `submission_status` |
 | `GET /filings/{id}` | – | `200` and the `submission_status` of the filing; `404` if the adapter has none |
 
-A submission status (type `submission_status`) is `filing`, `state` – `submitted`, `accepted` or `rejected` –,
-`receipts` – what the authority returned, each `media_type`, `name` and the bytes as `content` in base64 –, and
-`message` where the authority explained a rejection. The implementation records each receipt as a document and the
-state as an event; the adapter keeps nothing it needs after the answer. An adapter answers a request it cannot
-process with `4xx` or `5xx` and a `message`.
+Bodies are root objects (part 0003) with the media type `application/json`.
+
+| Type | Members |
+|---|---|
+| `submission` | `filing` – the filing as prepared –, `filer` and `test`: `true` for a test submission the authority does not process, `false` otherwise |
+| `submission_status` | `filing` – its identity –, `state` – `submitted`, `accepted` or `rejected` –, `receipts` – what the authority returned, absent when nothing – and `message` – how the authority explained a rejection, absent otherwise |
+| `receipt` | `media_type`, `name` – its file name – and `content` – its bytes, written as in part 0006: base64url without padding |
+| `adapter_error` | `message` – why the adapter cannot process a request, in words |
+
+`filer` is the organisation or person filing (part 0008) with its tax identities, as an object with one member:
+`organisation` or `person`. It is the filing's `filer`; an adapter refuses a submission whose filer is another.
+
+The implementation records each receipt as a document – its original made from `media_type`, `name` and `content`
+(part 0005) – and the state as an event: `submitted` as `filing_submitted`, `accepted` as `filing_accepted`,
+`rejected` as `filing_rejected`, each naming the documents of the receipts. The adapter keeps nothing it needs after
+the answer. An adapter answers a request it cannot process with `4xx` or `5xx` and an `adapter_error`.
+
+**The implementation authenticates itself to the adapter with a token**, sent as a bearer token in the
+`Authorization` header ([RFC 6750](https://www.rfc-editor.org/rfc/rfc6750), section 2.1). Adapter and implementation
+agree on the token outside the protocol; an adapter answers a request without a token it accepts with `401`.
+Mutual TLS may be used in addition.
 
 **Credentials are not part of the protocol.** Certificates, passwords and tokens for an authority's system belong to
 the adapter or to the device that submits; an event records that a filing was submitted and by whom, never how
@@ -87,7 +104,6 @@ income statement on a cash basis as the Anlage EÜR with the income tax or trade
 
 ## Open points
 
-- Authentication of the implementation towards the adapter (OPEN: mutual TLS or tokens).
 - The conditions of using ERiC, and its data formats, which are published to registered developers only.
 - The master data the E-Bilanz needs beyond part 0008 (GCD: report type, legal form, Finanzamt), and the other
   modules of the taxonomy.
