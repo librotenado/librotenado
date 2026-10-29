@@ -85,6 +85,7 @@ mod date;
 mod decimal;
 mod document;
 pub mod en16931;
+mod encryption;
 mod event;
 mod filing;
 pub mod gobd;
@@ -109,6 +110,11 @@ pub use clock::{Clock, DeviceId, Hlc};
 pub use date::Date;
 pub use decimal::Decimal;
 pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
+pub use encryption::{
+    BooksKey, Bytes, EncryptionError, Envelope, EnvelopeContent, Grant, Invitation, JoinRequest, KeyChange, Member,
+    MemberId, MemberKeys, MemberList, MemberRecord, MemberRole, ReceivingKey, RecordProblem, RecoveryCode, Rights,
+    request_signature, verify, verify_request,
+};
 pub use event::{
     AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload,
 };

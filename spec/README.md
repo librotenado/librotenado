@@ -10,7 +10,7 @@ Version 0.4 – a draft, not yet stable. Normative statements will use the key w
 | [0003 Canonical encoding](0003-canonical-encoding.md) | a byte-exact encoding every implementation can hash (RFC 8785); objects and their types | draft, implemented |
 | [0004 Chart of accounts](0004-chart-of-accounts.md) | the harmonised chart: hierarchy with attributes; national charts as translations | draft, implemented (form; the accounts themselves follow) |
 | [0005 Documents](0005-documents.md) | invoices, receipts, statements as records of their own; invoice data; XRechnung and ZUGFeRD; booking proposals | draft, implemented |
-| [0006 Encryption](0006-encryption.md) | end-to-end encryption: an ordered list of members and keys, a books key per member, a chain of keys | draft, proposal |
+| [0006 Encryption](0006-encryption.md) | end-to-end encryption: members and their keys, an ordered member list, a books key per member, a chain of keys, envelopes, relays, invitations, recovery codes | draft, implemented |
 | [0007 Filings](0007-filings.md) | submissions to authorities: derived from a state of the books, never changed; adapters over HTTPS | draft; filings implemented, adapter interface a proposal |
 | [0008 Parties](0008-parties.md) | the organisations and persons books belong to: legal form, registers, tax numbers, roles and shares; how each keeps its books | draft, implemented |
 | [0009 Reports](0009-reports.md) | report mappings per country and version: HGB balance sheet and profit and loss account, VAT return | draft, implemented |
