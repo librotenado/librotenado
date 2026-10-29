@@ -85,6 +85,53 @@ impl<'de> Deserialize<'de> for Country {
     }
 }
 
+/// A subdivision of a country by its ISO 3166-2 code, e.g. `DE-BY`: the country, `-`, and one to three upper-case
+/// letters or digits.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Region(String);
+
+impl Region {
+    /// The code as text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The country it is part of.
+    pub fn country(&self) -> Country {
+        self.0[..2].parse().expect("checked when read")
+    }
+}
+
+impl FromStr for Region {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fits = s.get(..2).is_some_and(|c| c.parse::<Country>().is_ok())
+            && s.get(2..3) == Some("-")
+            && (1..=3).contains(&(s.len() - 3))
+            && s[3..].bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+        if fits { Ok(Region(s.to_owned())) } else { Err(ParseError::Region(s.to_owned())) }
+    }
+}
+
+impl fmt::Display for Region {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Serialize for Region {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Region {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?.parse().map_err(de::Error::custom)
+    }
+}
+
 /// An entry in a public register, e.g. a commercial register.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Registration {
@@ -289,6 +336,10 @@ pub struct Configuration {
     /// How the owner is treated for VAT; left out when it is not liable.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub vat: Option<VatScheme>,
+    /// The subdivision of the country whose public holidays move the owner's deadlines – where its tax authority
+    /// sits (`DE-BY`); left out when not known.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub region: Option<Region>,
 }
 
 fn month<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
@@ -305,6 +356,15 @@ pub struct VatScheme {
     pub basis: VatBasis,
     /// The period of advance returns.
     pub period: ReturnPeriod,
+    /// Whether the tax authority has extended the deadlines of advance returns for good (`de`: § 46 UStDV); left
+    /// out when not.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not", deserialize_with = "only_true")]
+    pub extended: bool,
+}
+
+/// A flag that, when present, is `true` – absent is the one form of `false`.
+fn only_true<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    if bool::deserialize(deserializer)? { Ok(true) } else { Err(de::Error::custom("false is written by leaving out")) }
 }
 
 /// When VAT is due: on what was agreed, or on what was received.
@@ -426,6 +486,22 @@ pub(crate) mod tests {
         assert_eq!("DE".parse::<Country>().unwrap().as_str(), "DE");
         for bad in ["de", "DEU", "D", ""] {
             assert!(bad.parse::<Country>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_configuration_with_a_region_and_extended_deadlines() {
+        let json = r#"{"type":"configuration","owner":"01a182f7-0000-7000-8000-000000000001","from":"2026-01-01","currency":"EUR","year_start":1,"vat":{"scheme":"de-regular","basis":"cash","period":"quarter","extended":true},"region":"DE-BY"}"#;
+        let configuration: Configuration = crate::from_root(json.as_bytes()).unwrap();
+        assert_eq!(configuration.region.as_ref().map(Region::as_str), Some("DE-BY"));
+        assert_eq!(configuration.region.as_ref().map(Region::country), Some("DE".parse().unwrap()));
+        assert!(configuration.vat.as_ref().unwrap().extended);
+        let again: Configuration = crate::from_root(&crate::to_root(&configuration).unwrap()).unwrap();
+        assert_eq!(again, configuration);
+        // Absent is the one form of no extension; a region has its form.
+        assert!(crate::from_root::<Configuration>(json.replace("true", "false").as_bytes()).is_err());
+        for region in ["DE", "de-BY", "DE-", "DE-BYXX", "DE-by"] {
+            assert!(region.parse::<Region>().is_err(), "{region}");
         }
     }
 }

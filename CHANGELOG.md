@@ -8,6 +8,8 @@ Specification and library share one version. Until 1.0, any version may change w
   the VAT return and the Anlage EÜR –, a translation of their own; the German wording is the one that counts.
 - [0004 Chart of accounts](spec/0004-chart-of-accounts.md): opening balances are booked against the opening balance
   sheet, a memo account (`Chart::opening_balances_v0_1`); balances carry on between years by themselves.
+- [0008 Parties](spec/0008-parties.md): a configuration names the `region` whose public holidays move the owner's
+  deadlines (ISO 3166-2, `Region`), and a VAT scheme whether its deadlines are `extended` for good (§ 46 UStDV).
 
 ## 0.3.0 – 2026-10-29
 

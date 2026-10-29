@@ -123,8 +123,8 @@ pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Mo
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{
-    Configuration, Country, Organisation, PartyId, Person, RegimeCode, Registration, ReturnPeriod, Role, RoleKind,
-    Shares, TaxId, VatBasis, VatScheme,
+    Configuration, Country, Organisation, PartyId, Person, RegimeCode, Region, Registration, ReturnPeriod, Role,
+    RoleKind, Shares, TaxId, VatBasis, VatScheme,
 };
 pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use statement::{
@@ -160,6 +160,9 @@ pub enum ParseError {
     /// A country that is not two upper-case letters (ISO 3166-1 alpha-2).
     #[error("not a country code: {0:?}")]
     Country(String),
+    /// A region that is not a country, `-` and one to three upper-case letters or digits (ISO 3166-2).
+    #[error("not a region code: {0:?}")]
+    Region(String),
     /// A tax code that is not a country in lower case, `-` and a name.
     #[error("not a tax code: {0:?}")]
     TaxCode(String),

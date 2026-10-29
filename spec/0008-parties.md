@@ -89,10 +89,12 @@ configuration (type `configuration`):
 | `chart` | the national chart of accounts the owner works with, as a code (`de-skr03`); its translation valid on a date (part 0004) applies; absent when none |
 | `accounting` | how profit is determined, as a code (below); absent when the owner determines none – a private household |
 | `vat` | how the owner is treated for VAT (type `vat_scheme`, below); absent when it is not liable – not an entrepreneur |
+| `region` | the subdivision of the country whose public holidays move the owner's deadlines – where its tax authority sits –, as an ISO 3166-2 code (`DE-BY`); absent when not known |
 
 A VAT scheme is `scheme`, a code (below), `basis` – `accrual` when VAT is due on what was agreed, `cash` when on what
 was received – and `period`, the period of advance returns: `month`, `quarter`, or `year` when there are none, only
-the annual return.
+the annual return. `extended` is `true` when the tax authority has extended the deadlines of advance returns for
+good; absent when it has not.
 
 A configuration applies from `from` until the next configuration of the same owner; of two with the same `from`, the
 later in the agreed order of events (part 0002) applies. Codes are the country in lower case, `-`, and 1 to 61
@@ -113,6 +115,8 @@ does not interpret it. A financial year that begins on another day than the firs
 | `vat.basis` | `accrual` | on agreed consideration ([§ 16 Abs. 1 UStG](https://www.gesetze-im-internet.de/ustg_1980/__16.html)) |
 | `vat.basis` | `cash` | on consideration received ([§ 20 UStG](https://www.gesetze-im-internet.de/ustg_1980/__20.html)) |
 | `vat.period` | `month`, `quarter`, `year` | advance returns per month or quarter, or none after an exemption by the tax office ([§ 18 Abs. 2 UStG](https://www.gesetze-im-internet.de/ustg_1980/__18.html)) |
+| `vat.extended` | `true` | the permanent extension of deadlines by one month (Dauerfristverlängerung, [§ 46 UStDV](https://www.gesetze-im-internet.de/ustdv_1980/__46.html)) |
+| `region` | `DE-BW` … `DE-TH` | the state whose public holidays move deadlines ([§ 108 Abs. 3 AO](https://www.gesetze-im-internet.de/ao_1977/__108.html)): for returns, the holidays where the tax office sits, after a regulation of the Brandenburg tax administration of 2004 ([BRAVORS](https://bravors.brandenburg.de/verwaltungsvorschriften/feiertagsrecht)) – whether the current AEAO says the same is **OPEN** |
 
 An implementation MUST report, and MUST NOT silently resolve:
 
