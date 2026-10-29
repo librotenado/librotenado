@@ -2126,8 +2126,17 @@ pub fn attach_to_pdf(pdf: &[u8], cii: &str) -> std::result::Result<Vec<u8>, Tran
             .and_then(|s| s.decompressed_content().ok().or_else(|| Some(s.content.clone())))
             .and_then(|bytes| String::from_utf8(bytes).ok()),
     );
-    let metadata =
-        document.add_object(Stream::new(dictionary! { "Type" => "Metadata", "Subtype" => "XML" }, xmp.into_bytes()));
+    // In place of the document's metadata, so that no stream of metadata is left behind.
+    let stream = Stream::new(dictionary! { "Type" => "Metadata", "Subtype" => "XML" }, xmp.into_bytes());
+    let existing =
+        document.get_dictionary(catalog_id).ok().and_then(|c| c.get(b"Metadata").and_then(Object::as_reference).ok());
+    let metadata = match existing {
+        Some(id) => {
+            document.objects.insert(id, Object::Stream(stream));
+            id
+        }
+        None => document.add_object(stream),
+    };
 
     let catalog = document.get_object_mut(catalog_id).and_then(Object::as_dict_mut).map_err(pdf_error)?;
     let mut associated = catalog.get(b"AF").and_then(Object::as_array).cloned().unwrap_or_default();
@@ -2149,17 +2158,19 @@ pub fn attach_to_pdf(pdf: &[u8], cii: &str) -> std::result::Result<Vec<u8>, Tran
     Ok(out)
 }
 
-/// XMP metadata with the Factur-X description of an attached XRechnung, inserted into `existing` where there is one.
+/// XMP metadata with the Factur-X description of an attached XRechnung, added to `existing` where there is one: the
+/// Factur-X properties as a description of their own, and the Factur-X extension schema in the list of extension
+/// schemas – the one the document has, since a property may appear only once.
 #[cfg(feature = "pdf")]
 fn facturx_xmp(existing: Option<String>) -> String {
-    const DESCRIPTION: &str = r#"<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+    const PROPERTIES: &str = r#"<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
 <fx:DocumentType>INVOICE</fx:DocumentType>
 <fx:DocumentFileName>xrechnung.xml</fx:DocumentFileName>
 <fx:Version>1.0</fx:Version>
 <fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>
 </rdf:Description>
-<rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
-<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+"#;
+    const SCHEMA: &str = r#"<rdf:li rdf:parseType="Resource">
 <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
 <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
 <pdfaSchema:prefix>fx</pdfaSchema:prefix>
@@ -2169,13 +2180,45 @@ fn facturx_xmp(existing: Option<String>) -> String {
 <rdf:li rdf:parseType="Resource"><pdfaProperty:name>Version</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The version of the XML schema</pdfaProperty:description></rdf:li>
 <rdf:li rdf:parseType="Resource"><pdfaProperty:name>ConformanceLevel</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The conformance level of the embedded XML document</pdfaProperty:description></rdf:li>
 </rdf:Seq></pdfaSchema:property>
-</rdf:li></rdf:Bag></pdfaExtension:schemas>
-</rdf:Description>
+</rdf:li>
 "#;
+    const SCHEMAS: &str = "<pdfaExtension:schemas><rdf:Bag>";
+    let own_schemas = || {
+        format!(
+            "<rdf:Description rdf:about=\"\" xmlns:pdfaExtension=\"http://www.aiim.org/pdfa/ns/extension/\" \
+             xmlns:pdfaSchema=\"http://www.aiim.org/pdfa/ns/schema#\" xmlns:pdfaProperty=\"http://www.aiim.org/pdfa/ns/property#\">\n\
+             {SCHEMAS}{SCHEMA}</rdf:Bag></pdfaExtension:schemas>\n</rdf:Description>\n"
+        )
+    };
     match existing.filter(|x| x.contains("</rdf:RDF>")) {
-        Some(xmp) => xmp.replacen("</rdf:RDF>", &format!("{DESCRIPTION}</rdf:RDF>"), 1),
-        None => format!(
-            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n{DESCRIPTION}</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>"
+        Some(xmp) if xmp.contains(SCHEMAS) => xmp.replacen(SCHEMAS, &format!("{SCHEMAS}{SCHEMA}"), 1).replacen(
+            "</rdf:RDF>",
+            &format!("{PROPERTIES}</rdf:RDF>"),
+            1,
         ),
+        Some(xmp) => xmp.replacen("</rdf:RDF>", &format!("{PROPERTIES}{}</rdf:RDF>", own_schemas()), 1),
+        None => format!(
+            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n{PROPERTIES}{}</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>",
+            own_schemas()
+        ),
+    }
+}
+
+#[cfg(all(test, feature = "pdf"))]
+mod tests {
+    use super::facturx_xmp;
+
+    #[test]
+    fn the_factur_x_schema_joins_the_extension_schemas_a_document_has() {
+        let existing = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\
+            <rdf:Description rdf:about=\"\" xmlns:pdfaExtension=\"http://www.aiim.org/pdfa/ns/extension/\" xmlns:pdfaSchema=\"http://www.aiim.org/pdfa/ns/schema#\" xmlns:pdfaProperty=\"http://www.aiim.org/pdfa/ns/property#\"><pdfaExtension:schemas><rdf:Bag><rdf:li>pdf</rdf:li></rdf:Bag></pdfaExtension:schemas>\
+            </rdf:Description></rdf:RDF></x:xmpmeta>";
+        let xmp = facturx_xmp(Some(existing.into()));
+        assert_eq!(xmp.matches("<pdfaExtension:schemas>").count(), 1);
+        assert!(xmp.contains("<pdfaSchema:prefix>fx</pdfaSchema:prefix>") && xmp.contains("<rdf:li>pdf</rdf:li>"));
+        assert!(xmp.contains("<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>"));
+        let fresh = facturx_xmp(None);
+        assert_eq!(fresh.matches("<pdfaExtension:schemas>").count(), 1);
+        assert!(roxmltree::Document::parse(&fresh).is_ok() && roxmltree::Document::parse(&xmp).is_ok());
     }
 }

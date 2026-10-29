@@ -137,7 +137,10 @@ preceding invoice only; an invoice referring to several is written in UBL.
 
 In the PDF the XML is the embedded file `xrechnung.xml`, related to the document as its `Alternative`, listed in the
 catalogue's associated files (`AF`) and embedded files, and described in the XMP metadata with the Factur-X schema
-(`fx:ConformanceLevel` XRECHNUNG). The PDF itself – fonts, colours, output intent of PDF/A-3 – is the implementation's.
+(`fx:ConformanceLevel` XRECHNUNG): the Factur-X properties in a description of their own, the Factur-X extension
+schema added to the document's list of extension schemas – XMP allows a property only once. The PDF itself – fonts,
+colours, output intent of PDF/A-3 – is the implementation's. spezado's ZUGFeRD invoices written this way pass
+veraPDF 1.30 (PDF/A-3b) and the Mustang validator 2.26 (PDF/A-3b, EN 16931 and XRechnung rules).
 
 The reference library reads every test invoice of the standard business cases and the CIUS technical cases of the
 KoSIT test suite, writes it in both syntaxes and reads it back to the same data. The written files are accepted by the
@@ -317,8 +320,10 @@ header is MT940, anything else is read as CSV.
 - Code lists (ISO/IEC 6523, UNTDID 7143, VATEX …) are not checked before writing; the KoSIT validator checks them.
 - Reverse charge and intra-Community acquisitions at the reduced rate: the proposal assumes 19 %; rates other than
   19 % and 7 % get no tax code.
-- Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED); the file name `xrechnung.xml` of the profile XRECHNUNG, to be verified against the
-  ZUGFeRD specification.
+- Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED). The file name `xrechnung.xml`, `fx:Version` 1.0 and
+  `fx:ConformanceLevel` XRECHNUNG follow a vendor's documentation of the ZUGFeRD / Factur-X specification
+  ([IDEAL Software](https://idealsoftware.com/manuals/ctrl/setfacturxparams.html)) and are accepted by Mustang;
+  verified against the specification of FeRD itself: OPEN.
 - Correcting the data of a recorded document by a later event.
 - The intraday reports camt.052 and camt.054; the sections of annex 3 that structure MT940 and its field `:86:`.
 - Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
