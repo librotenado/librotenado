@@ -20,13 +20,13 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
-# The brand kit: generated artwork (brand/generate.py). Name and brand are not licensed for other products – see
-# brand/README.md.
+# Copies of the artwork from librotenado/brand – kept as they are, under its licence. Name and brand are not licensed
+# for other products – see brand/README.md.
 [[annotations]]
-path = ["brand/svg/**", "brand/png/**", "brand/web/**"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
-SPDX-License-Identifier = "MIT"
+path = ["brand/svg/**", "brand/web/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G."
+SPDX-License-Identifier = "CC-BY-ND-4.0"
 
 [[annotations]]
 path = "brand/fonts/**"

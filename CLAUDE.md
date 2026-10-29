@@ -31,6 +31,8 @@ include file there and a line in `docs/src/SUMMARY.md`.
 
 - `spec/`: **CC BY 4.0**; library code: **MIT**; SPDX headers, REUSE (`REUSE.toml`).
 - Never copy code from spezado (AGPL) into this repository – only code written for it.
+- `brand/` holds copies from [librotenado/brand](https://github.com/librotenado/brand) (artwork CC BY-ND 4.0, fonts
+  OFL-1.1): changed there, copied here, never edited in place.
 
 ## Rules
 
