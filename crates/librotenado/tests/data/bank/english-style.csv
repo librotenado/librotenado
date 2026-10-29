@@ -1,0 +1,6 @@
+Account,DE89 3704 0044 0532 0130 00
+Period,01/10/2026 - 31/10/2026
+
+Booking Date,Value Date,Partner Name,Partner Iban,Type,Payment Reference,Amount (EUR)
+2026-10-20,2026-10-20,"Büro Müller, Inh. M.",,Debit Transfer,"Papier, Toner",-160.00
+2026-10-05,2026-10-05,Kunde A GmbH,DE02120300000000202051,Credit Transfer,Rechnung RE-2026-001,"2,380.00"

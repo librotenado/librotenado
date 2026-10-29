@@ -21,8 +21,8 @@ fn version_08_is_read_with_balances_entries_and_their_details() {
     assert_eq!(statements.len(), 1);
     let read = &statements[0];
     assert_eq!(
-        (read.format, read.number.as_str(), read.date.to_string()),
-        ("iso20022-camt.053", "2026-10-001", "2026-11-01".into())
+        (read.format, read.number.as_deref(), read.date.to_string()),
+        ("iso20022-camt.053", Some("2026-10-001"), "2026-11-01".into())
     );
     let statement = &read.statement;
     assert_eq!(statement.account.iban, "DE89370400440532013000");
@@ -62,7 +62,7 @@ fn version_02_is_read_too() {
     assert_eq!((counterparty.name.as_deref(), counterparty.bic.as_deref()), (Some("Telefon AG"), Some("COBADEFFXXX")));
     assert!(matches!(
         camt::read(b"<Document><Other/></Document>", &CurrencyTable::v0_1()),
-        Err(camt::CamtError::Syntax)
+        Err(librotenado::ReadError::Syntax("iso20022-camt.053"))
     ));
 }
 
@@ -87,7 +87,7 @@ fn document(id: &str, bytes: &[u8]) -> Document {
     Document {
         id: id.parse().unwrap(),
         kind: read.kind,
-        number: Some(read.number),
+        number: read.number,
         date: read.date,
         received: read.date,
         original,

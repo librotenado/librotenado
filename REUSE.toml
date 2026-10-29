@@ -9,7 +9,7 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
 
 [[annotations]]
-path = ["*.md", "brand/README.md", "**/.gitignore", "Cargo.lock"]
+path = ["*.md", "brand/README.md", "**/.gitignore", ".gitattributes", "Cargo.lock"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
 SPDX-License-Identifier = "MIT"
@@ -49,7 +49,7 @@ SPDX-FileCopyrightText = "CEN/TC 434"
 SPDX-License-Identifier = "EUPL-1.2"
 
 [[annotations]]
-path = "crates/librotenado/tests/data/camt/**"
+path = ["crates/librotenado/tests/data/camt/**", "crates/librotenado/tests/data/bank/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
 SPDX-License-Identifier = "MIT"

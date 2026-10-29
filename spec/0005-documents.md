@@ -1,7 +1,7 @@
 # 0005 Documents
 
 Version 0.3, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
-`propose_booking`, `StatementData`, `camt`, event kind `document_recorded`).
+`propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kind `document_recorded`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of
 its own**: its data – kind, number, date – stand in the document, never only in its file. The file it came as, the
@@ -190,6 +190,8 @@ Formats in version 0.1 (names are lower case; more follow with their translation
 | `en16931-ubl` | an invoice according to EN 16931 in the UBL syntax (e.g. XRechnung, Peppol BIS Billing 3.0) |
 | `en16931-cii` | an invoice according to EN 16931 in the UN/CEFACT CII syntax – also a PDF with an embedded CII invoice (ZUGFeRD, Factur-X) |
 | `iso20022-camt.053` | a bank statement (ISO 20022 BankToCustomerStatement), read as below |
+| `swift-mt940` | a bank statement in SWIFT MT940, read as below |
+| `csv` | the entries of an account as a bank offers them for download, read as below |
 
 ## Bank statements
 
@@ -240,6 +242,56 @@ annex 3 (Spezifikation der Datenformate; version 3.7 of 5 April 2023 found, whet
   `Pty`, `Id/IBAN` of their account –, its BIC from `RltdAgts`, `RmtInf/Ustrd` joined by spaces, and `AmtDtls/TxAmt/Amt`
   where an entry has more than one.
 
+### Reading MT940
+
+SWIFT MT940 (Customer Statement Message, SWIFT Standards MT, category 9) as German banks write it under annex 3 of the
+agreement above, which also structures the field `:86:` (section OPEN). A file may hold several statements, each
+beginning with `:20:`; a field begins with `:tag:` at the start of a line and runs to the next. Files that are not
+UTF-8 are read as ISO 8859-1.
+
+- **The account** `:25:`: an IBAN, or `BLZ/account number`, from which the German IBAN follows (ISO 13616, check
+  digits after ISO 7064 MOD 97-10). The number `:28C:`.
+- **Balances:** opening `:60F:` or `:60M:`, closing `:62F:` or `:62M:` – `C` or `D`, `YYMMDD`, the currency, the amount
+  with a decimal comma. The currency of the opening balance is the account's. Years are those from 2000 to 2099.
+- **Entries** `:61:`: the value date `YYMMDD`, an optional booking date `MMDD` – in the year of the value date, or the
+  next or previous across the turn of a year –, `C` credit, `D` debit, `RC` reversal of a credit (a debit), `RD`
+  reversal of a debit (a credit), the amount, the type of transaction (`NTRF` …), the customer's reference and, after
+  `//`, the bank's.
+- **The field `:86:`**, structured: the code of the business transaction (GVC) and sub-fields after a separator
+  (`?`): `?20` to `?29` and `?60` to `?63` the remittance text, joined without spaces, `?30` the BIC, `?31` the IBAN,
+  `?32` and `?33` the name of the other party. In the remittance text, the SEPA references `EREF+` (end-to-end, left
+  out when `NOTPROVIDED`), `MREF+` (mandate) and `SVWZ+` (purpose) are taken apart; text without them is the purpose.
+  An unstructured `:86:` is the purpose. The code of an entry is the type and the GVC, `NTRF/166`.
+
+### Reading the CSV files of banks
+
+Most banks offer the entries of an account as a CSV file, each in a layout of its own; there is no standard. The reader
+finds the columns by their names in the first line that names a day and an amount – lines before it are left out –,
+whatever the separator (`;`, `,`, tab); names are compared without case and spaces.
+
+| Role | Names recognised |
+|---|---|
+| booking date | `Buchungstag`, `Buchungsdatum`, `Datum`, `Booking Date`, `Date` |
+| value date | `Valutadatum`, `Wertstellung`, `Valuta`, `Value Date` |
+| amount | `Betrag`, `Betrag (€)`, `Betrag (EUR)`, `Umsatz`, `Amount`, `Amount (EUR)` |
+| currency | `Waehrung`, `Währung`, `Currency`; EUR where there is none |
+| other party | `Beguenstigter/Zahlungspflichtiger`, `Zahlungsempfänger*in`, `Zahlungspflichtige*r`, `Auftraggeber/Empfänger`, `Empfänger`, `Name`, `Partner Name`, `Payee`; its IBAN `Kontonummer/IBAN`, `IBAN`, `Partner Iban`, `Gegenkonto`; its BIC `BIC (SWIFT-Code)`, `BIC`, `Bankleitzahl/BIC` |
+| purpose | `Verwendungszweck`, `Payment Reference`, `Purpose`, `Reference` |
+| code | `Buchungstext`, `Umsatzart`, `Transaction Type`, `Type` |
+| references | end-to-end `Kundenreferenz (End-to-End)`, `Kundenreferenz`; mandate `Mandatsreferenz` |
+| the account | `Auftragskonto`; else its IBAN is given by whoever reads the file |
+| status | `Info`, `Status`: entries marked `vorgemerkt` or `pending` are not booked and left out |
+
+Dates are `DD.MM.YYYY`, `DD.MM.YY` or `YYYY-MM-DD`; of `,` and `.` in an amount the last is the decimal mark when one
+to as many places as the currency has follow it, the other separates thousands. A CSV file has no balances; the
+statement covers its first to its last day, its entries in the order booked. Files that are not UTF-8 are read as
+ISO 8859-1. Which bank writes which names is OPEN; layouts that are not recognised are added here.
+
+### One entry point
+
+`read_statements` tells the formats apart by their content: XML is camt.053, a file beginning with `:20:` or a SWIFT
+header is MT940, anything else is read as CSV.
+
 ## Events
 
 - `document_recorded` with `document` – a document was recorded with its data and original (part 0002).
@@ -268,7 +320,7 @@ annex 3 (Spezifikation der Datenformate; version 3.7 of 5 April 2023 found, whet
 - Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED); the file name `xrechnung.xml` of the profile XRECHNUNG, to be verified against the
   ZUGFeRD specification.
 - Correcting the data of a recorded document by a later event.
-- Statements in other formats – MT940, the CSV files of banks –, and the intraday reports camt.052 and camt.054.
+- The intraday reports camt.052 and camt.054; the sections of annex 3 that structure MT940 and its field `:86:`.
 - Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
   may be quoted in a specification under CC BY; this part names their identifiers only.
 - Whether the names of formats should be the identifiers the standards define (e.g. the specification identifier of

@@ -39,6 +39,10 @@ closed periods.
 - Library: `StatementData`, `StatementAccount`, `StatementEntry`, `EntryDetail`, `Counterparty`, `EntryReference`,
   `Document::statement`, `Booking::entries`, `camt::read`, `EventSet::statements`, `EventSet::booked_entries`,
   `EventSet::review_statements`, `StatementProblem`.
+- [0005 Documents](spec/0005-documents.md): statements read from SWIFT MT940 as German banks write it – the account
+  from BLZ and account number, the structured field `:86:` with its SEPA references – and from the CSV files of banks,
+  their columns found by name; one entry point tells the formats apart. Library: `read_statements`, `ReadStatement`,
+  `ReadError`, `mt940::read`, `bank_csv::read`.
 - Library: `EventSet::review_bookings`, `BookingProblem`, `Booking::cancels`, `Configuration::chart`,
   `ReportMapping::de_euer_2026`, `ReportMapping::excluded`.
 - Library: `BooksId`, `Payload::BooksFounded`, `EventSet::books`, `EventSet::review_books`, `Transaction`,

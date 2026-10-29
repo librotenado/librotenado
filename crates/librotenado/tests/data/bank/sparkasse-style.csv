@@ -1,0 +1,4 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Glaeubiger ID";"Mandatsreferenz";"Kundenreferenz (End-to-End)";"Sammlerreferenz";"Lastschrift Ursprungsbetrag";"Auslagenersatz Ruecklastschrift";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"BIC (SWIFT-Code)";"Betrag";"Waehrung";"Info"
+"DE89370400440532013000";"31.10.26";"31.10.26";"FOLGELASTSCHRIFT";"Kundennummer 123 Oktober";"DE98ZZZ09999999999";"TK-4711";"NOTPROVIDED";"";"";"";"Telefon AG";"DE44500105175407324931";"COBADEFFXXX";"-59,50";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"31.10.26";"31.10.26";"KARTENZAHLUNG";"Bürobedarf; Papier";"";"";"";"";"";"";"Büro Müller";"";"";"-1.234,56";"EUR";"Umsatz vorgemerkt"
+"DE89370400440532013000";"05.10.26";"05.10.26";"GUTSCHRIFT";"Rechnung RE-2026-001";"";"";"RE-2026-001";"";"";"";"Kunde A GmbH";"DE02120300000000202051";"BYLADEM1001";"2.380,00";"EUR";"Umsatz gebucht"

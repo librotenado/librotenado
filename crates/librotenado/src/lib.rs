@@ -74,6 +74,7 @@ pub(crate) fn safe_u64<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
 }
 
 mod balance;
+pub mod bank_csv;
 mod booking;
 mod books;
 pub mod camt;
@@ -89,6 +90,7 @@ mod filing;
 pub mod gobd;
 mod invoice;
 mod money;
+pub mod mt940;
 mod names;
 mod object;
 mod party;
@@ -126,7 +128,8 @@ pub use party::{
 };
 pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use statement::{
-    Counterparty, EntryDetail, EntryReference, StatementAccount, StatementData, StatementEntry, StatementProblem,
+    Counterparty, EntryDetail, EntryReference, ReadError, ReadStatement, StatementAccount, StatementData,
+    StatementEntry, StatementProblem, read_statements,
 };
 pub use tax::{TaxCode, TaxCodeDefinition, TaxDirection, TaxTable};
 

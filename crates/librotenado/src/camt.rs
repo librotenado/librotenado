@@ -5,48 +5,14 @@
 use roxmltree::{Document as Xml, Node};
 
 use crate::{
-    Counterparty, Currency, CurrencyTable, Date, DocumentKind, EntryDetail, Money, StatementAccount, StatementData,
-    StatementEntry,
+    Counterparty, Currency, CurrencyTable, Date, DocumentKind, EntryDetail, Money, ReadError, ReadStatement,
+    StatementAccount, StatementData, StatementEntry,
 };
 
-/// Why a camt.053 file could not be read.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum CamtError {
-    /// Not XML.
-    #[error("not XML: {0}")]
-    Xml(String),
-    /// Not a BankToCustomerStatement.
-    #[error("not a bank statement in camt.053")]
-    Syntax,
-    /// An element the model needs is missing.
-    #[error("{0} is missing")]
-    Missing(&'static str),
-    /// A value that cannot be read.
-    #[error("{element} is not valid: {value:?}")]
-    Invalid {
-        /// The element.
-        element: &'static str,
-        /// The value.
-        value: String,
-    },
-}
+/// The name of the format.
+pub const FORMAT: &str = "iso20022-camt.053";
 
-/// A statement read from a camt.053 file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReadStatement {
-    /// The name of the format: `iso20022-camt.053`.
-    pub format: &'static str,
-    /// Always a bank statement.
-    pub kind: DocumentKind,
-    /// The statement's identification (`Stmt/Id`).
-    pub number: String,
-    /// The day it was created.
-    pub date: Date,
-    /// Its data.
-    pub statement: StatementData,
-}
-
-type Result<T> = std::result::Result<T, CamtError>;
+type Result<T> = std::result::Result<T, ReadError>;
 
 /// The first descendant along a path of local names.
 fn at<'a, 'i>(node: Node<'a, 'i>, path: &[&str]) -> Option<Node<'a, 'i>> {
@@ -70,15 +36,15 @@ fn text(node: Node, path: &[&str]) -> Option<String> {
 /// A date, from `Dt` or the day of `DtTm`.
 fn date(node: Node, element: &'static str) -> Result<Option<Date>> {
     let Some(value) = text(node, &["Dt"]).or_else(|| text(node, &["DtTm"])) else { return Ok(None) };
-    value.get(..10).and_then(|day| day.parse().ok()).map(Some).ok_or(CamtError::Invalid { element, value })
+    value.get(..10).and_then(|day| day.parse().ok()).map(Some).ok_or(ReadError::Invalid { element, value })
 }
 
 /// An amount with its sign by `CdtDbtInd`: credit positive, debit negative.
 fn amount(node: Node, currencies: &CurrencyTable, element: &'static str) -> Result<Money> {
-    let amt = at(node, &["Amt"]).ok_or(CamtError::Missing(element))?;
+    let amt = at(node, &["Amt"]).ok_or(ReadError::Missing(element))?;
     let value = amt.text().map(str::trim).unwrap_or("").to_owned();
-    let invalid = || CamtError::Invalid { element, value: value.clone() };
-    let currency: Currency = amt.attribute("Ccy").ok_or(CamtError::Missing("Ccy"))?.parse().map_err(|_| invalid())?;
+    let invalid = || ReadError::Invalid { element, value: value.clone() };
+    let currency: Currency = amt.attribute("Ccy").ok_or(ReadError::Missing("Ccy"))?.parse().map_err(|_| invalid())?;
     let places = currencies.get(&currency).and_then(|c| c.decimals()).ok_or_else(invalid)? as usize;
     let (whole, fraction) = value.split_once('.').unwrap_or((value.as_str(), ""));
     if whole.is_empty()
@@ -91,7 +57,7 @@ fn amount(node: Node, currencies: &CurrencyTable, element: &'static str) -> Resu
     let sign = match text(node, &["CdtDbtInd"]).as_deref() {
         Some("CRDT") => 1,
         Some("DBIT") => -1,
-        _ => return Err(CamtError::Missing("CdtDbtInd")),
+        _ => return Err(ReadError::Missing("CdtDbtInd")),
     };
     Money::new(sign * units, currency).ok_or_else(invalid)
 }
@@ -139,18 +105,18 @@ fn detail(tx: Node, money_in: bool, bundled: bool, currencies: &CurrencyTable) -
 
 /// An amount without a sign of its own (`AmtDtls/TxAmt`).
 fn amount_of(node: Node, currencies: &CurrencyTable) -> Result<Money> {
-    let amt = at(node, &["Amt"]).ok_or(CamtError::Missing("TxAmt"))?;
+    let amt = at(node, &["Amt"]).ok_or(ReadError::Missing("TxAmt"))?;
     let value = amt.text().map(str::trim).unwrap_or("");
     let currency: Currency = amt
         .attribute("Ccy")
         .and_then(|c| c.parse().ok())
-        .ok_or(CamtError::Invalid { element: "TxAmt", value: value.to_owned() })?;
+        .ok_or(ReadError::Invalid { element: "TxAmt", value: value.to_owned() })?;
     let places = currencies.get(&currency).and_then(|c| c.decimals()).unwrap_or(2) as usize;
     let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     let units: i128 = format!("{whole}{fraction:0<places$}")
         .parse()
-        .map_err(|_| CamtError::Invalid { element: "TxAmt", value: value.to_owned() })?;
-    Money::new(units, currency).ok_or(CamtError::Invalid { element: "TxAmt", value: value.to_owned() })
+        .map_err(|_| ReadError::Invalid { element: "TxAmt", value: value.to_owned() })?;
+    Money::new(units, currency).ok_or(ReadError::Invalid { element: "TxAmt", value: value.to_owned() })
 }
 
 fn entry(ntry: Node, currencies: &CurrencyTable) -> Result<Option<StatementEntry>> {
@@ -164,7 +130,7 @@ fn entry(ntry: Node, currencies: &CurrencyTable) -> Result<Option<StatementEntry
         .map(|n| date(n, "BookgDt"))
         .transpose()?
         .flatten()
-        .ok_or(CamtError::Missing("BookgDt"))?;
+        .ok_or(ReadError::Missing("BookgDt"))?;
     let value = at(ntry, &["ValDt"]).map(|n| date(n, "ValDt")).transpose()?.flatten();
     let code = at(ntry, &["BkTxCd", "Domn"]).and_then(|domain| {
         let family = at(domain, &["Fmly"])?;
@@ -188,18 +154,18 @@ fn entry(ntry: Node, currencies: &CurrencyTable) -> Result<Option<StatementEntry
 }
 
 fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
-    let number = text(stmt, &["Id"]).ok_or(CamtError::Missing("Stmt/Id"))?;
-    let created = text(stmt, &["CreDtTm"]).ok_or(CamtError::Missing("CreDtTm"))?;
+    let number = text(stmt, &["Id"]).ok_or(ReadError::Missing("Stmt/Id"))?;
+    let created = text(stmt, &["CreDtTm"]).ok_or(ReadError::Missing("CreDtTm"))?;
     let date = created
         .get(..10)
         .and_then(|day| day.parse().ok())
-        .ok_or(CamtError::Invalid { element: "CreDtTm", value: created.clone() })?;
-    let currency_text = text(stmt, &["Acct", "Ccy"]).ok_or(CamtError::Missing("Acct/Ccy"))?;
+        .ok_or(ReadError::Invalid { element: "CreDtTm", value: created.clone() })?;
+    let currency_text = text(stmt, &["Acct", "Ccy"]).ok_or(ReadError::Missing("Acct/Ccy"))?;
     let account = StatementAccount {
-        iban: text(stmt, &["Acct", "Id", "IBAN"]).ok_or(CamtError::Missing("Acct/Id/IBAN"))?,
+        iban: text(stmt, &["Acct", "Id", "IBAN"]).ok_or(ReadError::Missing("Acct/Id/IBAN"))?,
         currency: currency_text
             .parse()
-            .map_err(|_| CamtError::Invalid { element: "Acct/Ccy", value: currency_text })?,
+            .map_err(|_| ReadError::Invalid { element: "Acct/Ccy", value: currency_text })?,
         holder: text(stmt, &["Acct", "Ownr", "Nm"]),
     };
     let period = at(stmt, &["FrToDt"]);
@@ -217,9 +183,9 @@ fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
     let entries =
         all(stmt, "Ntry").map(|n| entry(n, currencies)).collect::<Result<Vec<_>>>()?.into_iter().flatten().collect();
     Ok(ReadStatement {
-        format: "iso20022-camt.053",
+        format: FORMAT,
         kind: DocumentKind::BankStatement,
-        number,
+        number: Some(number),
         date,
         statement: StatementData {
             account,
@@ -234,8 +200,8 @@ fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
 
 /// Reads the statements of a camt.053 file – one per `Stmt`.
 pub fn read(xml: &[u8], currencies: &CurrencyTable) -> Result<Vec<ReadStatement>> {
-    let text = std::str::from_utf8(xml).map_err(|e| CamtError::Xml(e.to_string()))?;
-    let doc = Xml::parse(text).map_err(|e| CamtError::Xml(e.to_string()))?;
-    let message = at(doc.root_element(), &["BkToCstmrStmt"]).ok_or(CamtError::Syntax)?;
+    let text = std::str::from_utf8(xml).map_err(|e| ReadError::Encoding(e.to_string()))?;
+    let doc = Xml::parse(text).map_err(|e| ReadError::Encoding(e.to_string()))?;
+    let message = at(doc.root_element(), &["BkToCstmrStmt"]).ok_or(ReadError::Syntax(FORMAT))?;
     all(message, "Stmt").map(|stmt| statement(stmt, currencies)).collect()
 }

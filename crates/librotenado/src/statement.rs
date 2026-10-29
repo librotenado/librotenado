@@ -150,6 +150,61 @@ impl Object for EntryReference {
     const TYPE: &'static str = "entry_reference";
 }
 
+/// A statement read from a file, with what its document needs besides its data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadStatement {
+    /// The name of the format: `iso20022-camt.053`, `swift-mt940`, `csv`.
+    pub format: &'static str,
+    /// Always a bank statement.
+    pub kind: crate::DocumentKind,
+    /// The statement's number, as the file gives it.
+    pub number: Option<String>,
+    /// The day it was made, or the last day it covers.
+    pub date: Date,
+    /// Its data.
+    pub statement: StatementData,
+}
+
+/// Why a statement could not be read from a file.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ReadError {
+    /// Not text in the encoding the format uses, or not XML.
+    #[error("cannot be read: {0}")]
+    Encoding(String),
+    /// Not a bank statement in this format.
+    #[error("not a bank statement in {0}")]
+    Syntax(&'static str),
+    /// An element or field the model needs is missing.
+    #[error("{0} is missing")]
+    Missing(&'static str),
+    /// A value that cannot be read.
+    #[error("{element} is not valid: {value:?}")]
+    Invalid {
+        /// The element or field.
+        element: &'static str,
+        /// The value.
+        value: String,
+    },
+}
+
+/// Reads the statements of a file in whichever format it is: camt.053, MT940, or the CSV file of a bank. `account`
+/// is the IBAN of the account for a CSV file that does not name it.
+pub fn read_statements(
+    bytes: &[u8],
+    currencies: &crate::CurrencyTable,
+    account: Option<&str>,
+) -> Result<Vec<ReadStatement>, ReadError> {
+    let text = String::from_utf8_lossy(bytes);
+    let start = text.trim_start_matches('\u{feff}').trim_start();
+    if start.starts_with('<') {
+        crate::camt::read(bytes, currencies)
+    } else if start.starts_with(":20:") || start.starts_with("{1:") || start.contains("\n:20:") {
+        crate::mt940::read(bytes, currencies)
+    } else {
+        crate::bank_csv::read(bytes, currencies, account)
+    }
+}
+
 /// Something about bank statements and the bookings of their entries that needs review: never resolved silently.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StatementProblem {

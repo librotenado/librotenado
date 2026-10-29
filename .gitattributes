@@ -1,0 +1,2 @@
+# Statements as banks write them: line ends and encodings as they are.
+crates/librotenado/tests/data/bank/** -text
