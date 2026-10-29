@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MIT
-# Format, lints and tests of the library; the written XRechnung checked by the KoSIT validator; the licence check
-# (REUSE); a sign-off (DCO) on every commit of a pull request. Actions are pinned by commit, with the version as a
-# comment, downloads by their SHA-256.
+# Format, lints and tests of the library on Linux and macOS; the written XRechnung checked by the KoSIT validator;
+# dependencies (cargo deny). The licence check (REUSE) and a sign-off (DCO) on every commit of a pull request come
+# from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the version as a comment, downloads by
+# their SHA-256.
 name: CI
 
 on:
@@ -19,7 +20,11 @@ env:
 
 jobs:
   rust:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Rust toolchain from rust-toolchain.toml
@@ -57,24 +62,15 @@ jobs:
           java -jar validator.jar -s configuration/scenarios.xml -r configuration -o reports written/*.xml | tee result.txt
           grep -Eq 'Rejected: +0$' result.txt
 
-  licences:
+  dependencies:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: fsfe/reuse-action@9a55738c6490d015afe69ad187520395d2b7a1fa # v6.0.0
-
-  sign-off:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
-          fetch-depth: 0
-      - name: Every commit carries a Signed-off-by line (DCO)
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          missing=$(git rev-list --no-merges "$BASE..$HEAD" | while read -r c; do
-            git log -1 --format=%B "$c" | grep -q '^Signed-off-by: ' || echo "$c"; done)
-          if [ -n "$missing" ]; then echo "Commits without sign-off (git commit -s):"; echo "$missing"; exit 1; fi
+          command: check
+
+  licences:
+    uses: falkoss/starterpack/.github/workflows/reuse.yml@4c37856fa8c0e9a415d1bf207a1d6ccefb1157b6
+  sign-off:
+    uses: falkoss/starterpack/.github/workflows/dco.yml@4c37856fa8c0e9a415d1bf207a1d6ccefb1157b6

@@ -35,7 +35,11 @@ include file there and a line in `docs/src/SUMMARY.md`.
 ## Rules
 
 - Library and specification change together: what `spec/` says is what the library does, and the other way round.
-- `cargo fmt`, `cargo clippy --all-targets` (no warnings) and `cargo test` before every commit.
+- `cargo fmt`, `cargo clippy --all-targets` (no warnings) and `cargo test` before every commit; `cargo deny check`
+  and `scripts/check-age.py` after changing dependencies.
+- **Shape after falkoss/starterpack** (`docs/practices.md`), with this deviation and its reason:
+  - **Ranges in `Cargo.toml`, not exact versions:** the library is built on by others, and exact versions would force
+    theirs. The rule of 14 days holds for `Cargo.lock`.
 
 - English in code, specification and commits; commits signed off (`git commit -s`).
 - No personal data in tracked files.

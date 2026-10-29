@@ -29,4 +29,10 @@ and the reference library in `crates/`.
 cargo fmt --check
 cargo clippy --all-targets
 cargo test
+cargo deny check            # dependencies: advisories, licences, sources
+scripts/check-age.py        # after changing Cargo.lock: no crate younger than 14 days
 ```
+
+Dependencies are locked in `Cargo.lock`, each the newest version that is at least 14 days old (`scripts/check-age.py
+--fix` sets back the younger ones); a fix for a security advisory may be younger. `Cargo.toml` keeps ranges, not exact
+versions, so that projects building on the library resolve their own.

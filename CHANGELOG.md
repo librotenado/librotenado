@@ -2,6 +2,15 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.7.2 – 2026-10-29
+
+No change to the protocol or the library's interface.
+
+- Dependencies at least 14 days old, as falkOSS projects keep them: `hpke` 0.14, `lopdf` 0.45 and `roxmltree` 0.21.1
+  are the lowest versions `Cargo.toml` asks for; `scripts/check-age.py` checks `Cargo.lock`.
+- CI on Linux and macOS, `cargo deny` for advisories, licences and sources; the licence check and the sign-off from
+  falkoss/starterpack.
+
 ## 0.7.1 – 2026-10-29
 
 - [0007 Filings](spec/0007-filings.md): a report content without any amount leaves `fields` out instead of being

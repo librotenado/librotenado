@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: MIT
+# cargo-deny: what the dependencies may be (CI, job `dependencies`). Known vulnerabilities fail the build, licences
+# must fit a library under MIT that anyone may build on, crates come only from crates.io. A finding that does not
+# affect librotenado is ignored below with a reason, never silently. From falkoss/starterpack.
+
+[graph]
+all-features = true
+
+[advisories]
+# Unmaintained crates are reported, but only direct dependencies fail the build.
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+confidence-threshold = 0.93
+# Permissive licences, and MPL-2.0, whose copyleft stays with its own files – no AGPL or LGPL in a library under MIT.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+# Workspace crates refer to each other by path.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
