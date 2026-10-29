@@ -139,7 +139,7 @@ def social():
     """1280×640: GitHub social preview, link previews."""
     name, nw, ntop, _ = text_outline(NAME, WORDMARK_FONT, 120, 0, 0, INK)
     desc, _, _, _ = text_outline(DESCRIPTOR, MONO_FONT, 40, 4, 70, STEEL)
-    proto, _, _, _ = text_outline("librotenado/0.1 · spec CC BY 4.0 · library MIT", MONO_FONT, 26, 4, 0, STEEL)
+    proto, _, _, _ = text_outline("spec CC BY 4.0 · library MIT", MONO_FONT, 26, 4, 0, STEEL)
     pub, pw, _, _ = text_outline("a falkOSS project", MONO_FONT, 26, 0, 0, STEEL)
     return svg("0 0 1280 640", f'<rect width="1280" height="640" fill="{PAPER}"/>'
                + placed(mark(LIGHT), 120, 200, 240)
