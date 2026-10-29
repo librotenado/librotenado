@@ -66,6 +66,11 @@ which charts may be published, see the whitepaper).
 
 ## The chart of version 0.1
 
+The harmonised chart has a version of its own, independent of the version of this specification: books name the chart
+they use as `name/version` (`chart_selected`, part 0002), and so do translations and report mappings (`into`). The
+chart of this specification is `librotenado/0.1`. Accounts added since have kept that version, and an account's
+identity is stable across versions (above); when a new version of the chart is due is OPEN.
+
 The harmonised chart of version 0.1 is published as [`spec/data/chart.json`](data/chart.json), with names in
 [German](data/names/de.json), [English](data/names/en.json) and [French](data/names/fr.json). It is built against
 its first national chart, the French Plan comptable général in its version of 1 January 2026

@@ -26,14 +26,15 @@ Regenerate everything from code: `python3 brand/generate.py` (needs `rsvg-conver
 ## Type
 
 **Atkinson Hyperlegible Next** for the name, headings and text, **Atkinson Hyperlegible Mono** for the descriptor,
-code and protocol notation (`librotenado/0.1`) – both designed for legibility, both under the SIL Open Font
+code and protocol notation (`chart_selected`, `librotenado/0.1`) – both designed for legibility, both under the SIL Open Font
 License 1.1 (`fonts/`). Websites and documents bundle the fonts; nothing is loaded from other servers.
 
 ## Name and descriptor
 
 - Always lowercase – **librotenado**, also at the start of a sentence and in titles.
-- The descriptor is **open accounting protocol**. In technical contexts the protocol may be written with its
-  version: `librotenado/0.1`.
+- The descriptor is **open accounting protocol**. Its version is written plainly – **version 0.4** – and changes with
+  every release. `librotenado/0.1` is not that version but the identifier of the harmonised chart of accounts (spec
+  part 0004), which keeps its own version; it belongs in the specification and the documentation.
 - The lockup with descriptor is the default; the name-only lockup is for tight spaces.
 
 ## Where to use what
