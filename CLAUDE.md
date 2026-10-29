@@ -8,9 +8,9 @@ librotenado – the open protocol for accounting data: the specification (`spec/
 in Rust (`crates/`, MIT). [spezado](https://github.com/spezado/spezado) is its first implementation, but the protocol
 belongs to no product: anyone may implement it, including commercial vendors.
 
-Version 0.1 (draft): `spec/0001`–`0005`, `0007`–`0010` implemented in the library (base types, events,
-canonical encoding, chart of accounts, documents, filings, parties, reports, audit), `0006` and the adapter
-interface of `0007` proposals. Reference data –
+Version 0.3 (draft): `spec/0001`–`0005`, `0007`–`0010` implemented in the library (base types, events and sets of
+books, canonical encoding, chart of accounts, documents and bank statements, filings, parties and their
+configuration, reports, audit), `0006` and the adapter interface of `0007` proposals. Reference data –
 the currency table, the chart, translations, names, tax tables, report mappings – lives in `spec/data/`. State per
 part in `spec/README.md`, changes in `CHANGELOG.md`.
 

@@ -8,7 +8,7 @@ The crate is not yet published on crates.io; use it from Git:
 
 ```toml
 [dependencies]
-librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.2.0" }
+librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.3.0" }
 ```
 
 ## Two devices, one set of books

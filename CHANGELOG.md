@@ -2,10 +2,11 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
-## 0.3.0 – unreleased
+## 0.3.0 – 2026-10-29
 
-Sets of books as a whole: their identity, transactions shared between them, how each owner keeps its books, and
-closed periods.
+Sets of books as a whole – their identity, transactions shared between them, how each owner keeps its books, closed
+periods –, the review of bookings and reversals as rules of the protocol, every expense account its line of the
+Anlage EÜR 2025 and 2026, and bank statements read from camt.053, MT940 and the CSV files of banks.
 
 - [0002 Events](spec/0002-events.md): every set of books is founded with an identity (`books_founded`), named in the
   envelope of encrypted events (part 0006); not founded or founded twice is for review.
