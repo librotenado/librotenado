@@ -2,6 +2,19 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.5.0 – 2026-10-29
+
+End-to-end encryption, so that books travel between devices through relays that cannot read them.
+
+- [0006 Encryption](spec/0006-encryption.md) specified and implemented: Ed25519, HPKE (RFC 9180) with X25519 and
+  ChaCha20Poly1305, XChaCha20-Poly1305, HKDF-SHA256 and HMAC-SHA256; members and their keys from a seed; the chain of
+  books keys; the ordered member list and the six rules every member checks; envelopes for events and originals;
+  signed requests to relays and what a relay offers; invitations to add a device; recovery codes in Crockford's
+  base32.
+- Library: `MemberKeys`, `MemberId`, `ReceivingKey`, `Member`, `MemberRole`, `Rights`, `BooksKey`, `Grant`,
+  `KeyChange`, `MemberRecord`, `MemberList`, `RecordProblem`, `Envelope`, `EnvelopeContent`, `Bytes`,
+  `request_signature`, `verify_request`, `verify`, `Invitation`, `JoinRequest`, `RecoveryCode`, `EncryptionError`.
+
 ## 0.4.1 – 2026-10-29
 
 - [0005 Documents](spec/0005-documents.md): a sale under reverse charge to a buyer abroad is a service to another EU

@@ -9,7 +9,7 @@ The crate is not yet published on crates.io; use it from Git:
 
 ```toml
 [dependencies]
-librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.4.1" }
+librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.5.0" }
 ```
 
 ## Two devices, one set of books
@@ -68,6 +68,11 @@ sha256:ee872f6362d30fc9f5a605100f42f88d9a73dc15b6769d766435fe161a7022e7
   of 2026, the Anlage EÜR of 2025 and the HGB profit and loss account (`ReportMapping::de_ustva_2026()`,
   `de_euer_2025()`, `de_hgb_275_gkv_2026()`), `EventSet::account_report` the HGB balance sheet
   (`de_hgb_266_2026()`).
+- **Books are encrypted between their members.** `MemberKeys` come from a seed that stays on the device;
+  `MemberRecord::found` starts the member list with key 0, `MemberList::apply` checks each record, `add` and `remove`
+  write the next one, `keys` opens the chain of books keys. `Envelope::seal_event` and `open_event` carry events
+  to and from a relay, `request_signature` signs requests to it, `Invitation` adds a device, `RecoveryCode` brings
+  the books back (part 0006).
 - **Balances are derived.** `EventSet::balances(until)` sums the postings per owner, account and currency;
   `EventSet::trial_balance(chart, until)` rolls them up the hierarchy. `CurrencyTable::v0_1()` says how each currency
   divides, for formatting.
