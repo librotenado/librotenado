@@ -2,6 +2,11 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## Unreleased
+
+- [0009 Reports](spec/0009-reports.md): English names of the positions of the German reports – the HGB statements,
+  the VAT return and the Anlage EÜR –, a translation of their own; the German wording is the one that counts.
+
 ## 0.3.0 – 2026-10-29
 
 Sets of books as a whole – their identity, transactions shared between them, how each owner keeps its books, closed

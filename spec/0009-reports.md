@@ -91,7 +91,8 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
 - **Names of the positions** stand in the translation data (part 0001) under `<report>/<position>`: the German names
   of the HGB positions are the wording of the law, those of the VAT return and the Anlage EÜR the wording of the
   official forms of the BMF letters named above (`de-ustva/81`, `de-euer/2.280`) – of the latest year where a form
-  refers to its own lines (`Übertrag in Zeile 77`).
+  refers to its own lines (`Übertrag in Zeile 77`). The English names are a translation of their own, to read the
+  reports by; the German wording is the one that counts.
 - **Fields of the VAT return** are its Kennzahlen (`81`, `66`, …). The fields the form computes or asks for directly –
   the totals, the advance payment (Kz 83), the special advance payment (Kz 39), the yes/no questions – are not part of
   the mapping.

@@ -63,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn tax_codes_and_german_positions_have_german_names() {
+    fn tax_codes_and_german_positions_have_german_and_english_names() {
         let de = Names::v0_1("de").unwrap();
         let en = Names::v0_1("en").unwrap();
         for code in crate::TaxTable::de().codes {
@@ -74,6 +74,7 @@ mod tests {
             crate::ReportMapping::de_hgb_275_gkv_2026(),
             crate::ReportMapping::de_ustva_2026(),
             crate::ReportMapping::de_euer_2025(),
+            crate::ReportMapping::de_euer_2026(),
         ] {
             let taxes = mapping.taxes.iter().flat_map(|r| [&r.base, &r.output, &r.input]).flatten();
             let settlement = mapping.vat_settlement.iter().flat_map(|s| [&s.debit, &s.credit]).flatten();
@@ -86,7 +87,7 @@ mod tests {
                 .chain(&mapping.mandatory)
             {
                 let key = format!("{}/{position}", mapping.report);
-                assert!(de.get(&key).is_some(), "{key}");
+                assert!(de.get(&key).is_some() && en.get(&key).is_some(), "{key}");
             }
         }
     }
