@@ -13,8 +13,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     Account, AccountId, Booking, BooksId, Chart, Closing, Configuration, ContentHash, Currency, Date, DeviceId,
-    Document, DocumentId, Filing, FilingId, Hlc, Money, Object, ObjectError, Organisation, ParseError, PartyId, Person,
-    canonical, from_root, to_root,
+    Document, DocumentId, Filing, FilingId, Hlc, Invoicing, Money, Object, ObjectError, Organisation, ParseError,
+    PartyId, Person, Series, canonical, from_root, to_root,
 };
 
 /// The SHA-256 hash of an event's canonical encoding – its identity. Written as `sha256:` and 64 lower-case
@@ -81,6 +81,16 @@ pub enum Payload {
     OwnerConfigured {
         /// The configuration; it applies until the owner's next one.
         configuration: Configuration,
+    },
+    /// How an owner writes invoices (spec part 0008); a later one replaces an earlier one.
+    InvoicingConfigured {
+        /// The settings.
+        invoicing: Invoicing,
+    },
+    /// The series of invoice numbers a device writes for an owner (spec part 0008).
+    SeriesAssigned {
+        /// The series.
+        series: Series,
     },
     /// The books use this harmonised chart of accounts (spec part 0004).
     ChartSelected {
@@ -281,6 +291,16 @@ pub enum PartyProblem {
         event: EventHash,
         /// The organisation or person.
         owner: PartyId,
+    },
+    /// One series of invoice numbers of an owner assigned to several devices – they may write the same numbers.
+    #[error("the series {series:?} of {owner} is assigned to several devices: {devices:?}")]
+    SeriesTaken {
+        /// The owner.
+        owner: PartyId,
+        /// The series.
+        series: String,
+        /// The devices.
+        devices: Vec<DeviceId>,
     },
     /// A posting in the books of someone who is not an owner of the books.
     #[error("event {event} posts in the books of {owner}, who is not an owner")]
@@ -557,6 +577,27 @@ impl EventSet {
         owners
     }
 
+    /// How `owner` writes invoices: the latest settings in the agreed order.
+    pub fn invoicing(&self, owner: &PartyId) -> Option<&Invoicing> {
+        self.ordered().into_iter().rev().find_map(|(_, event)| match &event.payload {
+            Payload::InvoicingConfigured { invoicing } if invoicing.owner == *owner => Some(invoicing),
+            _ => None,
+        })
+    }
+
+    /// The series of invoice numbers of `owner` per device: the latest assignment of each device.
+    pub fn series(&self, owner: &PartyId) -> BTreeMap<DeviceId, String> {
+        let mut series = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            if let Payload::SeriesAssigned { series: assigned } = &event.payload
+                && assigned.owner == *owner
+            {
+                series.insert(assigned.device.clone(), assigned.series.clone());
+            }
+        }
+        series
+    }
+
     /// The configuration of `owner` that applies on `date`: the one with the latest `from` on or before it, and of
     /// two with the same `from` the later in the agreed order.
     pub fn configuration(&self, owner: &PartyId, date: Date) -> Option<&Configuration> {
@@ -627,6 +668,24 @@ impl EventSet {
                 }
                 let from = first_configured.entry(&configuration.owner).or_insert(configuration.from);
                 *from = (*from).min(configuration.from);
+            }
+            let invoicing_owner = match &event.payload {
+                Payload::InvoicingConfigured { invoicing } => Some(&invoicing.owner),
+                Payload::SeriesAssigned { series } => Some(&series.owner),
+                _ => None,
+            };
+            if let Some(owner) = invoicing_owner.filter(|owner| !owners.contains(owner)) {
+                problems.push(PartyProblem::ConfigurationOfNonOwner { event: hash, owner: owner.clone() });
+            }
+        }
+        // Per owner: a series written by more than one device.
+        for owner in &owners {
+            let mut devices: BTreeMap<String, Vec<DeviceId>> = BTreeMap::new();
+            for (device, series) in self.series(owner) {
+                devices.entry(series).or_default().push(device);
+            }
+            for (series, devices) in devices.into_iter().filter(|(_, devices)| devices.len() > 1) {
+                problems.push(PartyProblem::SeriesTaken { owner: (*owner).clone(), series, devices });
             }
         }
         for (hash, event) in self.ordered() {
@@ -1032,6 +1091,42 @@ mod tests {
     }
 
     #[test]
+    fn owners_write_invoices_in_series_of_their_own() {
+        use crate::party::tests::organisation;
+        use crate::{Contact, Invoicing, Series};
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        append(&mut set, &mut clock, 1, Payload::OwnerAdded { owner: party(1) });
+        let contact = Contact { email: Some("billing@example.org".into()), ..Contact::default() };
+        let described = Organisation { contact: Some(contact.clone()), ..organisation(1) };
+        append(&mut set, &mut clock, 2, Payload::OrganisationDescribed { organisation: described });
+        assert_eq!(set.parties().0[&party(1)].contact, Some(contact));
+        let invoicing =
+            |prefix: &str| Invoicing { owner: party(1), prefix: prefix.into(), payment_days: Some(14), account: None };
+        append(&mut set, &mut clock, 3, Payload::InvoicingConfigured { invoicing: invoicing("RE-") });
+        append(&mut set, &mut clock, 4, Payload::InvoicingConfigured { invoicing: invoicing("AR-") });
+        assert_eq!(set.invoicing(&party(1)).map(|i| i.prefix.as_str()), Some("AR-"), "the later replaces");
+        let series = |device: &str, name: &str| Payload::SeriesAssigned {
+            series: Series { owner: party(1), device: device.parse().unwrap(), series: name.into() },
+        };
+        append(&mut set, &mut clock, 5, series("laptop", ""));
+        append(&mut set, &mut clock, 6, series("phone", "B"));
+        assert_eq!(set.series(&party(1)).len(), 2);
+        assert!(!set.review_parties().iter().any(|p| matches!(p, PartyProblem::SeriesTaken { .. })));
+        // Two devices offline took the same series.
+        append(&mut set, &mut clock, 7, series("tablet", "B"));
+        let taken = PartyProblem::SeriesTaken {
+            owner: party(1),
+            series: "B".into(),
+            devices: vec!["phone".parse().unwrap(), "tablet".parse().unwrap()],
+        };
+        assert!(set.review_parties().contains(&taken), "{:?}", set.review_parties());
+        // A series is up to four of A-Z and 0-9.
+        let json = br#"{"type":"series","owner":"00000000-0000-7000-8000-000000000001","device":"x","series":"b"}"#;
+        assert!(from_root::<Series>(json).is_err());
+    }
+
+    #[test]
     fn books_belong_to_described_parties() {
         use crate::party::tests::{organisation, two_euro_shares};
         use crate::{Person, Role, RoleKind};
@@ -1044,7 +1139,13 @@ mod tests {
 
         append(&mut set, &mut clock, 2, Payload::OrganisationDescribed { organisation: organisation(1) });
         let role = |n| Role { organisation: party(n), kind: RoleKind::Shareholder, shares: Some(two_euro_shares(257)) };
-        let person = Person { id: party(2), name: "Erika Beispiel".into(), tax_ids: vec![], roles: vec![role(1)] };
+        let person = Person {
+            id: party(2),
+            name: "Erika Beispiel".into(),
+            tax_ids: vec![],
+            roles: vec![role(1)],
+            contact: None,
+        };
         append(&mut set, &mut clock, 3, Payload::PersonDescribed { person: person.clone() });
         assert_eq!(set.review_parties(), []);
         assert_eq!(set.owners(), [&party(1)]);
@@ -1060,7 +1161,8 @@ mod tests {
             [PartyProblem::UnknownOrganisation { person: party(2), organisation: party(9) }]
         );
         let more = Role { shares: Some(two_euro_shares(513)), ..role(1) };
-        let second = Person { id: party(3), name: "Max Beispiel".into(), tax_ids: vec![], roles: vec![more] };
+        let second =
+            Person { id: party(3), name: "Max Beispiel".into(), tax_ids: vec![], roles: vec![more], contact: None };
         append(&mut set, &mut clock, 6, Payload::PersonDescribed { person: second });
         let too_many = set.review_parties();
         assert!(too_many.iter().any(|p| matches!(p, PartyProblem::Shares { .. })), "513 of 512: {too_many:?}");

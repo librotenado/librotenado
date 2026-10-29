@@ -32,6 +32,8 @@ Kinds:
 | `owner_added` | `owner` | the books belong to this organisation or person, too (part 0008) |
 | `owner_removed` | `owner` | the books no longer belong to them (part 0008) |
 | `owner_configured` | `configuration` | how an owner keeps its books from a date on: currency, financial year, accounting, VAT (part 0008) |
+| `invoicing_configured` | `invoicing` | how an owner writes invoices: the prefix of their numbers, the days until they are due, the account they are paid to (part 0008) |
+| `series_assigned` | `series` | the series of invoice numbers a device writes for an owner (part 0008) |
 | `chart_selected` | `chart`, as `name/version` | the books use this harmonised chart of accounts (part 0004) |
 | `account_opened` | `account` | an account of the books' own was opened, refining a known one (below) |
 | `booking_recorded` | `booking` | a booking (part 0001) was recorded |

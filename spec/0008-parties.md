@@ -1,7 +1,8 @@
 # 0008 Parties
 
-Version 0.4, draft. Implemented in the reference library (`Organisation`, `Person`, event kinds
-`organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`; `Configuration`).
+Version 0.6, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
+`organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`,
+`invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`, `Series`).
 
 **A set of books always belongs to at least one organisation or natural person** – its owners – and every posting
 names the owner whose books it is in (part 0001). Who they are decides which law applies, which national chart and
@@ -23,6 +24,7 @@ An organisation – a company, an association, a foundation, a partnership – i
 | `registrations` | its entries in public registers (below); absent when none, never empty |
 | `tax_ids` | its tax numbers (below); absent when none, never empty |
 | `shares` | how its capital is divided into shares (below); absent when it has none |
+| `contact` | how to reach it (below); absent when not given |
 
 A registration (type `registration`) is `register` – the register as a code, e.g. `de-hrb` –, `number`, and,
 where a register is kept by several authorities, `authority` (e.g. the local court).
@@ -46,6 +48,7 @@ A natural person is an object of type `person`:
 | `name` | their name as they use it |
 | `tax_ids` | their tax numbers, e.g. a personal tax identification number; absent when none |
 | `roles` | their roles in organisations (below); absent when none |
+| `contact` | how to reach them (below); absent when not given |
 
 A role (type `role`) is `organisation` – the identity of an organisation –, `kind`, and, where the role holds
 shares, `shares`: how many of one nominal amount the organisation has (`{"count": 257, "nominal": …}`). A person
@@ -62,6 +65,22 @@ holding shares of several nominal amounts has one role for each.
 | `authorised_signatory` | may sign for it, e.g. under a commercial power of attorney |
 
 Later versions add kinds; an implementation keeps a role of a kind it does not know but does not interpret it.
+
+## Contact
+
+Organisations and persons – owners, and the customers and suppliers of the books – carry how to reach them, as a
+contact (type `contact`); every member is absent when not given:
+
+| Member | Content |
+|---|---|
+| `address` | the postal address (type `postal_address`, part 0005) |
+| `name` | whom to contact |
+| `phone` | the telephone number |
+| `email` | the e-mail address |
+| `endpoint` | where electronic invoices go: `scheme` and `address`, as EN 16931 writes them (BT-34, BT-49; part 0005) |
+| `buyer_reference` | what the party asks to be named on invoices to it (BT-10) – the Leitweg-ID of a German authority |
+
+An invoice an owner writes takes the seller's details from the owner and the buyer's from the customer.
 
 ## Owners
 
@@ -121,7 +140,30 @@ does not interpret it. A financial year that begins on another day than the firs
 An implementation MUST report, and MUST NOT silently resolve:
 
 - **Not configured** – a posting in the books of an owner, dated before the owner's first configuration.
-- **Configuration of a non-owner** – a configuration for an organisation or person that is not an owner of the books.
+- **Configuration of a non-owner** – a configuration, invoicing settings or a series for an organisation or person
+  that is not an owner of the books.
+
+## Invoicing
+
+`invoicing_configured` records how an owner writes invoices (type `invoicing`); a later one replaces an earlier one in
+the agreed order:
+
+| Member | Content |
+|---|---|
+| `owner` | the owner |
+| `prefix` | what invoice numbers start with, before the year: `RE-` |
+| `payment_days` | the days until an invoice is due; absent when not given |
+| `account` | the account invoices are paid to, an IBAN; absent when not given |
+
+Invoice numbers must be unique, in a sequence "based on one or more series"
+([Directive 2006/112/EC, Article 226](https://eur-lex.europa.eu/eli/dir/2006/112/oj)). So that devices working
+offline never write the same number, each device writes its own **series** for an owner: `series_assigned` (type
+`series`) is `owner`, `device` – the device name (part 0002) – and `series`, empty or one to four of `A-Z` and `0-9`.
+The latest assignment of a device applies. An implementation SHOULD write numbers as the prefix, the year, `-`, the
+series and a sequence of the year – `RE-2026-001` in the empty series, `RE-2026-B001` in the series `B` – and MUST
+report, and MUST NOT silently resolve:
+
+- **Series taken** – one series of an owner assigned to several devices, perhaps by two devices offline at once.
 
 ## Personal data
 
@@ -133,7 +175,7 @@ is a matter of encryption (part 0006).
 - The registries of codes: legal forms, registers, tax schemes – per country, with sources.
 - Further data the books depend on beyond the configuration: accounting standards beyond Germany (IFRS, national
   GAAP), a financial year that does not begin on the first of a month, codes of further countries.
-- Addresses, and the parties of documents (sellers, buyers, part 0005).
+- The parties of documents (sellers, buyers, part 0005) as parties of the books.
 - Relations between organisations: groups, holdings, branches.
 - Capital that is not divided into shares: the contributions of partners in a partnership, the assets of a
   foundation.

@@ -5,7 +5,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Currency, Date, Money, Object, ParseError};
+use crate::{Currency, Date, DeviceId, Endpoint, Money, Object, ParseError, PostalAddress};
 
 /// The identity of an organisation or a person: a UUID in its one form (spec part 0001). It carries no meaning.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -200,6 +200,9 @@ pub struct Organisation {
     /// How its capital is divided into shares, one entry per nominal amount; left out when it has no shares.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub shares: Vec<Shares>,
+    /// How to reach it; left out when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact: Option<Contact>,
 }
 
 impl Organisation {
@@ -270,6 +273,78 @@ pub struct Person {
     /// Their roles in organisations; left out when none.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub roles: Vec<Role>,
+    /// How to reach them; left out when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact: Option<Contact>,
+}
+
+/// How to reach an organisation or a person – for invoices to and from them, and filings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Contact {
+    /// The postal address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<PostalAddress>,
+    /// Whom to contact.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub name: Option<String>,
+    /// The telephone number.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub phone: Option<String>,
+    /// The e-mail address.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub email: Option<String>,
+    /// Where electronic invoices go, as EN 16931 writes it (BT-34, BT-49): a scheme and an address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<Endpoint>,
+    /// What it asks to be named on invoices to it – the Leitweg-ID of a German authority (BT-10).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub buyer_reference: Option<String>,
+}
+
+impl Object for Contact {
+    const TYPE: &'static str = "contact";
+}
+
+/// How an owner writes invoices (spec part 0008).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Invoicing {
+    /// The owner.
+    pub owner: PartyId,
+    /// What invoice numbers start with, before the year: `RE-`.
+    pub prefix: String,
+    /// The days until an invoice is due; left out when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment_days: Option<u16>,
+    /// The account invoices are paid to, an IBAN; left out when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub account: Option<String>,
+}
+
+impl Object for Invoicing {
+    const TYPE: &'static str = "invoicing";
+}
+
+/// The series of invoice numbers a device writes for an owner, so that devices working offline never write the
+/// same number (spec part 0008): empty, or one to four of `A-Z` and `0-9`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Series {
+    /// The owner.
+    pub owner: PartyId,
+    /// The device.
+    pub device: DeviceId,
+    /// The series.
+    #[serde(deserialize_with = "series_name")]
+    pub series: String,
+}
+
+impl Object for Series {
+    const TYPE: &'static str = "series";
+}
+
+fn series_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let name = String::deserialize(deserializer)?;
+    let valid = name.len() <= 4 && name.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+    if valid { Ok(name) } else { Err(de::Error::custom("a series is up to four of A-Z and 0-9")) }
 }
 
 /// A code of a configuration: the country in lower case, `-`, and a name of `a-z`, `0-9` and `-`
@@ -443,6 +518,7 @@ pub(crate) mod tests {
             }],
             tax_ids: vec![TaxId { scheme: "vat".into(), number: "DE000000000".into() }],
             shares: vec![two_euro_shares(512)],
+            contact: None,
         }
     }
 

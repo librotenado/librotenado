@@ -129,8 +129,8 @@ pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Mo
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{
-    Configuration, Country, Organisation, PartyId, Person, RegimeCode, Region, Registration, ReturnPeriod, Role,
-    RoleKind, Shares, TaxId, VatBasis, VatScheme,
+    Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region, Registration,
+    ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
 pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use statement::{
