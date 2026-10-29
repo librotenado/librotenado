@@ -71,8 +71,9 @@ pub struct ReportContent {
     pub report: String,
     /// The version of its mapping, e.g. `2026` or `6.10`.
     pub version: String,
-    /// Position → amount, in the filer's functional currency.
-    #[serde(deserialize_with = "crate::non_empty_map")]
+    /// Position → amount, in the filer's functional currency; absent when no position has an amount – a VAT return
+    /// with nothing to report is filed all the same.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "crate::non_empty_map")]
     pub fields: BTreeMap<String, Money>,
 }
 
@@ -513,6 +514,18 @@ mod tests {
             status.payload(vec![document.clone()]),
             Payload::FilingAccepted { filing: status.filing.clone(), documents: vec![document] }
         );
+
+        // A filing with nothing to report leaves its fields out, and reads back as written.
+        let nil = Submission {
+            filing: Filing {
+                content: vec![ReportContent { fields: BTreeMap::new(), ..submission.filing.content[0].clone() }],
+                ..submission.filing.clone()
+            },
+            ..submission.clone()
+        };
+        let json = crate::to_root(&nil).unwrap();
+        assert!(String::from_utf8_lossy(&json).contains(r#""content":[{"report":"de-ustva","version":"2026"}]"#));
+        assert_eq!(crate::from_root::<Submission>(&json).unwrap(), nil);
 
         // Empty receipts and messages are left out, not written.
         let empty = r#"{"filing":"0192f1e4-0000-7000-8000-0000000000f1","message":"","state":"rejected","type":"submission_status"}"#;

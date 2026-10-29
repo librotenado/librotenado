@@ -2,6 +2,12 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.7.1 – 2026-10-29
+
+- [0007 Filings](spec/0007-filings.md): a report content without any amount leaves `fields` out instead of being
+  refused when read – a VAT return with nothing to report is filed all the same. Before, such a filing could be
+  written but not read back.
+
 ## 0.7.0 – 2026-10-29
 
 The interface between an implementation and the adapters that submit filings to authorities, no longer a proposal.

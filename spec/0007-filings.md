@@ -25,7 +25,8 @@ A filing is an object of type `filing` (part 0003):
 
 A report content (type `report_content`) is `report` and `version` – of the report mapping it was derived with (part
 0009) – and `fields`: position → money, in the filer's functional currency (part 0001), positions without an amount
-left out. A mandatory position of the mapping without an amount is stated as empty by the adapter.
+left out, and `fields` itself absent when no position has one: a VAT return with nothing to report is filed all the
+same. A mandatory position of the mapping without an amount is stated as empty by the adapter.
 
 | `kind` | Content | Derived | Germany |
 |---|---|---|---|
