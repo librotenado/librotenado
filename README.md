@@ -48,6 +48,17 @@ Changes per version are in [CHANGELOG.md](CHANGELOG.md).
 
 Licences follow the [REUSE specification](https://reuse.software); the texts are in [LICENSES/](LICENSES/).
 
+## The name
+
+```
+LIBRO + TENi + ADO → librotenado
+```
+
+*librotenado* is Esperanto for bookkeeping: *libro* (book) + *teni* (to keep) + *-ado* (ongoing action) – book-keeping,
+word for word. The dictionary explains it as entering income and expenditure, *en- kaj el-spezoj*, into the books –
+the very word spezado, its first implementation, is named after. Esperanto belongs to no nation and takes its roots
+mostly from European languages – fitting for a protocol meant to become a European standard. Say *li-bro-te-NA-do*.
+
 ## Contributing
 
 Issues and pull requests are welcome – see [CONTRIBUTING.md](CONTRIBUTING.md): a
