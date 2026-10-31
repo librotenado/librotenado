@@ -65,7 +65,7 @@ pub struct Chart {
 impl Chart {
     /// The harmonised chart of version 0.1 (`spec/data/chart.json`).
     pub fn v0_1() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/chart.json")).expect("the published chart is valid")
+        crate::from_root(include_bytes!("../data/chart.json")).expect("the published chart is valid")
     }
 
     /// The opening balance sheet of the chart 0.1, a memo account: the other side of opening balances (part 0004).
@@ -78,21 +78,21 @@ impl ChartTranslation {
     /// The translation of the French Plan comptable général, version of 1 January 2026, into the harmonised chart
     /// 0.1 (`spec/data/translations/fr-pcg.json`).
     pub fn fr_pcg() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/translations/fr-pcg.json"))
+        crate::from_root(include_bytes!("../data/translations/fr-pcg.json"))
             .expect("the published translation is valid")
     }
 
     /// The translation of the DATEV standard chart SKR 03 (process structure), valid for 2026, into the harmonised
     /// chart 0.1 (`spec/data/translations/de-skr03.json`), reversible (spec part 0004).
     pub fn de_skr03() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/translations/de-skr03.json"))
+        crate::from_root(include_bytes!("../data/translations/de-skr03.json"))
             .expect("the published translation is valid")
     }
 
     /// The translation of the DATEV standard chart SKR 04 (closing statement structure), valid for 2026, into the
     /// harmonised chart 0.1 (`spec/data/translations/de-skr04.json`), reversible.
     pub fn de_skr04() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/translations/de-skr04.json"))
+        crate::from_root(include_bytes!("../data/translations/de-skr04.json"))
             .expect("the published translation is valid")
     }
 }

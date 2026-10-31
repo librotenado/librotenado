@@ -26,9 +26,9 @@ impl Names {
     /// The names of version 0.1 in `language`, if published (`spec/data/names/`): `de`, `en` and `fr`.
     pub fn v0_1(language: &str) -> Option<Self> {
         let json: &[u8] = match language {
-            "de" => include_bytes!("../../../spec/data/names/de.json"),
-            "en" => include_bytes!("../../../spec/data/names/en.json"),
-            "fr" => include_bytes!("../../../spec/data/names/fr.json"),
+            "de" => include_bytes!("../data/names/de.json"),
+            "en" => include_bytes!("../data/names/en.json"),
+            "fr" => include_bytes!("../data/names/fr.json"),
             _ => return None,
         };
         Some(crate::from_root(json).expect("the published names are valid"))

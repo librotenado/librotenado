@@ -96,7 +96,7 @@ impl Object for TaxTable {
 impl TaxTable {
     /// The German tax codes (`spec/data/tax/de.json`).
     pub fn de() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/tax/de.json")).expect("the published table is valid")
+        crate::from_root(include_bytes!("../data/tax/de.json")).expect("the published table is valid")
     }
 
     /// The definition of a code.

@@ -234,7 +234,7 @@ impl CurrencyTable {
     /// The table of version 0.1: every currency of ISO 4217 with a minor unit, and `x-btc` and `x-eth`
     /// (`spec/data/currencies.json`).
     pub fn v0_1() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/currencies.json")).expect("the published table is valid")
+        crate::from_root(include_bytes!("../data/currencies.json")).expect("the published table is valid")
     }
 
     /// The definition of this currency, if the table has it.

@@ -122,44 +122,41 @@ impl Object for ReportMapping {
 impl ReportMapping {
     /// The German VAT return of 2026 (Umsatzsteuer-Voranmeldung), from tax codes (`spec/data/reports/`).
     pub fn de_ustva_2026() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-ustva-2026.json"))
-            .expect("the published mapping is valid")
+        crate::from_root(include_bytes!("../data/reports/de-ustva-2026.json")).expect("the published mapping is valid")
     }
 
     /// The German balance sheet of 2026 (HGB § 266).
     pub fn de_hgb_266_2026() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-266-2026.json"))
+        crate::from_root(include_bytes!("../data/reports/de-hgb-266-2026.json"))
             .expect("the published mapping is valid")
     }
 
     /// The German profit and loss account of 2026, by nature of expense (HGB § 275 Abs. 2).
     pub fn de_hgb_275_gkv_2026() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-hgb-275-gkv-2026.json"))
+        crate::from_root(include_bytes!("../data/reports/de-hgb-275-gkv-2026.json"))
             .expect("the published mapping is valid")
     }
 
     /// The balance sheet of the German E-Bilanz (§ 5b EStG) in the taxonomy 6.10: positions of `de-gaap-ci`.
     pub fn de_ebilanz_bs_6_10() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-ebilanz-bs-6.10.json"))
+        crate::from_root(include_bytes!("../data/reports/de-ebilanz-bs-6.10.json"))
             .expect("the published mapping is valid")
     }
 
     /// The income statement by nature of expense of the German E-Bilanz (§ 5b EStG) in the taxonomy 6.10.
     pub fn de_ebilanz_is_gkv_6_10() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-ebilanz-is-gkv-6.10.json"))
+        crate::from_root(include_bytes!("../data/reports/de-ebilanz-is-gkv-6.10.json"))
             .expect("the published mapping is valid")
     }
 
     /// The German income statement on a cash basis of 2026 (Anlage EÜR, § 4 Abs. 3 EStG).
     pub fn de_euer_2026() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-euer-2026.json"))
-            .expect("the published mapping is valid")
+        crate::from_root(include_bytes!("../data/reports/de-euer-2026.json")).expect("the published mapping is valid")
     }
 
     /// The German income statement on a cash basis of 2025 (Anlage EÜR, § 4 Abs. 3 EStG).
     pub fn de_euer_2025() -> Self {
-        crate::from_root(include_bytes!("../../../spec/data/reports/de-euer-2025.json"))
-            .expect("the published mapping is valid")
+        crate::from_root(include_bytes!("../data/reports/de-euer-2025.json")).expect("the published mapping is valid")
     }
 
     /// The position of an account: its own mapping or the nearest of the accounts it refines; for a credit balance

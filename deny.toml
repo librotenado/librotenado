@@ -30,6 +30,8 @@ allow = [
   "Unlicense",
   "Zlib",
 ]
+# The library itself carries the reference data of the specification, which is CC BY 4.0.
+exceptions = [{ crate = "librotenado", allow = ["CC-BY-4.0"] }]
 
 [bans]
 multiple-versions = "allow"

@@ -2,8 +2,13 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
-## Unreleased
+## 0.7.3 – 2026-10-31
 
+No change to the protocol or the library's interface.
+
+- The library on [crates.io](https://crates.io/crates/librotenado), published by CI on every version tag. The crate
+  carries the reference data of `spec/data/` (CC BY 4.0) – its licence is `MIT AND CC-BY-4.0` – but not the test
+  invoices.
 - The documentation at librotenado.dev is built with Jekyll and Just the Docs, as falkOSS projects build theirs;
   the addresses stay, the old introduction and overview forward.
 

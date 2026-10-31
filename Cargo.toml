@@ -4,12 +4,12 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.7.2"
+version = "0.7.3"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"
 repository = "https://github.com/librotenado/librotenado"
-publish = false
+homepage = "https://librotenado.dev"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

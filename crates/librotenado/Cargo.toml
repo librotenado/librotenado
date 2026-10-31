@@ -5,9 +5,15 @@ description = "Reference library of the librotenado protocol for accounting data
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+# The library is MIT; the reference data it embeds (`data/`, the specification's `spec/data/`) is CC BY 4.0.
+license = "MIT AND CC-BY-4.0"
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["accounting", "bookkeeping", "e-invoicing", "xrechnung", "zugferd"]
+categories = ["finance", "encoding", "parser-implementations"]
+# The test invoices (Apache-2.0, EUPL-1.2) stay in the repository; `data` and the licence texts are links into it.
+include = ["src/**", "examples/**", "data/**", "LICENSE-MIT.txt", "LICENSE-CC-BY-4.0.txt"]
 
 [lints]
 workspace = true

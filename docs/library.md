@@ -10,12 +10,15 @@ implemented: base types, events and merging, the canonical encoding, the chart o
 translations, documents and bank statements, filings, parties and their configuration, reports and the audit data
 transfer. The full API is in the [API documentation](api/librotenado/index.html).
 
-The crate is not yet published on crates.io; use it from Git:
+The crate is on [crates.io](https://crates.io/crates/librotenado):
 
 ```toml
 [dependencies]
-librotenado = { git = "https://github.com/librotenado/librotenado", tag = "v0.7.2" }
+librotenado = "0.7"
 ```
+
+Reading the invoice embedded in a PDF (ZUGFeRD, Factur-X) is the default feature `pdf`; without it,
+`default-features = false`.
 
 ## Two devices, one set of books
 

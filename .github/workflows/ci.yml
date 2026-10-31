@@ -2,12 +2,13 @@
 # Format, lints and tests of the library on Linux and macOS; the written XRechnung checked by the KoSIT validator;
 # dependencies (cargo deny). The licence check (REUSE) and a sign-off (DCO) on every commit of a pull request come
 # from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the version as a comment, downloads by
-# their SHA-256.
+# their SHA-256. On a version tag, the library goes to crates.io.
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -74,3 +75,32 @@ jobs:
     uses: falkoss/starterpack/.github/workflows/reuse.yml@4c37856fa8c0e9a415d1bf207a1d6ccefb1157b6
   sign-off:
     uses: falkoss/starterpack/.github/workflows/dco.yml@4c37856fa8c0e9a415d1bf207a1d6ccefb1157b6
+
+  # The library on crates.io, on a release: in the tag's version, through crates.io's trusted publishing (a short-lived
+  # token for this workflow and the environment `crates-io`, no stored secret). A version already on crates.io is left
+  # alone, so the job can run again.
+  crate:
+    needs: [rust, xrechnung, dependencies, licences]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::librotenado is $version, the tag $GITHUB_REF_NAME"; exit 1; }
+          if curl -fsS -A "librotenado release (https://github.com/librotenado/librotenado)" \
+               "https://crates.io/api/v1/crates/librotenado/$version" >/dev/null 2>&1; then
+            echo "librotenado $version is on crates.io already"; exit 0
+          fi
+          cargo publish --locked -p librotenado
