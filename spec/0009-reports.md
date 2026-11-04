@@ -1,7 +1,7 @@
 # 0009 Reports
 
-Version 0.8, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
-`EventSet::period_report`).
+Version 0.11, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+`EventSet::period_report`, `EventSet::customer_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
 prescribes their positions, and many change every year. A **report mapping** says how the harmonised chart (part
@@ -76,6 +76,24 @@ tax code – and the fields it fills:
 An account holds VAT if it is one of `vat_accounts` or refines one. A reverse charge purchase fills all three: the
 net amount, the VAT the recipient owes, and the same VAT deducted.
 
+### Reports per customer
+
+A report per customer – the recapitulative statement of supplies to other member states of the EU – takes the same
+postings, but only those with a tax code whose rule has a `base`, on accounts that hold no VAT. Each counts on the
+field `<VAT identification number>/<base>`, e.g. `FR40303265045/S`: the customer's VAT identification number with its
+country prefix, a slash, and the rule's `base`. The amount is the net amount, credit positive; reversals and credit
+notes reduce it, and a field whose sum is zero is left out.
+
+The customer's VAT identification number is taken from the documents the booking is based on (part 0005): the
+buyer's VAT identifier on an invoice or credit note (BT-48) or, where the invoice names none, the tax number of scheme
+`vat` of the organisation the buyer is (`party`, part 0008). An implementation MUST report, and MUST NOT silently
+resolve:
+
+- **No VAT identification number** – a booking with such a posting whose documents name no VAT identification number
+  of the customer; it is left out of the report.
+- **Several VAT identification numbers** – a booking whose documents name more than one; it is left out, too. Each
+  customer's sales are booked on their own.
+
 ## The German reports of 2026
 
 | Report | File | Source |
@@ -85,6 +103,7 @@ net amount, the VAT the recipient owes, and the same VAT deducted.
 | Income statement on a cash basis 2026 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2026.json`](data/reports/de-euer-2026.json) | BMF letter of 1 September 2026, IV C 6 - S 2142/00024/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2026-09-01-anlage-EUER-2026.html)) |
 | Income statement on a cash basis 2025 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2025.json`](data/reports/de-euer-2025.json) | BMF letter of 29 August 2025, IV C 6 - S 2142/00023/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-08-29-anlage-EUER-2025.html)) |
 | VAT return 2026 (Umsatzsteuer-Voranmeldung) | [`de-ustva-2026.json`](data/reports/de-ustva-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00039/007/036, form USt 1 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-vordruckmuster-USt-voranmeldung-2026.html)) |
+| Recapitulative statement 2026 (Zusammenfassende Meldung) | [`de-zm-2026.json`](data/reports/de-zm-2026.json) | [§ 18a UStG](https://www.gesetze-im-internet.de/ustg_1980/__18a.html) |
 
 - **Positions of the HGB** are written as their place in the law: `aktiv.B.II.1` is § 266 Abs. 2 B. II. 1.
   (receivables from trade), `passiv.C.2` § 266 Abs. 3 C. 2., `gkv.6.a` § 275 Abs. 2 Nr. 6 Buchst. a. Positions the
@@ -160,6 +179,34 @@ Two members of a report mapping serve the E-Bilanz:
 | `taxes[].within` | the rule applies only to postings on accounts whose position is this one or one below it (written with it and a dot); without it, to every posting with the code |
 | `mandatory` | positions a report states even without an amount, as empty |
 
+### The recapitulative statement
+
+A business that supplies goods to, or services under § 3a Abs. 2 UStG for, businesses in other member states
+reports them per customer to the Bundeszentralamt für Steuern: the Zusammenfassende Meldung
+([§ 18a UStG](https://www.gesetze-im-internet.de/ustg_1980/__18a.html)), for each customer the VAT identification
+number its other member state gave it and the sum of the assessment bases (Abs. 7). It is a report per customer
+(above) of the mapping [`de-zm-2026.json`](data/reports/de-zm-2026.json):
+
+| Tax code | `base` | What is reported (§ 18a Abs. 7 UStG) |
+|---|---|---|
+| `de-out-ig-supply` | `L` | intra-Community supplies of goods (Nr. 1) |
+| `de-out-eu-service` | `S` | services whose recipient owes the VAT in its member state (Nr. 3) |
+| `de-out-triangular` | `D` | supplies in an intra-Community triangular transaction, § 25b Abs. 2 (Nr. 4) |
+
+- **Periods:** a calendar month for supplies of goods; a calendar quarter where these have not exceeded 50,000 euros
+  in the current or any of the four preceding quarters, and for services (Abs. 1 and 2); a calendar year after an
+  exemption from advance returns, under the conditions of Abs. 9. Which period applies is the filer's: the report
+  takes any period.
+- **Not for small businesses** (Abs. 4): books whose configuration has `vat.scheme` `de-small-business` (part 0008)
+  file none.
+- **Which period a supply belongs to** (Abs. 8): goods to the period in which the invoice is issued, at the latest the
+  one in which the month after the supply ends; services and triangular transactions to the period in which they
+  were supplied. The report takes the booking's date; booking an invoice on its date and a service in the period it
+  was supplied meets both.
+- **Changes of the assessment base** (§ 17 UStG, applied by Abs. 7) – a credit note, a reversal – count in the period
+  in which they are booked; correcting a statement already filed (Abs. 10) is a filing that `corrects` it (part 0007).
+- **Names** of the three kinds stand in the translation data under `de-zm/L`, `de-zm/S` and `de-zm/D`.
+
 ## Open points
 
 - Review of the German mappings by tax advisers; until then they are drafts.
@@ -175,5 +222,8 @@ Two members of a report mapping serve the E-Bilanz:
   (Überleitungsrechnung), the split of reductions of sales by VAT, the other modules of the taxonomy (GCD master data,
   notes, appropriation of profits), and writing the XBRL instance – which ERiC transmits (part 0007). Names of the
   positions stay with the taxonomy until the conditions for reusing it (© XBRL Deutschland e.V.) are clarified.
-- The recapitulative statement (§ 18a UStG), which needs the customer's VAT identification number per posting or
-  document.
+- The recapitulative statement: whether `L`, `S` and `D` are the codes of the official data set (OPEN – the
+  adapter translates them); whether amounts are stated in whole euros; transfers of own goods (§ 6a Abs. 2 UStG) and
+  call-off stock (§ 6b UStG), which have no tax code yet; supplies of new vehicles to buyers without a VAT
+  identification number, which carry `de-out-ig-supply` but are not reported (§ 18a Abs. 6 Nr. 1) and so are
+  reported as missing a number.

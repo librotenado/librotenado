@@ -58,6 +58,9 @@ pub enum FilingKind {
     CashBasisStatement,
     /// Annual accounts: balance sheet and profit and loss account – in Germany the E-Bilanz.
     AnnualAccounts,
+    /// A statement of supplies to customers in other EU member states, per customer – in Germany the
+    /// Zusammenfassende Meldung (§ 18a UStG).
+    RecapitulativeStatement,
     /// A kind of a later version; kept as received, not interpreted, and not written by this version.
     #[serde(other, skip_serializing)]
     Unknown,

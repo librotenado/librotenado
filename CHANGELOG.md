@@ -2,6 +2,20 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.11.0 – 2026-11-04
+
+The recapitulative statement.
+
+- [0009 Reports](spec/0009-reports.md): reports per customer – postings with a tax code whose rule has a `base`, per
+  the customer's VAT identification number from the invoices the booking is based on (BT-48) or the organisation the
+  buyer is; reported – a booking that names no such number, or several. The German recapitulative statement
+  (Zusammenfassende Meldung, § 18a UStG) of 2026 as the mapping `de-zm-2026.json`: intra-Community supplies (`L`),
+  services under § 3a Abs. 2 (`S`), triangular transactions (`D`).
+- [0007 Filings](spec/0007-filings.md): the kind `recapitulative_statement`.
+- [0008 Parties](spec/0008-parties.md): the AEAO 2026 on § 108 does not say whose holidays apply – no longer OPEN.
+- Library: `EventSet::customer_report`, `CustomerProblem`, `ReportMapping::de_zm_2026`,
+  `FilingKind::RecapitulativeStatement`.
+
 ## 0.10.0 – 2026-11-04
 
 Short financial years.

@@ -1,6 +1,6 @@
 # 0007 Filings
 
-Version 0.7, draft. Implemented in the reference library: filings and their events (`Filing`,
+Version 0.11, draft. Implemented in the reference library: filings and their events (`Filing`,
 `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`) and what an implementation and an
 adapter send each other (`Submission`, `SubmissionStatus`, `Receipt`, `AdapterError`).
 
@@ -33,6 +33,7 @@ same. A mandatory position of the mapping without an amount is stated as empty b
 | `vat_return` | the VAT return | over the period | Umsatzsteuer-Voranmeldung (`de-ustva`) |
 | `cash_basis_statement` | the income statement on a cash basis | over the period | Anlage EÜR (`de-euer`) |
 | `annual_accounts` | balance sheet and profit and loss account | balances on the last day, and over the period | E-Bilanz (`de-ebilanz-bs`, `de-ebilanz-is-gkv`) |
+| `recapitulative_statement` | supplies to businesses in other EU member states, per customer | per customer over the period | Zusammenfassende Meldung (`de-zm`) |
 
 - **A filing is derived from the books and records from what.** `basis` is the state of the books when it was
   derived: whoever has the same events derives it again and gets the same content. When an event that concerns its
@@ -109,5 +110,5 @@ income statement on a cash basis as the Anlage EÜR with the income tax or trade
 - The master data the E-Bilanz needs beyond part 0008 (GCD: report type, legal form, Finanzamt), and the other
   modules of the taxonomy.
 - Which events concern a filing's period – and so make its `basis` outdated – per kind.
-- Further kinds: the recapitulative statement (§ 18a UStG), the annual VAT return, the income, corporation and trade
+- Further kinds: the annual VAT return, the income, corporation and trade
   tax returns.

@@ -1,6 +1,6 @@
 # 0008 Parties
 
-Version 0.10, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
+Version 0.11, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
 `organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`,
 `invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`, `Series`).
 

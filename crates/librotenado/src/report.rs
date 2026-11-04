@@ -2,14 +2,31 @@
 //! Report mappings (spec part 0009): how the harmonised accounts and the tax codes of a set of books fall into the
 //! positions of a national report – a balance sheet, a VAT return – in one version of that report.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccountId, AccountKind, BalanceError, Chart, Country, Date, EventSet, Object, PartyId, Payload, TaxCode,
+    AccountId, AccountKind, BalanceError, Chart, Country, Date, EventHash, EventSet, Object, PartyId, Payload, TaxCode,
     TaxDirection, TaxTable,
 };
+
+/// A booking a report per customer cannot place (spec part 0009): never resolved silently.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CustomerProblem {
+    /// The documents of the booking name no VAT identification number of the customer.
+    #[error("the booking of event {event} names no VAT identification number of its customer")]
+    NoVatId {
+        /// The event of the booking.
+        event: EventHash,
+    },
+    /// The documents of the booking name several VAT identification numbers of customers.
+    #[error("the booking of event {event} names several VAT identification numbers of customers")]
+    SeveralVatIds {
+        /// The event of the booking.
+        event: EventHash,
+    },
+}
 
 /// Whether a mapping has been reviewed by tax advisers of its country.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +166,12 @@ impl ReportMapping {
             .expect("the published mapping is valid")
     }
 
+    /// The German recapitulative statement of 2026 (Zusammenfassende Meldung, § 18a UStG), from tax codes, per
+    /// customer (`EventSet::customer_report`).
+    pub fn de_zm_2026() -> Self {
+        crate::from_root(include_bytes!("../data/reports/de-zm-2026.json")).expect("the published mapping is valid")
+    }
+
     /// The German income statement on a cash basis of 2026 (Anlage EÜR, § 4 Abs. 3 EStG).
     pub fn de_euer_2026() -> Self {
         crate::from_root(include_bytes!("../data/reports/de-euer-2026.json")).expect("the published mapping is valid")
@@ -282,6 +305,91 @@ impl EventSet {
             }
         }
         Ok(fields)
+    }
+
+    /// A report per customer over a period – in Germany the recapitulative statement (Zusammenfassende Meldung,
+    /// § 18a UStG) – for `owner`, from the bookings dated from `from` to `to` inclusive (spec part 0009). Every
+    /// posting with a tax code whose rule has a `base` field, on an account that holds no VAT, counts on the field
+    /// `<VAT identification number>/<base>` – e.g. `FR40303265045/S` –, positive as a sale; reversals and credit
+    /// notes reduce it. The customer's VAT identification number is the buyer's on the invoices and credit notes the
+    /// booking is based on (BT-48), or else the `vat` tax number of the organisation the buyer is.
+    ///
+    /// A booking whose documents name no such number, or several, is reported and left out.
+    pub fn customer_report(
+        &self,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        from: Date,
+        to: Date,
+    ) -> Result<(BTreeMap<String, i128>, Vec<CustomerProblem>), BalanceError> {
+        let parents = self.account_parents(chart);
+        let none = VatAccounts { output: vec![], input: vec![] };
+        let vat = mapping.vat_accounts.as_ref().unwrap_or(&none);
+        let on_vat = |account: &AccountId| {
+            ancestry(account, &parents).into_iter().any(|id| vat.output.contains(id) || vat.input.contains(id))
+        };
+        let (organisations, _) = self.parties();
+        let mut documents = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            if let Payload::DocumentRecorded { document } = &event.payload {
+                documents.entry(&document.id).or_insert(document);
+            }
+        }
+        let vat_id_of = |buyer: &crate::InvoiceParty| -> Option<String> {
+            buyer.vat_id.clone().or_else(|| {
+                let organisation = organisations.get(buyer.party.as_ref()?)?;
+                organisation.tax_ids.iter().find(|t| t.scheme == "vat").map(|t| t.number.clone())
+            })
+        };
+        let mut fields: BTreeMap<String, i128> = BTreeMap::new();
+        let mut problems = Vec::new();
+        for (hash, event) in self.ordered() {
+            let booking = match &event.payload {
+                Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
+                _ => continue,
+            };
+            if booking.date < from || booking.date > to {
+                continue;
+            }
+            let counted: Vec<(&str, i128)> = booking
+                .postings
+                .iter()
+                .filter(|p| p.owner == *owner && !on_vat(&p.account))
+                .filter_map(|p| {
+                    let code = p.tax.as_ref()?;
+                    let rule = mapping.taxes.iter().find(|rule| rule.tax == *code)?;
+                    Some((rule.base.as_deref()?, -p.functional().base_units()))
+                })
+                .collect();
+            if counted.is_empty() {
+                continue;
+            }
+            let vat_ids: BTreeSet<String> = booking
+                .documents
+                .iter()
+                .filter_map(|id| documents.get(id)?.invoice.as_ref())
+                .filter_map(|invoice| vat_id_of(&invoice.buyer))
+                .collect();
+            let mut vat_ids = vat_ids.into_iter();
+            let vat_id = match (vat_ids.next(), vat_ids.next()) {
+                (Some(vat_id), None) => vat_id,
+                (None, _) => {
+                    problems.push(CustomerProblem::NoVatId { event: hash });
+                    continue;
+                }
+                (Some(_), Some(_)) => {
+                    problems.push(CustomerProblem::SeveralVatIds { event: hash });
+                    continue;
+                }
+            };
+            for (base, amount) in counted {
+                let sum = fields.entry(format!("{vat_id}/{base}")).or_default();
+                *sum = sum.checked_add(amount).ok_or(BalanceError::Overflow)?;
+            }
+        }
+        fields.retain(|_, amount| *amount != 0);
+        Ok((fields, problems))
     }
 
     /// The kind of every account: of `chart`, and opened in the books.
@@ -828,6 +936,87 @@ mod tests {
         assert!(gkv.keys().all(|position| position.starts_with("gkv.")));
         assert_eq!(set.financial_year_start(&party(1), "2026-06-30".parse().unwrap()), "2025-07-01".parse().unwrap());
         assert_eq!(set.financial_year_start(&party(2), "2026-06-30".parse().unwrap()), "2026-01-01".parse().unwrap());
+    }
+
+    /// The recapitulative statement: per customer's VAT identification number and kind, from the invoices.
+    #[test]
+    fn a_recapitulative_statement_per_customer() {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let device: crate::DeviceId = "a".parse().unwrap();
+        let mut add = |set: &mut EventSet, payload: Payload| {
+            let (seq, prev) = set.chain_head(&device);
+            let ms = seq;
+            set.insert(Event { time: clock.now(ms), seq, prev, payload }).0
+        };
+        let invoice = |id: u8, vat_id: Option<&str>, buyer: Option<PartyId>| -> crate::Document {
+            let mut document: crate::Document = serde_json::from_value(serde_json::json!({
+                "id": format!("01a18406-0000-7000-8000-0000000000{id:02}"), "kind": "invoice", "date": "2026-03-15",
+                "received": "2026-03-15",
+                "original": {"hash": format!("sha256:{}", "ab".repeat(32)), "size": 1, "media_type": "application/pdf"},
+            }))
+            .unwrap();
+            let mut buyer_party = crate::InvoiceParty::named("Client");
+            buyer_party.vat_id = vat_id.map(str::to_owned);
+            buyer_party.party = buyer;
+            let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/en16931/01.01a-INVOICE_ubl.xml");
+            let read = crate::en16931::read(&std::fs::read(path).unwrap(), &crate::CurrencyTable::v0_1()).unwrap();
+            let mut data = read.invoice;
+            data.buyer = buyer_party;
+            document.invoice = Some(Box::new(data));
+            document
+        };
+        let sale = |documents: Vec<crate::DocumentId>, tax: &str, units: i128| Booking {
+            date: "2026-03-15".parse().unwrap(),
+            text: "sale".into(),
+            postings: vec![posting("411", units, None), posting("706", -units, Some(tax))],
+            documents,
+            entries: vec![],
+            transaction: None,
+        };
+        // A customer in France by the invoice, one in Austria by its description; a domestic sale counts nowhere.
+        let austrian: PartyId = party(2);
+        let organisation = serde_json::from_value(serde_json::json!({
+            "id": austrian.to_string(), "name": "Kunde GmbH", "legal_form": "", "country": "AT",
+            "tax_ids": [{"scheme": "vat", "number": "ATU12345678"}],
+        }))
+        .unwrap();
+        add(&mut set, Payload::OrganisationDescribed { organisation });
+        let documents =
+            [invoice(1, Some("FR40303265045"), None), invoice(2, None, Some(austrian)), invoice(3, None, None)];
+        for document in &documents {
+            add(&mut set, Payload::DocumentRecorded { document: document.clone() });
+        }
+        let id = |i: usize| documents[i].id.clone();
+        let first = sale(vec![id(0)], "de-out-eu-service", 100_000);
+        let recorded = add(&mut set, Payload::BookingRecorded { booking: first.clone() });
+        add(&mut set, Payload::BookingRecorded { booking: sale(vec![id(0)], "de-out-eu-service", 50_000) });
+        add(&mut set, Payload::BookingRecorded { booking: sale(vec![id(1)], "de-out-ig-supply", 70_000) });
+        add(&mut set, Payload::BookingRecorded { booking: sale(vec![id(1)], "de-out-19", 10_000) });
+        // A reversal reduces the sum; a booking without a number, or with two, is reported.
+        add(
+            &mut set,
+            Payload::BookingReversed {
+                reverses: recorded,
+                booking: first.reversed("2026-03-20".parse().unwrap(), "storno".into()),
+            },
+        );
+        let without = add(&mut set, Payload::BookingRecorded { booking: sale(vec![id(2)], "de-out-ig-supply", 1) });
+        let both = add(&mut set, Payload::BookingRecorded { booking: sale(vec![id(0), id(1)], "de-out-ig-supply", 1) });
+        let (fields, problems) = set
+            .customer_report(
+                &ReportMapping::de_zm_2026(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-01-01".parse().unwrap(),
+                "2026-03-31".parse().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(fields, BTreeMap::from([("ATU12345678/L".into(), 70_000), ("FR40303265045/S".into(), 50_000)]));
+        assert_eq!(
+            problems,
+            vec![CustomerProblem::NoVatId { event: without }, CustomerProblem::SeveralVatIds { event: both }]
+        );
     }
 
     /// A change of `year_start` makes a short financial year (§ 8b Satz 2 Nr. 2 EStDV).

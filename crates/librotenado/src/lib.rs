@@ -141,7 +141,7 @@ pub use party::{
     Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region, Registration,
     ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
-pub use report::{MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
+pub use report::{CustomerProblem, MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use statement::{
     Counterparty, EntryDetail, EntryReference, ReadError, ReadStatement, StatementAccount, StatementData,
     StatementEntry, StatementProblem, read_statements,
