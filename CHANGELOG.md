@@ -9,8 +9,10 @@ Short financial years.
 - [0008 Parties](spec/0008-parties.md): the financial year that holds a day – twelve months from the first day of the
   month `year_start`; where a configuration changes `year_start`, the year before ends the day before it and the
   year after begins on it, as § 8b EStDV allows. A financial year that begins within a month stays OPEN.
+- [0008 Parties](spec/0008-parties.md): reported – a change of `year_start` from a day that does not begin the new
+  year, which would make two short years.
 - [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the result for the year follows short financial years.
-- Library: `EventSet::financial_year`, `Date::previous`; `EventSet::financial_year_start` and the result on a
+- Library: `EventSet::financial_year`, `Date::previous`, `PartyProblem::YearChangedWithin`; `EventSet::financial_year_start` and the result on a
   balance sheet follow short years.
 
 ## 0.9.0 – 2026-11-04

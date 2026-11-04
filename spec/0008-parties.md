@@ -123,7 +123,8 @@ does not interpret it.
 **The financial year** that holds a day is twelve months from the latest first day of the month `year_start`, on or
 before it, of the configuration that applies on that day – the calendar year without one. Where a configuration
 changes `year_start`, the financial year is shorter: the year before ends the day before that configuration's
-`from`, the year after begins on it, and full years of the new `year_start` follow. A configuration that keeps
+`from`, the year after begins on it, and full years of the new `year_start` follow; so a change moves the
+financial year for good, with one short year between. A configuration that keeps
 `year_start` changes no financial year; nor does the first configuration of an owner, whose books may begin within a
 year. A financial year that begins on another day than the first of a month is OPEN.
 
@@ -149,6 +150,8 @@ An implementation MUST report, and MUST NOT silently resolve:
 - **Not configured** – a posting in the books of an owner, dated before the owner's first configuration.
 - **Configuration of a non-owner** – a configuration, invoicing settings or a series for an organisation or person
   that is not an owner of the books.
+- **Year changed within** – a configuration that changes `year_start` from a day that is not the first day of the
+  month `year_start`: it makes two short financial years where the change needs one.
 
 ## Invoicing
 

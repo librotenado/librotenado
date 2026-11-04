@@ -858,6 +858,18 @@ mod tests {
         assert_eq!(year("2026-07-01"), (date("2026-07-01"), date("2027-06-30")));
         assert_eq!(year("2027-06-30"), (date("2026-07-01"), date("2027-06-30")));
         assert_eq!(year("2027-07-01"), (date("2027-07-01"), date("2028-06-30")));
+        assert!(set.review_parties().iter().all(|p| !matches!(p, crate::PartyProblem::YearChangedWithin { .. })));
+        // A change from a day that does not begin the new year is reported.
+        let configuration = serde_json::from_value(serde_json::json!({
+            "owner": party(1).to_string(), "from": "2028-03-01", "currency": "EUR", "year_start": 4,
+        }))
+        .unwrap();
+        let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+        let event = Event { time: clock.now(10), seq, prev, payload: Payload::OwnerConfigured { configuration } };
+        let (changed, _) = set.insert(event);
+        assert!(
+            set.review_parties().contains(&crate::PartyProblem::YearChangedWithin { event: changed, owner: party(1) })
+        );
         // Without a configuration, the calendar year; before the first one, too.
         assert_eq!(set.financial_year(&party(2), date("2026-02-28")), (date("2026-01-01"), date("2026-12-31")));
         assert_eq!(date("2024-03-01").previous(), Some(date("2024-02-29")));

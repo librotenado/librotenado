@@ -300,6 +300,15 @@ pub enum PartyProblem {
         /// The organisation or person.
         owner: PartyId,
     },
+    /// A configuration that changes the financial year from a day that is not the first day of its new year: two
+    /// short financial years where the law allows one.
+    #[error("event {event} changes the financial year of {owner} on a day that does not begin it")]
+    YearChangedWithin {
+        /// The event with the configuration.
+        event: EventHash,
+        /// The owner.
+        owner: PartyId,
+    },
     /// One series of invoice numbers of an owner assigned to several devices – they may write the same numbers.
     #[error("the series {series:?} of {owner} is assigned to several devices: {devices:?}")]
     SeriesTaken {
@@ -685,6 +694,21 @@ impl EventSet {
             if let Some(owner) = invoicing_owner.filter(|owner| !owners.contains(owner)) {
                 problems.push(PartyProblem::ConfigurationOfNonOwner { event: hash, owner: owner.clone() });
             }
+        }
+        // Per owner: a change of the financial year begins the new year.
+        let mut by_from: BTreeMap<(&PartyId, Date), (EventHash, u8)> = BTreeMap::new();
+        for (hash, event) in self.ordered() {
+            if let Payload::OwnerConfigured { configuration } = &event.payload {
+                by_from.insert((&configuration.owner, configuration.from), (hash, configuration.year_start));
+            }
+        }
+        let mut previous: Option<(&PartyId, u8)> = None;
+        for ((owner, from), (hash, year_start)) in &by_from {
+            let changed = previous.is_some_and(|(o, y)| o == *owner && y != *year_start);
+            if changed && (from.day() != 1 || from.month() != *year_start) {
+                problems.push(PartyProblem::YearChangedWithin { event: *hash, owner: (*owner).clone() });
+            }
+            previous = Some((owner, *year_start));
         }
         // Per owner: a series written by more than one device.
         for owner in &owners {
