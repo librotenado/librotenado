@@ -2,6 +2,19 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.9.0 – 2026-11-04
+
+Reopening a closed period.
+
+- [0002 Events](spec/0002-events.md): `period_reopened` with `closing` – the hash of the closing's event – and a
+  `reason`, never empty. From the reopening on, the period takes bookings and configurations again; what was written
+  between closing and reopening stays late. Reported: a reopening of something that is not a closing, and a closing
+  reopened twice – the first reopening applies.
+- [0010 Audit](spec/0010-audit.md): a period is reopened only by an event of its own with a reason, which deletes
+  nothing.
+- Library: `Payload::PeriodReopened`, `EventSet::reopenings`, `ClosingProblem::UnknownClosing`,
+  `ClosingProblem::ReopenedTwice`; `EventSet::closed_until` leaves reopened closings out.
+
 ## 0.8.0 – 2026-11-04
 
 How the result of a year reaches equity on a balance sheet – without a closing booking.

@@ -1,6 +1,6 @@
 # 0010 Audit and retention
 
-Version 0.3, draft. Implemented in the reference library (`gobd::export`).
+Version 0.9, draft. Implemented in the reference library (`gobd::export`).
 
 Books must be kept so that an auditor can follow every business transaction from its document to the statements and
 back, for years. This part says what the protocol guarantees for that, and how books are handed over to an auditor
@@ -18,7 +18,8 @@ back, for years. This part says what the protocol guarantees for that, and how b
   review list and are resolved by new events (parts 0002, 0005, 0008).
 - **Derived figures can be derived again.** Reports record the state of the books they came from (parts 0002, 0007).
 - **Closed periods stay closed.** A closing names the state of the books it was decided on and the software the
-  figures were derived with; a booking dated in a closed period, written later, is reported (part 0002).
+  figures were derived with; a booking dated in a closed period, written later, is reported. A period is reopened
+  only by an event of its own with a reason, which deletes nothing (part 0002).
 
 How long books are kept is a rule of the law that applies; the protocol never deletes. Erasing books whose period has
 ended is an act of the implementation, outside the events (OPEN: how it is recorded).

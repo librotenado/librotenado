@@ -36,6 +36,12 @@ pub(crate) fn present_text<'de, D: serde::Deserializer<'de>>(deserializer: D) ->
     }
 }
 
+/// Deserialises a text that is never empty.
+pub(crate) fn text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let text = <String as serde::Deserialize>::deserialize(deserializer)?;
+    if text.is_empty() { Err(serde::de::Error::custom("the text is empty")) } else { Ok(text) }
+}
+
 /// Whether `s` is a UUID in its one form: lower-case hexadecimal digits in groups of 8-4-4-4-12.
 pub(crate) fn is_uuid(s: &str) -> bool {
     s.len() == 36

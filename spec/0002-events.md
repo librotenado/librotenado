@@ -1,6 +1,6 @@
 # 0002 Events and synchronisation
 
-Version 0.3, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.9, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Events
 
@@ -40,6 +40,7 @@ Kinds:
 | `booking_reversed` | `reverses`, `booking` | the booking recorded by the event `reverses` was cancelled by `booking`, with the opposite amounts |
 | `document_recorded` | `document` | a document was recorded with its data and original (part 0005) |
 | `period_closed` | `closing` | an owner's books were closed up to a date (below) |
+| `period_reopened` | `closing`, `reason` | the closing recorded by the event `closing` no longer applies, for the reason given (below) |
 
 Later versions add kinds and members. An implementation keeps, chains and passes on events of a kind or with members
 it does not know, unchanged (part 0003), but does not interpret what it does not know.
@@ -167,4 +168,18 @@ decided on stand before it in the agreed order. An implementation MUST report, a
 - **Late booking** – a booking after a closing, in the books of its owner, dated on or before `to`.
 - **Late configuration** – a configuration (part 0008) after a closing, for its owner, from a date on or before `to`.
 
-A closed period is corrected in the open one, with bookings dated after `to`. Reopening a period is OPEN.
+A closed period is corrected in the open one, with bookings dated after `to`, unless it is reopened.
+
+### Reopening a period
+
+`period_reopened` reopens a closing: `closing` is the hash of its event, `reason` a text, never empty, that says
+why. From the reopening on, the period is open again – bookings and configurations written after it are not late for
+that closing; what was written between the closing and the reopening stays late. A closing is reopened once; to
+close the period again, a new closing follows, decided on the books as they are then. A reopening deletes nothing:
+the closing, the reopening and the filings derived meanwhile (part 0007) stay among the events. To shorten a closed
+period, reopen it and close it again up to an earlier day. An implementation MUST report, and MUST NOT silently
+resolve:
+
+- **Unknown closing** – a reopening names an event that does not stand before it as a `period_closed` (it may not
+  have arrived yet).
+- **Reopened twice** – a further reopening of a closing reopened already; the first in the agreed order applies.

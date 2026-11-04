@@ -205,6 +205,22 @@ pub enum ClosingProblem {
         /// The closing's event.
         closing: EventHash,
     },
+    /// A reopening of an event that is not a closing – perhaps not arrived yet.
+    #[error("event {event} reopens {closing}, which is not a closing")]
+    UnknownClosing {
+        /// The reopening's event.
+        event: EventHash,
+        /// What it names.
+        closing: EventHash,
+    },
+    /// A further reopening of a closing that was reopened already.
+    #[error("event {event} reopens {closing}, which is reopened already")]
+    ReopenedTwice {
+        /// The later reopening's event.
+        event: EventHash,
+        /// The closing.
+        closing: EventHash,
+    },
 }
 
 impl EventSet {
@@ -245,23 +261,56 @@ impl EventSet {
             .collect()
     }
 
-    /// The last day closed in the books of `owner`, if any.
-    pub fn closed_until(&self, owner: &PartyId) -> Option<Date> {
-        self.closings().into_iter().filter(|(_, c)| c.owner == *owner).map(|(_, c)| c.to).max()
+    /// The reopenings of closings: per closing, the event of its first reopening in the agreed order.
+    pub fn reopenings(&self) -> BTreeMap<EventHash, EventHash> {
+        let mut reopened = BTreeMap::new();
+        for (hash, event) in self.ordered() {
+            if let Payload::PeriodReopened { closing, .. } = &event.payload {
+                reopened.entry(*closing).or_insert(hash);
+            }
+        }
+        reopened
     }
 
-    /// Checks the closings: each was decided on the events before it, and nothing written after it falls into the
-    /// period it closed for its owner.
+    /// The last day closed in the books of `owner`, if any: of the closings not reopened.
+    pub fn closed_until(&self, owner: &PartyId) -> Option<Date> {
+        let reopened = self.reopenings();
+        self.closings()
+            .into_iter()
+            .filter(|(hash, c)| c.owner == *owner && !reopened.contains_key(hash))
+            .map(|(_, c)| c.to)
+            .max()
+    }
+
+    /// Checks the closings: each was decided on the events before it, and nothing written after it – until it is
+    /// reopened – falls into the period it closed for its owner; each reopening names a closing not reopened before.
     pub fn review_closings(&self) -> Vec<ClosingProblem> {
         let ordered = self.ordered();
         let mut problems = Vec::new();
+        let mut reopened: BTreeMap<EventHash, EventHash> = BTreeMap::new();
+        for (position, (hash, event)) in ordered.iter().enumerate() {
+            let Payload::PeriodReopened { closing, .. } = &event.payload else { continue };
+            let is_closing = ordered[..position]
+                .iter()
+                .any(|(h, e)| h == closing && matches!(e.payload, Payload::PeriodClosed { .. }));
+            if !is_closing {
+                problems.push(ClosingProblem::UnknownClosing { event: *hash, closing: *closing });
+            } else if reopened.contains_key(closing) {
+                problems.push(ClosingProblem::ReopenedTwice { event: *hash, closing: *closing });
+            } else {
+                reopened.insert(*closing, *hash);
+            }
+        }
+        let position_of: BTreeMap<EventHash, usize> =
+            ordered.iter().enumerate().map(|(position, (hash, _))| (*hash, position)).collect();
         for (position, (closing_hash, event)) in ordered.iter().enumerate() {
             let Payload::PeriodClosed { closing } = &event.payload else { continue };
+            let end = reopened.get(closing_hash).map_or(ordered.len(), |reopening| position_of[reopening]);
             let before: Vec<EventHash> = ordered[..position].iter().map(|(hash, _)| *hash).collect();
             if crate::event::state_of(&before) != closing.state {
                 problems.push(ClosingProblem::StateMismatch { closing: *closing_hash });
             }
-            for (hash, later) in &ordered[position + 1..] {
+            for (hash, later) in &ordered[position + 1..end] {
                 match &later.payload {
                     Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. }
                         if booking.date <= closing.to && booking.postings.iter().any(|p| p.owner == closing.owner) =>
@@ -600,6 +649,43 @@ mod tests {
                 ClosingProblem::LateConfiguration { event: reconfigured, closing: closed },
             ]
         );
+    }
+
+    #[test]
+    fn a_reopened_period_takes_bookings_again() {
+        let mut writer = Writer::founded("laptop", 1);
+        let closing = |set: &EventSet, to: &str| Closing {
+            owner: party(1),
+            to: to.parse().unwrap(),
+            state: set.state(),
+            software: BTreeMap::new(),
+        };
+        let closed = writer.write(Payload::PeriodClosed { closing: closing(&writer.set, "2026-03-31") });
+        let late = writer.book(booking(1, "2026-03-15", 10, None));
+        let reason = "an invoice of March was missing".to_owned();
+        let reopened = writer.write(Payload::PeriodReopened { closing: closed, reason: reason.clone() });
+        assert_eq!(writer.set.closed_until(&party(1)), None);
+        assert_eq!(writer.set.reopenings(), BTreeMap::from([(closed, reopened)]));
+        // After the reopening, the period takes bookings; before it, a booking was late all the same.
+        writer.book(booking(1, "2026-03-20", 10, None));
+        assert_eq!(writer.set.review_closings(), vec![ClosingProblem::LateBooking { event: late, closing: closed }]);
+        // Closed again, and reopened once more by mistake, or something that is no closing.
+        let again = writer.write(Payload::PeriodClosed { closing: closing(&writer.set, "2026-03-31") });
+        assert_eq!(writer.set.closed_until(&party(1)), Some("2026-03-31".parse().unwrap()));
+        let twice = writer.write(Payload::PeriodReopened { closing: closed, reason: reason.clone() });
+        let wrong = writer.write(Payload::PeriodReopened { closing: late, reason });
+        assert_eq!(
+            writer.set.review_closings(),
+            vec![
+                ClosingProblem::ReopenedTwice { event: twice, closing: closed },
+                ClosingProblem::UnknownClosing { event: wrong, closing: late },
+                ClosingProblem::LateBooking { event: late, closing: closed },
+            ]
+        );
+        assert_eq!(writer.set.closed_until(&party(1)), Some("2026-03-31".parse().unwrap()), "{again}");
+        // The reason is never empty.
+        let event = serde_json::json!({"kind": "period_reopened", "closing": closed.to_string(), "reason": ""});
+        assert!(serde_json::from_value::<Payload>(event).is_err());
     }
 
     #[test]

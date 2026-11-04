@@ -125,6 +125,14 @@ pub enum Payload {
         /// The closing.
         closing: Closing,
     },
+    /// A closing was reopened: the period it closed is open again (spec part 0002).
+    PeriodReopened {
+        /// The event of the closing.
+        closing: EventHash,
+        /// Why it was reopened.
+        #[serde(deserialize_with = "crate::text")]
+        reason: String,
+    },
     /// A filing was derived from the books and is ready to be submitted (spec part 0007).
     FilingPrepared {
         /// The filing.
