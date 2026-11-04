@@ -143,7 +143,7 @@ year. A financial year that begins on another day than the first of a month is O
 | `vat.basis` | `cash` | on consideration received ([§ 20 UStG](https://www.gesetze-im-internet.de/ustg_1980/__20.html)) |
 | `vat.period` | `month`, `quarter`, `year` | advance returns per month or quarter, or none after an exemption by the tax office ([§ 18 Abs. 2 UStG](https://www.gesetze-im-internet.de/ustg_1980/__18.html)) |
 | `vat.extended` | `true` | the permanent extension of deadlines by one month (Dauerfristverlängerung, [§ 46 UStDV](https://www.gesetze-im-internet.de/ustdv_1980/__46.html)) |
-| `region` | `DE-BW` … `DE-TH` | the state whose public holidays move deadlines ([§ 108 Abs. 3 AO](https://www.gesetze-im-internet.de/ao_1977/__108.html)): for returns, the holidays where the tax office sits, after a regulation of the Brandenburg tax administration of 2004 ([BRAVORS](https://bravors.brandenburg.de/verwaltungsvorschriften/feiertagsrecht)) – whether the current AEAO says the same is **OPEN** |
+| `region` | `DE-BW` … `DE-TH` | the state whose public holidays move deadlines ([§ 108 Abs. 3 AO](https://www.gesetze-im-internet.de/ao_1977/__108.html)): for returns, the holidays where the tax office sits, after a regulation of the Brandenburg tax administration of 2004 ([BRAVORS](https://bravors.brandenburg.de/verwaltungsvorschriften/feiertagsrecht)); the AEAO 2026 on § 108 does not say whose holidays apply ([BMF](https://ao.bundesfinanzministerium.de/ao/2026/Abgabenordnung/Dritter-Teil/Erster-Abschnitt/Vierter-Unterabschnitt/Paragraf-108/inhalt.html)) |
 
 An implementation MUST report, and MUST NOT silently resolve:
 
