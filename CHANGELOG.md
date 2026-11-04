@@ -2,6 +2,17 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.10.0 – 2026-11-04
+
+Short financial years.
+
+- [0008 Parties](spec/0008-parties.md): the financial year that holds a day – twelve months from the first day of the
+  month `year_start`; where a configuration changes `year_start`, the year before ends the day before it and the
+  year after begins on it, as § 8b EStDV allows. A financial year that begins within a month stays OPEN.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the result for the year follows short financial years.
+- Library: `EventSet::financial_year`, `Date::previous`; `EventSet::financial_year_start` and the result on a
+  balance sheet follow short years.
+
 ## 0.9.0 – 2026-11-04
 
 Reopening a closed period.

@@ -10,7 +10,7 @@
 **An open protocol for accounting data in Europe** – one model for bookings, receipts, invoices, reports and
 filings that the existing European formats translate into and out of.
 
-> **Status:** version 0.9, a draft: base types, events and synchronisation, the canonical encoding, the harmonised
+> **Status:** version 0.10, a draft: base types, events and synchronisation, the canonical encoding, the harmonised
 > chart of accounts with the French PCG and the German SKR 03 and SKR 04, documents and e-invoices after EN 16931,
 > bank statements, end-to-end encryption, parties, reports – HGB, VAT return, Anlage EÜR, E-Bilanz –, filings with
 > the interface to adapters, and the GoBD export are specified and implemented. Everything may change before 1.0.

@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.8, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
+Version 0.10, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -31,8 +31,8 @@ reopening booking is needed between years.
 into equity. A report on a date – a balance sheet – shows it on two accounts of equity the chart names: the balances
 of income and expense accounts booked in the owner's **financial year** that holds the date on the **result for the
 year**, those booked before it on the **retained earnings**. The financial year is the one of the owner's
-configuration that applies on the date (`year_start`, part 0008), the calendar year without one; a short financial
-year, when `year_start` changes, is OPEN. What becomes of a result – reserves, a distribution, a sole trader's
+configuration that applies on the date (`year_start`, part 0008), the calendar year without one, shorter where
+`year_start` changes (part 0008). What becomes of a result – reserves, a distribution, a sole trader's
 capital – is an ordinary booking from the retained earnings to the account it goes to; how a balance sheet shows a
 result already partly appropriated (Bilanzgewinn, [§ 268 Abs. 1 HGB](https://www.gesetze-im-internet.de/hgb/__268.html))
 is OPEN.

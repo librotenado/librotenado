@@ -1,6 +1,6 @@
 # 0008 Parties
 
-Version 0.6, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
+Version 0.10, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
 `organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`,
 `invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`, `Series`).
 
@@ -118,14 +118,21 @@ good; absent when it has not.
 A configuration applies from `from` until the next configuration of the same owner; of two with the same `from`, the
 later in the agreed order of events (part 0002) applies. Codes are the country in lower case, `-`, and 1 to 61
 characters of `a-z`, `0-9` and `-`, like tax codes (part 0001); an implementation keeps a code it does not know but
-does not interpret it. A financial year that begins on another day than the first of a month is OPEN.
+does not interpret it.
+
+**The financial year** that holds a day is twelve months from the latest first day of the month `year_start`, on or
+before it, of the configuration that applies on that day – the calendar year without one. Where a configuration
+changes `year_start`, the financial year is shorter: the year before ends the day before that configuration's
+`from`, the year after begins on it, and full years of the new `year_start` follow. A configuration that keeps
+`year_start` changes no financial year; nor does the first configuration of an owner, whose books may begin within a
+year. A financial year that begins on another day than the first of a month is OPEN.
 
 ### Germany
 
 | Member | Code or value | Meaning |
 |---|---|---|
 | `currency` | `EUR` | the euro ([§ 244 HGB](https://www.gesetze-im-internet.de/hgb/__244.html)) |
-| `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)) |
+| `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)); a change makes a short financial year, which the law allows when an owner moves its regular closing to another day – away from the calendar year only in agreement with the tax office ([§ 8b EStDV](https://www.gesetze-im-internet.de/estdv_1955/__8b.html), § 4a Abs. 1 Nr. 2 EStG) |
 | `chart` | `de-skr03`, `de-skr04` | DATEV's standard charts SKR 03 and SKR 04 (part 0004) – common, not prescribed |
 | `accounting` | `de-cash-basis` | income over expenses ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html)), reported in the Anlage EÜR |
 | `accounting` | `de-double-entry` | double-entry bookkeeping ([§§ 238 ff. HGB](https://www.gesetze-im-internet.de/hgb/__238.html), [§ 141 AO](https://www.gesetze-im-internet.de/ao_1977/__141.html)), profit by comparing net assets (§ 4 Abs. 1, § 5 EStG) |

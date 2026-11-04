@@ -36,6 +36,16 @@ impl Date {
     pub fn day(self) -> u8 {
         self.day
     }
+
+    /// The day before, or `None` before 0001-01-01.
+    pub fn previous(self) -> Option<Self> {
+        match (self.year, self.month, self.day) {
+            (1, 1, 1) => None,
+            (year, 1, 1) => Some(Date { year: year - 1, month: 12, day: 31 }),
+            (year, month, 1) => Some(Date { year, month: month - 1, day: days_in(year, month - 1) }),
+            (year, month, day) => Some(Date { year, month, day: day - 1 }),
+        }
+    }
 }
 
 fn days_in(year: u16, month: u8) -> u8 {

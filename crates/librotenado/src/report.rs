@@ -351,12 +351,50 @@ impl EventSet {
         Ok(positions)
     }
 
-    /// The first day of the financial year of `owner` that holds `date`: the latest first day of the month
-    /// `year_start` of the configuration that applies on `date` (spec part 0008) – of January without one.
+    /// The first day of the financial year of `owner` that holds `date` (see [`EventSet::financial_year`]).
     pub fn financial_year_start(&self, owner: &PartyId, date: Date) -> Date {
-        let month = self.configuration(owner, date).map_or(1, |configuration| configuration.year_start);
+        self.financial_year(owner, date).0
+    }
+
+    /// The financial year of `owner` that holds `date`, first and last day (spec part 0008): twelve months from the
+    /// first day of the month `year_start` of the configuration that applies on `date` – January without one –,
+    /// shorter where `year_start` changes: the year before a change ends the day before the configuration that
+    /// changes it, the year after it begins on that configuration's `from`.
+    pub fn financial_year(&self, owner: &PartyId, date: Date) -> (Date, Date) {
+        // The configurations of the owner by `from`; of two with the same `from`, the later in the agreed order.
+        let mut by_from: BTreeMap<Date, u8> = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            if let Payload::OwnerConfigured { configuration } = &event.payload
+                && configuration.owner == *owner
+            {
+                by_from.insert(configuration.from, configuration.year_start);
+            }
+        }
+        let month = by_from.range(..=date).next_back().map_or(1, |(_, month)| *month);
         let year = if date.month() >= month { date.year() } else { date.year() - 1 };
-        Date::new(year, month, 1).expect("the first day of a month")
+        let mut start = Date::new(year, month, 1).expect("the first day of a month");
+        let next = Date::new(year + 1, month, 1).expect("the first day of a month");
+        let mut end = next.previous().expect("after the first day of the calendar");
+        // A change of `year_start` on or before `date`, after the start: the year begins with it.
+        let mut previous: Option<u8> = None;
+        for (from, year_start) in by_from.range(..=date) {
+            if previous.is_some_and(|p| p != *year_start) && *from > start {
+                start = *from;
+            }
+            previous = Some(*year_start);
+        }
+        // The next change of `year_start` after `date`, before the year ends: the year ends the day before it.
+        let mut current = month;
+        for (from, year_start) in by_from.range(date..).filter(|(from, _)| **from > date) {
+            if *year_start != current {
+                if *from <= end {
+                    end = from.previous().expect("after the first day of the calendar");
+                }
+                break;
+            }
+            current = *year_start;
+        }
+        (start, end)
     }
 
     /// The date of the latest booking with a posting of `owner`.
@@ -790,5 +828,39 @@ mod tests {
         assert!(gkv.keys().all(|position| position.starts_with("gkv.")));
         assert_eq!(set.financial_year_start(&party(1), "2026-06-30".parse().unwrap()), "2025-07-01".parse().unwrap());
         assert_eq!(set.financial_year_start(&party(2), "2026-06-30".parse().unwrap()), "2026-01-01".parse().unwrap());
+    }
+
+    /// A change of `year_start` makes a short financial year (§ 8b Satz 2 Nr. 2 EStDV).
+    #[test]
+    fn a_change_of_the_financial_year_makes_a_short_one() {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let date = |d: &str| -> Date { d.parse().unwrap() };
+        for (ms, (from, year_start)) in
+            [("2025-01-01", 1), ("2026-03-01", 1), ("2026-07-01", 7)].into_iter().enumerate()
+        {
+            let configuration = serde_json::from_value(serde_json::json!({
+                "owner": party(1).to_string(), "from": from, "currency": "EUR", "year_start": year_start,
+            }))
+            .unwrap();
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            set.insert(Event {
+                time: clock.now(ms as u64),
+                seq,
+                prev,
+                payload: Payload::OwnerConfigured { configuration },
+            });
+        }
+        let year = |d: &str| set.financial_year(&party(1), date(d));
+        assert_eq!(year("2025-12-31"), (date("2025-01-01"), date("2025-12-31")));
+        // A configuration that keeps `year_start` changes nothing; the change ends the year early.
+        assert_eq!(year("2026-04-15"), (date("2026-01-01"), date("2026-06-30")), "short");
+        assert_eq!(year("2026-07-01"), (date("2026-07-01"), date("2027-06-30")));
+        assert_eq!(year("2027-06-30"), (date("2026-07-01"), date("2027-06-30")));
+        assert_eq!(year("2027-07-01"), (date("2027-07-01"), date("2028-06-30")));
+        // Without a configuration, the calendar year; before the first one, too.
+        assert_eq!(set.financial_year(&party(2), date("2026-02-28")), (date("2026-01-01"), date("2026-12-31")));
+        assert_eq!(date("2024-03-01").previous(), Some(date("2024-02-29")));
+        assert_eq!(date("0001-01-01").previous(), None);
     }
 }
