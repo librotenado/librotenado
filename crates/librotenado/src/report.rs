@@ -299,6 +299,11 @@ impl EventSet {
     /// The positions of a report computed from accounts – a balance sheet, a profit and loss account – for `owner`
     /// on `until`: per position, the sum of the balances of the accounts that fall into it, in base units of the
     /// owner's functional currency, debit positive. Accounts without a position are left out.
+    ///
+    /// Income and expense accounts without a position of their own – on a balance sheet – show their result on the
+    /// chart's result accounts (spec part 0004): what was booked in the financial year that holds `until` on the
+    /// result for the year, what was booked before it on the retained earnings. Without `until`, the year is the
+    /// one of the owner's latest booking.
     pub fn account_report(
         &self,
         mapping: &ReportMapping,
@@ -307,17 +312,64 @@ impl EventSet {
         until: Option<Date>,
     ) -> Result<BTreeMap<String, i128>, BalanceError> {
         let parents = self.account_parents(chart);
+        let kinds = self.account_kinds(chart);
+        let is_result =
+            |account: &AccountId| matches!(kinds.get(account), Some(AccountKind::Income | AccountKind::Expense));
         let mut positions: BTreeMap<String, i128> = BTreeMap::new();
+        let mut add = |account: &AccountId, units: i128| -> Result<bool, BalanceError> {
+            let Some(position) = mapping.position(account, &parents, units < 0) else { return Ok(false) };
+            let sum = positions.entry(position.to_owned()).or_default();
+            *sum = sum.checked_add(units).ok_or(BalanceError::Overflow)?;
+            Ok(true)
+        };
+        let mut result: i128 = 0;
         for (party, account, _, units) in self.functional_balances(until)?.iter() {
             if party != owner {
                 continue;
             }
-            if let Some(position) = mapping.position(account, &parents, units < 0) {
-                let sum = positions.entry(position.to_owned()).or_default();
-                *sum = sum.checked_add(units).ok_or(BalanceError::Overflow)?;
+            if !add(account, units)? && is_result(account) {
+                result = result.checked_add(units).ok_or(BalanceError::Overflow)?;
+            }
+        }
+        let date = until.or_else(|| self.latest_booking(owner));
+        if let (Some((current, earlier)), Some(date), true) = (chart.result_accounts(), date, result != 0) {
+            let start = self.financial_year_start(owner, date);
+            let mut before: i128 = 0;
+            for (party, account, _, units) in self.functional_balances_before(start)?.iter() {
+                if party == owner && is_result(account) && mapping.position(account, &parents, units < 0).is_none() {
+                    before = before.checked_add(units).ok_or(BalanceError::Overflow)?;
+                }
+            }
+            let this_year = result.checked_sub(before).ok_or(BalanceError::Overflow)?;
+            if before != 0 {
+                add(&earlier, before)?;
+            }
+            if this_year != 0 {
+                add(&current, this_year)?;
             }
         }
         Ok(positions)
+    }
+
+    /// The first day of the financial year of `owner` that holds `date`: the latest first day of the month
+    /// `year_start` of the configuration that applies on `date` (spec part 0008) – of January without one.
+    pub fn financial_year_start(&self, owner: &PartyId, date: Date) -> Date {
+        let month = self.configuration(owner, date).map_or(1, |configuration| configuration.year_start);
+        let year = if date.month() >= month { date.year() } else { date.year() - 1 };
+        Date::new(year, month, 1).expect("the first day of a month")
+    }
+
+    /// The date of the latest booking with a posting of `owner`.
+    fn latest_booking(&self, owner: &PartyId) -> Option<Date> {
+        self.ordered()
+            .into_iter()
+            .filter_map(|(_, event)| match &event.payload {
+                Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => Some(booking),
+                _ => None,
+            })
+            .filter(|booking| booking.postings.iter().any(|posting| posting.owner == *owner))
+            .map(|booking| booking.date)
+            .max()
     }
 }
 
@@ -680,5 +732,63 @@ mod tests {
         assert_eq!(mapping.position(&pcg.accounts["41"], &parents, false), Some("aktiv.B.II.1"));
         mapping.accounts.insert(pcg.accounts["4111"].clone(), "aktiv.B.II.4".into());
         assert_eq!(mapping.position(&pcg.accounts["4111"], &parents, false), Some("aktiv.B.II.4"));
+    }
+
+    /// A balance sheet shows the result of the year and of earlier years on equity, without a closing booking.
+    #[test]
+    fn a_balance_sheet_shows_the_result_on_equity() {
+        let dated = |date: &str, postings: Vec<Posting>| Booking {
+            date: date.parse().unwrap(),
+            text: "test".into(),
+            postings,
+            documents: vec![],
+            entries: vec![],
+            transaction: None,
+        };
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let mut write = |set: &mut EventSet, ms: u64, payload: Payload| {
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            set.insert(Event { time: clock.now(ms), seq, prev, payload });
+        };
+        // The financial year begins on 1 July.
+        let configuration = serde_json::from_value(serde_json::json!({
+            "owner": party(1).to_string(), "from": "2025-01-01", "currency": "EUR", "year_start": 7,
+        }))
+        .unwrap();
+        write(&mut set, 0, Payload::OwnerConfigured { configuration });
+        // Sales of 1,000 in the year 2025/26, costs of 300 and sales of 500 in 2026/27.
+        for (ms, booking) in [
+            dated("2026-05-10", vec![posting("5121", 100_000, None), posting("706", -100_000, None)]),
+            dated("2026-07-01", vec![posting("6064", 30_000, None), posting("5121", -30_000, None)]),
+            dated("2026-09-30", vec![posting("5121", 50_000, None), posting("706", -50_000, None)]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            write(&mut set, ms as u64 + 1, Payload::BookingRecorded { booking });
+        }
+        let chart = Chart::v0_1();
+        let bs = ReportMapping::de_hgb_266_2026();
+        let report = set.account_report(&bs, &chart, &party(1), Some("2026-12-31".parse().unwrap())).unwrap();
+        assert_eq!(report.get("aktiv.B.IV"), Some(&120_000));
+        assert_eq!(report.get("passiv.A.IV"), Some(&-100_000), "retained: the year 2025/26");
+        assert_eq!(report.get("passiv.A.V"), Some(&-20_000), "the result of 2026/27 so far");
+        assert_eq!(report.values().sum::<i128>(), 0, "the balance sheet balances");
+        // In the earlier year, all of it is the result for the year.
+        let report = set.account_report(&bs, &chart, &party(1), Some("2026-06-30".parse().unwrap())).unwrap();
+        assert_eq!(report.get("passiv.A.IV"), None);
+        assert_eq!(report.get("passiv.A.V"), Some(&-100_000));
+        // Without a date, the year of the latest booking.
+        let report = set.account_report(&bs, &chart, &party(1), None).unwrap();
+        assert_eq!(report.get("passiv.A.V"), Some(&-20_000));
+        // The same on the E-Bilanz, and the profit and loss account keeps its own positions.
+        let report = set.account_report(&ReportMapping::de_ebilanz_bs_6_10(), &chart, &party(1), None).unwrap();
+        assert_eq!(report.get("bs.eqLiab.equity.netIncome"), Some(&-20_000));
+        assert_eq!(report.get("bs.eqLiab.equity.retainedEarnings"), Some(&-100_000));
+        let gkv = set.account_report(&ReportMapping::de_hgb_275_gkv_2026(), &chart, &party(1), None).unwrap();
+        assert!(gkv.keys().all(|position| position.starts_with("gkv.")));
+        assert_eq!(set.financial_year_start(&party(1), "2026-06-30".parse().unwrap()), "2025-07-01".parse().unwrap());
+        assert_eq!(set.financial_year_start(&party(2), "2026-06-30".parse().unwrap()), "2026-01-01".parse().unwrap());
     }
 }

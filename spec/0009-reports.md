@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.4, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.8, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
@@ -43,6 +43,8 @@ A report mapping is a root object of type `report_mapping`:
   for one owner (part 0008), in base units of the owner's functional currency – postings in foreign currency by their
   converted amount (part 0001) –, debit positive. Presenting it – signs, totals, subtotals – is a matter of
   the report.
+- **The result on a balance sheet.** Income and expense accounts that fall into no position show their balances on
+  the result for the year and the retained earnings (part 0004), and fall into the positions of those accounts.
 
 ### Reports over a period
 

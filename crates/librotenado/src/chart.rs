@@ -72,6 +72,25 @@ impl Chart {
     pub fn opening_balances_v0_1() -> AccountId {
         "01a182f7-2145-7351-b0f0-548a57054ddf".parse().expect("an account identity")
     }
+
+    /// The result for the year of the chart 0.1, equity: where a balance sheet shows the result of the income and
+    /// expense accounts in the current financial year (part 0004).
+    pub fn result_for_the_year_v0_1() -> AccountId {
+        "01a182f7-1dfc-7fba-a97f-f996475820f8".parse().expect("an account identity")
+    }
+
+    /// The retained earnings of the chart 0.1, equity: where a balance sheet shows the result of the income and
+    /// expense accounts in earlier financial years (part 0004).
+    pub fn retained_earnings_v0_1() -> AccountId {
+        "01a182f7-1df9-71db-baf7-929b5c415baf".parse().expect("an account identity")
+    }
+
+    /// The accounts that show the result on a balance sheet – for the current financial year and for earlier
+    /// ones –, for the charts that name them: of the chart 0.1 (part 0004).
+    pub fn result_accounts(&self) -> Option<(AccountId, AccountId)> {
+        (self.name == "librotenado" && self.version == "0.1")
+            .then(|| (Chart::result_for_the_year_v0_1(), Chart::retained_earnings_v0_1()))
+    }
 }
 
 impl ChartTranslation {

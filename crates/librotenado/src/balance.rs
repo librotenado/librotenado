@@ -53,23 +53,32 @@ impl Balances {
 impl EventSet {
     /// The balances of all bookings – recorded and reversing – dated on or before `until`, or of all bookings.
     pub fn balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
-        self.sum_postings(until, |posting| &posting.amount)
+        self.sum_postings(|date| until.is_none_or(|until| date <= until), |posting| &posting.amount)
     }
 
     /// The balances in the functional currency of each owner: amounts converted where a posting has an exchange
     /// (spec part 0001) – what statements in one currency are drawn from.
     pub fn functional_balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
-        self.sum_postings(until, Posting::functional)
+        self.sum_postings(|date| until.is_none_or(|until| date <= until), Posting::functional)
     }
 
-    fn sum_postings(&self, until: Option<Date>, amount: fn(&Posting) -> &Money) -> Result<Balances, BalanceError> {
+    /// The functional balances of the bookings dated before `date`.
+    pub(crate) fn functional_balances_before(&self, date: Date) -> Result<Balances, BalanceError> {
+        self.sum_postings(|booked| booked < date, Posting::functional)
+    }
+
+    fn sum_postings(
+        &self,
+        keep: impl Fn(Date) -> bool,
+        amount: fn(&Posting) -> &Money,
+    ) -> Result<Balances, BalanceError> {
         let mut sums: BTreeMap<(PartyId, AccountId, Currency), i128> = BTreeMap::new();
         for (_, event) in self.ordered() {
             let booking = match &event.payload {
                 Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
                 _ => continue,
             };
-            if until.is_some_and(|until| booking.date > until) {
+            if !keep(booking.date) {
                 continue;
             }
             for posting in &booking.postings {

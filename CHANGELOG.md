@@ -2,6 +2,20 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.8.0 – 2026-11-04
+
+How the result of a year reaches equity on a balance sheet – without a closing booking.
+
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): income and expense accounts carry on between years; a
+  balance sheet shows their balances in the owner's financial year on the result for the year, those before it on
+  the retained earnings – in the chart 0.1 the accounts of PCG 12 and 11, § 266 Abs. 3 A. V. and A. IV. HGB. What
+  becomes of a result is an ordinary booking from the retained earnings. A short financial year and the
+  Bilanzgewinn (§ 268 Abs. 1 HGB) are OPEN.
+- [0009 Reports](spec/0009-reports.md): income and expense accounts without a position fall into the positions of
+  those two accounts. A balance sheet now balances, also as a filing (E-Bilanz).
+- Library: `EventSet::account_report` shows the result on equity; `EventSet::financial_year_start`,
+  `Chart::result_accounts`, `Chart::result_for_the_year_v0_1`, `Chart::retained_earnings_v0_1`.
+
 ## 0.7.3 – 2026-10-31
 
 No change to the protocol or the library's interface.

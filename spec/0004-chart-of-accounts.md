@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.4, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
+Version 0.8, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -25,7 +25,17 @@ opening and closing balance sheet – and have no normal side.
 booked once, dated that day, against the opening balance sheet (`01a182f7-2145-7351-b0f0-548a57054ddf` in the chart
 0.1), a memo account: so they count in balances but in no result and no report over a period. Balances are the sums
 of all bookings up to a date (part 0001), so they carry on from one year to the next by themselves; no closing and
-reopening booking is needed between years. How the result of a year moves into equity on a balance sheet is **OPEN**.
+reopening booking is needed between years.
+
+**The result** stays on the income and expense accounts, which carry on like all others; no closing booking moves it
+into equity. A report on a date – a balance sheet – shows it on two accounts of equity the chart names: the balances
+of income and expense accounts booked in the owner's **financial year** that holds the date on the **result for the
+year**, those booked before it on the **retained earnings**. The financial year is the one of the owner's
+configuration that applies on the date (`year_start`, part 0008), the calendar year without one; a short financial
+year, when `year_start` changes, is OPEN. What becomes of a result – reserves, a distribution, a sole trader's
+capital – is an ordinary booking from the retained earnings to the account it goes to; how a balance sheet shows a
+result already partly appropriated (Bilanzgewinn, [§ 268 Abs. 1 HGB](https://www.gesetze-im-internet.de/hgb/__268.html))
+is OPEN.
 
 Names are not part of an account, as they differ by language: translation data names an account by its `id`. The
 identity carries no meaning – no path, no name – so moving an account in the hierarchy or renaming it changes
@@ -86,6 +96,9 @@ articles 1121-1 and 1231-80 to 1231-89):
   kind refine a harmonised group of their own, under the root of their kind: 20 such groups.
 - Contra accounts – depreciation and impairment, rebates obtained or granted – keep the kind of what they correct
   and have the opposite balance.
+- **The result** (above) is shown on the result for the year `01a182f7-1dfc-7fba-a97f-f996475820f8` (PCG 12) and
+  on the retained earnings `01a182f7-1df9-71db-baf7-929b5c415baf` (PCG 11) – § 266 Abs. 3 A. V. and A. IV. HGB
+  ([§ 266 HGB](https://www.gesetze-im-internet.de/hgb/__266.html)).
 
 Each further national chart is translated against this chart, and the chart grows where it distinguishes more
 finely. The English and German names are the project's translation; the German ones follow the terms of the HGB and
