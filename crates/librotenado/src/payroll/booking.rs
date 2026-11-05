@@ -26,7 +26,7 @@ mod account {
 }
 
 /// The figures the employer pays on top of the wages, to the insurers.
-const EMPLOYER: [&str; 10] = [
+const EMPLOYER: [&str; 11] = [
     "health_employer",
     "health_additional_employer",
     "care_employer",
@@ -37,6 +37,7 @@ const EMPLOYER: [&str; 10] = [
     "u1",
     "u2",
     "u3",
+    "accident",
 ];
 
 /// What the employee pays to the insurers out of the wages.
@@ -57,12 +58,14 @@ impl Payslip {
         let employer: i128 = EMPLOYER.iter().map(|n| figure(n)).sum::<i128>() + figure("private_subsidy");
         let contributions: i128 =
             EMPLOYER.iter().chain(&EMPLOYEE).map(|n| figure(n)).sum::<i128>() + figure("flat_tax");
-        let taxes = figure("wage_tax") + figure("solidarity") + figure("church");
+        // The flat taxes: 2 % to the Minijob-Zentrale with the contributions, 25 % and its surcharge to the tax office.
+        let flat_office = figure("flat_wage_tax") + figure("flat_solidarity");
+        let taxes = figure("wage_tax") + figure("solidarity") + figure("church") + flat_office;
         let clearing = items(&[PayItemKind::InKind, PayItemKind::Deduction]);
         let lines = [
             (if minor { account::MINOR_WAGES } else { account::WAGES }, figure("gross")),
             (account::SOCIAL, employer),
-            (account::FLAT_TAX, figure("flat_tax")),
+            (account::FLAT_TAX, figure("flat_tax") + flat_office),
             (account::TAX_LIABILITY, -taxes),
             (account::SOCIAL_LIABILITY, -contributions),
             (account::NET_LIABILITY, -figure("payout")),
@@ -75,6 +78,34 @@ impl Payslip {
                 owner: owner.clone(),
                 account: account.parse::<AccountId>().expect("an account of the chart"),
                 amount: Money::new(units, currency.clone()).expect("within range"),
+                note: None,
+                tax: None,
+                exchange: None,
+            })
+            .collect()
+    }
+
+    /// The postings of a correction (spec part 0013): its own postings less those of the payslip it replaces, per
+    /// account; accounts whose difference is zero are left out.
+    pub fn correction_postings(&self, replaced: &Payslip, owner: &PartyId, minor: bool) -> Vec<Posting> {
+        let mut sums: Vec<(AccountId, Money)> = Vec::new();
+        let new = self.postings(owner, minor);
+        let old = replaced.postings(owner, minor).into_iter().map(|p| Posting { amount: -p.amount, ..p });
+        for posting in new.into_iter().chain(old) {
+            match sums.iter_mut().find(|(account, _)| *account == posting.account) {
+                Some((_, sum)) => {
+                    *sum = Money::new(sum.base_units() + posting.amount.base_units(), sum.currency().clone())
+                        .expect("within range");
+                }
+                None => sums.push((posting.account.clone(), posting.amount.clone())),
+            }
+        }
+        sums.into_iter()
+            .filter(|(_, sum)| sum.base_units() != 0)
+            .map(|(account, amount)| Posting {
+                owner: owner.clone(),
+                account,
+                amount,
                 note: None,
                 tax: None,
                 exchange: None,
@@ -100,6 +131,7 @@ mod tests {
             from,
             to,
             paid: to,
+            replaces: None,
             items,
             figures,
         };

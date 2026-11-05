@@ -54,7 +54,8 @@ pub struct ProfitTaxFacts {
     pub income_losses: i128,
     /// Trade tax losses carried forward (Fehlbeträge, § 10a GewStG), in base units.
     pub trade_losses: i128,
-    /// The reduction for business land (§ 9 Nr. 1 GewStG), in base units.
+    /// A reduction for business land stated beside the books, in base units – the extended reduction of § 9 Nr. 1
+    /// Satz 2 GewStG; the land tax booked as an expense (Satz 1, from 2025) comes from the accounts `land-tax`.
     pub land_reduction: i128,
     /// The sum of turnover and wages of the year, for the limit of donations of 4 per mille (§ 9 Abs. 1 Nr. 2 KStG,
     /// § 9 Nr. 5 GewStG); none to apply the limit of 20 % alone.
@@ -113,7 +114,7 @@ pub struct TradeTax {
     pub partnership_losses: i128,
     /// Donations added back (§ 8 Nr. 9).
     pub donations_added: i128,
-    /// The reduction for business land (§ 9 Nr. 1).
+    /// The reduction for business land (§ 9 Nr. 1): the land tax booked, and what is stated beside it.
     pub land: i128,
     /// Shares of profits of partnerships deducted (§ 9 Nr. 2).
     pub partnership_profits: i128,
@@ -136,6 +137,29 @@ pub struct TradeTax {
 }
 
 impl ProfitTax {
+    /// The lines of a person's profit in the forms of the income tax return (spec part 0012), by their Kennzahlen of
+    /// the forms of 2025 (Formulare 2025AnlG231 and 2025AnlS), in base units: of a trade the Anlage G – Kz 10, the
+    /// profit of the sole proprietorship; Kz 64, the base amount of trade tax, and Kz 66, the trade tax to pay, for the
+    /// reduction of § 35 EStG –, of a freelancer the Anlage S – Kz 100. Names under `de-anlage-g/<Kz>` and
+    /// `de-anlage-s/<Kz>`. Zero lines are left out.
+    pub fn income_tax_lines(&self) -> (&'static str, BTreeMap<String, i128>) {
+        let mut lines = BTreeMap::new();
+        let form = match &self.trade {
+            Some(trade) => {
+                lines.insert("10".to_owned(), self.income);
+                lines.insert("64".to_owned(), trade.base);
+                lines.insert("66".to_owned(), trade.tax);
+                "de-anlage-g"
+            }
+            None => {
+                lines.insert("100".to_owned(), self.income);
+                "de-anlage-s"
+            }
+        };
+        lines.retain(|_, units| *units != 0);
+        (form, lines)
+    }
+
     /// The figures of corporation tax as fields of the report `de-kst` (names in the translation data under
     /// `de-kst/<field>`), in base units.
     pub fn fields(&self) -> BTreeMap<String, i128> {
@@ -267,6 +291,7 @@ impl EventSet {
         let mut tax = ProfitTax::default();
         let mut trade = TradeTax::default();
         let mut dividends_exempt = 0;
+        let mut land_tax = 0;
         for (account, units) in &contributions {
             let units = *units;
             tax.result += units;
@@ -307,6 +332,7 @@ impl EventSet {
                 Some("licence") => *trade.financing.entry('f').or_default() += part(expense, 1, 4),
                 Some("partnership-loss") => trade.partnership_losses += expense,
                 Some("partnership-share") => trade.partnership_profits += units,
+                Some("land-tax") => land_tax += expense,
                 _ => {}
             }
         }
@@ -335,7 +361,8 @@ impl EventSet {
             trade.financing_addition = part((financing - 200_000 * EURO).max(0), 1, 4);
             trade.dividends = dividends_exempt;
             trade.donations_added = tax.donations_deducted;
-            trade.land = facts.land_reduction;
+            // § 9 Nr. 1 Satz 1 GewStG from 2025: the land tax booked as an expense; with what is stated beside it.
+            trade.land = land_tax.max(0) + facts.land_reduction;
             let with_additions = trade.profit
                 + trade.financing_addition
                 + trade.dividends
@@ -518,5 +545,31 @@ pub(crate) mod tests {
         assert_eq!(usable_losses(500_000 * E, 100 * E, 70), 100 * E);
         assert_eq!(usable_losses(-5, 100, 70), 0);
         assert_eq!([2026, 2027, 2028, 2031, 2032, 2040].map(corporation_tax_rate), [150, 150, 140, 110, 100, 100]);
+    }
+
+    /// Land tax booked on SKR 03 2375 reduces the trade income from 2025 (§ 9 Nr. 1 Satz 1 GewStG).
+    #[test]
+    fn land_tax_reduces_the_trade_income() {
+        let set = books(&[("8400", -100_000 * E), ("2375", 2_000 * E)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let tax = set.profit_tax(&Chart::v0_1(), &party(1), from, to, &facts(TaxSubject::Corporation)).unwrap();
+        let trade = tax.trade.unwrap();
+        assert_eq!(trade.land, 2_000 * E);
+        assert_eq!(trade.trade_income, tax.income - 2_000 * E);
+    }
+
+    /// A trade fills the Anlage G with its profit and trade tax, a freelancer the Anlage S.
+    #[test]
+    fn the_lines_of_the_income_tax_forms() {
+        let set = books(&[("8400", -100_000 * E)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let tax = set.profit_tax(&Chart::v0_1(), &party(1), from, to, &facts(TaxSubject::Individual)).unwrap();
+        let (form, lines) = tax.income_tax_lines();
+        assert_eq!(form, "de-anlage-g");
+        let trade = tax.trade.clone().unwrap();
+        assert_eq!((lines["10"], lines["64"], lines["66"]), (100_000 * E, trade.base, trade.tax));
+        let freelancer = ProfitTaxFacts { multiplier: None, ..facts(TaxSubject::Individual) };
+        let tax = set.profit_tax(&Chart::v0_1(), &party(1), from, to, &freelancer).unwrap();
+        assert_eq!(tax.income_tax_lines(), ("de-anlage-s", [("100".to_owned(), 100_000 * E)].into()));
     }
 }

@@ -6,6 +6,7 @@ mod booking;
 mod dec;
 mod employment;
 mod figures;
+mod pap2025;
 mod pap2026;
 mod register;
 mod reports;

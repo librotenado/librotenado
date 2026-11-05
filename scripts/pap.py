@@ -8,7 +8,10 @@
 #   scripts/pap.py cases <Lohnsteuer2026.xml> [count]   > crates/librotenado/tests/data/de-lst-<year>.json
 # The interpreter and the Rust code share only the parser; the arithmetic is written twice. pap2026.rs and
 # de-lst-2026.json come from Lohnsteuer2026.xml version 1.0 (Stand 2025-10-23), SHA-256
-# 63d8981646d139eba2f4dd990c13b43c4fb3883b402a5a40cddf253aa7aa96b4.
+# 63d8981646d139eba2f4dd990c13b43c4fb3883b402a5a40cddf253aa7aa96b4; pap2025.rs and de-lst-2025.json from
+# Lohnsteuer2025.xml version 1.0 (Stand 2025-09-17), SHA-256
+# 878ea4a0a1e0bb7122e44b02fe7f2e1d70b605768a2b42ec84f895365f4fb7e1. Both cases files were also checked against the
+# BMF's external interface for programme tests (bmf-steuerrechner.de/interface/einganginterface.xhtml).
 import decimal
 import json
 import random
@@ -113,6 +116,13 @@ class Parser:
             node = self.expr()
             self.take(")")
             return node
+        if value == "new":
+            # `new BigDecimal(x)`, as `BigDecimal.valueOf(x)` for the integers and decimals the PAP gives it.
+            self.take("BigDecimal")
+            self.take("(")
+            arg = self.expr()
+            self.take(")")
+            return ("valueOf", arg)
         if value == "BigDecimal":
             self.take(".")
             name = self.take()[1]
@@ -310,7 +320,7 @@ class Rust:
         value = self.pap.defaults[name]
         if self.pap.types[name] == "int":
             return str(int(float(value)))
-        if value.startswith("BigDecimal"):
+        if value.startswith(("BigDecimal", "new ")):
             return self.expr(parse_expr(value))
         return self.literal(value if "." in value else value)
 
@@ -370,7 +380,7 @@ class Interpreter:
             if t == "int":
                 self.v[name] = int(float(d))
             else:
-                self.v[name] = self.eval(parse_expr(d)) if d.startswith("BigDecimal") else D(d)
+                self.v[name] = self.eval(parse_expr(d)) if d.startswith(("BigDecimal", "new ")) else D(d)
         for name, value in inputs.items():
             self.v[name] = value if pap.types[name] == "int" else D(value)
         self.c = {}
@@ -510,7 +520,7 @@ def cases(pap, count):
     rng = random.Random(2026)
     out = []
     for _ in range(count):
-        inputs = random_case(rng)
+        inputs = {k: v for k, v in random_case(rng).items() if k in pap.inputs}
         run = Interpreter(pap, inputs)
         run.run()
         out.append(

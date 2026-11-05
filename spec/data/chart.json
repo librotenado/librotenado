@@ -619,7 +619,7 @@
   {"id": "01a182f7-2043-79a7-887f-ecbb1ea4128e", "kind": "expense", "parent": "01a182f7-2037-7bb7-8fd8-9eacd871cc04"},
   {"id": "01a182f7-2044-7f90-9a74-6a57f1e1fd76", "kind": "expense", "parent": "01a182f7-2043-79a7-887f-ecbb1ea4128e"},
   {"id": "01a182f7-2045-78e1-9f11-7519af3b44ff", "kind": "expense", "parent": "01a182f7-2044-7f90-9a74-6a57f1e1fd76"},
-  {"id": "01a182f7-2046-7b0c-bd66-2df6d24cee74", "kind": "expense", "parent": "01a182f7-2044-7f90-9a74-6a57f1e1fd76"},
+  {"id": "01a182f7-2046-7b0c-bd66-2df6d24cee74", "kind": "expense", "parent": "01a182f7-2044-7f90-9a74-6a57f1e1fd76", "attributes": {"trade_tax": "land-tax"}},
   {"id": "01a182f7-2047-7612-b269-c5b519c751f0", "kind": "expense", "parent": "01a182f7-2044-7f90-9a74-6a57f1e1fd76"},
   {"id": "01a182f7-2048-7064-816c-92c130bcb062", "kind": "expense", "parent": "01a182f7-2044-7f90-9a74-6a57f1e1fd76"},
   {"id": "01a182f7-2049-7fb5-a93c-49cd6e87b896", "kind": "expense", "parent": "01a182f7-2043-79a7-887f-ecbb1ea4128e"},

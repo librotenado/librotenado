@@ -2,6 +2,7 @@
 //! The wage tax an employer withholds in Germany (§ 39b EStG), by the Programmablaufplan of the BMF (spec part 0013).
 
 use super::dec::Dec;
+use super::pap2025::Pap2025;
 use super::pap2026::Pap2026;
 
 /// The largest amount, in cents, the wage tax is computed for – far above any wage, so that the arithmetic stays exact.
@@ -141,133 +142,169 @@ fn cents(units: i128) -> Result<Dec, WageTaxError> {
 }
 
 /// The wage tax, solidarity surcharge and base of church tax of a period (§ 39b EStG), by the Programmablaufplan of the
-/// year: 2026 (BMF letter of 23 October 2025, its XML pseudocode); other years are not part of this version.
+/// year: 2025 and 2026 (their XML pseudocode, of 17 September and 23 October 2025); other years are not part of
+/// this version.
 pub fn wage_tax(year: u16, period: PayPeriod, wages: &Wages, facts: &WageTaxFacts) -> Result<WageTax, WageTaxError> {
-    if year != 2026 {
-        return Err(WageTaxError::Year(year));
-    }
     if !(1..=6).contains(&facts.class) {
         return Err(WageTaxError::Class(facts.class));
     }
-    let mut pap = Pap2026 {
-        LZZ: match period {
-            PayPeriod::Year => 1,
-            PayPeriod::Month => 2,
-            PayPeriod::Week => 3,
-            PayPeriod::Day => 4,
-        },
-        STKL: i64::from(facts.class),
-        RE4: cents(wages.current)?,
-        SONSTB: cents(wages.one_off)?,
-        SONSTENT: cents(wages.compensation)?,
-        JRE4: cents(wages.expected_year)?,
-        ZKF: Dec::lit(i128::from(facts.children), 1),
-        R: i64::from(facts.church),
-        JFREIB: cents(facts.allowance.0)?,
-        LZZFREIB: cents(facts.allowance.1)?,
-        JHINZU: cents(facts.addition.0)?,
-        LZZHINZU: cents(facts.addition.1)?,
-        KRV: i64::from(!facts.pension),
-        ALV: i64::from(!facts.unemployment),
-        PVZ: i64::from(facts.childless),
-        PVA: Dec::lit(i128::from(facts.care_reductions.min(4)), 0),
-        PVS: i64::from(facts.saxony),
-        ..Pap2026::default()
-    };
-    if let Some(factor) = facts.factor {
-        pap.af = 1;
-        pap.f = Dec::lit(i128::from(factor), 3);
-    } else {
-        pap.af = 0;
+    match year {
+        2025 => run!(Pap2025, period, wages, facts, |_pap: &mut Pap2025| Ok(())),
+        2026 => run!(Pap2026, period, wages, facts, |pap: &mut Pap2026| -> Result<(), WageTaxError> {
+            // From 2026 the PAP asks for the unemployment insurance and the employer's subsidy to a private
+            // insurance.
+            pap.ALV = i64::from(!facts.unemployment);
+            if let HealthCover::Private { subsidy, .. } = facts.health {
+                pap.PKPVAGZ = cents(subsidy)?;
+            }
+            Ok(())
+        }),
+        _ => Err(WageTaxError::Year(year)),
     }
-    if let Some(from) = facts.age_relief_from {
-        pap.ALTER1 = 1;
-        pap.AJAHR = i64::from(from);
-    }
-    match facts.health {
-        HealthCover::Statutory { additional_rate } => pap.KVZ = Dec::lit(i128::from(additional_rate), 2),
-        HealthCover::Private { premium, subsidy } => {
-            pap.PKV = 1;
-            pap.PKPV = cents(premium)?;
-            pap.PKPVAGZ = cents(subsidy)?;
-        }
-    }
-    pap.run();
-    Ok(WageTax {
-        tax: pap.LSTLZZ.units(0),
-        solidarity: pap.SOLZLZZ.units(0),
-        church_base: pap.BK.units(0),
-        one_off_tax: pap.STS.units(0),
-        one_off_solidarity: pap.SOLZS.units(0),
-        one_off_church_base: pap.BKS.units(0),
-    })
 }
+
+/// Sets the inputs both PAPs share, runs the PAP of the year, and reads its outputs.
+macro_rules! run {
+    ($pap:ident, $period:expr, $wages:expr, $facts:expr, $more:expr) => {{
+        let (period, wages, facts) = ($period, $wages, $facts);
+        let mut pap = $pap {
+            LZZ: match period {
+                PayPeriod::Year => 1,
+                PayPeriod::Month => 2,
+                PayPeriod::Week => 3,
+                PayPeriod::Day => 4,
+            },
+            STKL: i64::from(facts.class),
+            RE4: cents(wages.current)?,
+            SONSTB: cents(wages.one_off)?,
+            SONSTENT: cents(wages.compensation)?,
+            JRE4: cents(wages.expected_year)?,
+            ZKF: Dec::lit(i128::from(facts.children), 1),
+            R: i64::from(facts.church),
+            JFREIB: cents(facts.allowance.0)?,
+            LZZFREIB: cents(facts.allowance.1)?,
+            JHINZU: cents(facts.addition.0)?,
+            LZZHINZU: cents(facts.addition.1)?,
+            KRV: i64::from(!facts.pension),
+            PVZ: i64::from(facts.childless),
+            PVA: Dec::lit(i128::from(facts.care_reductions.min(4)), 0),
+            PVS: i64::from(facts.saxony),
+            ..$pap::default()
+        };
+        if let Some(factor) = facts.factor {
+            pap.af = 1;
+            pap.f = Dec::lit(i128::from(factor), 3);
+        } else {
+            pap.af = 0;
+        }
+        if let Some(from) = facts.age_relief_from {
+            pap.ALTER1 = 1;
+            pap.AJAHR = i64::from(from);
+        }
+        match facts.health {
+            HealthCover::Statutory { additional_rate } => pap.KVZ = Dec::lit(i128::from(additional_rate), 2),
+            HealthCover::Private { premium, .. } => {
+                pap.PKV = 1;
+                pap.PKPV = cents(premium)?;
+            }
+        }
+        ($more)(&mut pap)?;
+        pap.run();
+        Ok(WageTax {
+            tax: pap.LSTLZZ.units(0),
+            solidarity: pap.SOLZLZZ.units(0),
+            church_base: pap.BK.units(0),
+            one_off_tax: pap.STS.units(0),
+            one_off_solidarity: pap.SOLZS.units(0),
+            one_off_church_base: pap.BKS.units(0),
+        })
+    }};
+}
+use run;
 
 #[cfg(test)]
 mod tests {
     use super::super::dec::Round;
     use super::*;
 
-    /// The PAP as generated, against the same PAP run by the interpreter of `scripts/pap.py` on Python's decimals: 600
-    /// cases of every period, class and insurance.
-    #[test]
-    fn the_pap_of_2026_as_interpreted() {
-        let cases: serde_json::Value =
-            serde_json::from_str(include_str!("../../tests/data/payroll/de-lst-2026.json")).unwrap();
-        let dec = |v: &serde_json::Value| -> Dec {
-            let text = v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string());
-            let (whole, frac) = text.split_once('.').unwrap_or((&text, ""));
-            Dec::lit(format!("{whole}{frac}").parse().unwrap(), frac.len() as u32)
-        };
-        for (n, case) in cases.as_array().unwrap().iter().enumerate() {
-            let mut pap = Pap2026::default();
-            for (name, value) in case["inputs"].as_object().unwrap() {
-                let int = || value.as_i64().unwrap();
-                match name.as_str() {
-                    "LZZ" => pap.LZZ = int(),
-                    "STKL" => pap.STKL = int(),
-                    "R" => pap.R = int(),
-                    "PKV" => pap.PKV = int(),
-                    "PVZ" => pap.PVZ = int(),
-                    "PVS" => pap.PVS = int(),
-                    "KRV" => pap.KRV = int(),
-                    "ALV" => pap.ALV = int(),
-                    "af" => pap.af = int(),
-                    "ALTER1" => pap.ALTER1 = int(),
-                    "AJAHR" => pap.AJAHR = int(),
-                    "VJAHR" => pap.VJAHR = int(),
-                    "ZMVB" => pap.ZMVB = int(),
-                    "RE4" => pap.RE4 = dec(value),
-                    "ZKF" => pap.ZKF = dec(value),
-                    "KVZ" => pap.KVZ = dec(value),
-                    "PVA" => pap.PVA = dec(value),
-                    "PKPV" => pap.PKPV = dec(value),
-                    "PKPVAGZ" => pap.PKPVAGZ = dec(value),
-                    "f" => pap.f = dec(value),
-                    "LZZFREIB" => pap.LZZFREIB = dec(value),
-                    "LZZHINZU" => pap.LZZHINZU = dec(value),
-                    "VBEZ" => pap.VBEZ = dec(value),
-                    "VBEZM" => pap.VBEZM = dec(value),
-                    "JRE4" => pap.JRE4 = dec(value),
-                    "SONSTB" => pap.SONSTB = dec(value),
-                    "SONSTENT" => pap.SONSTENT = dec(value),
-                    "JFREIB" => pap.JFREIB = dec(value),
-                    other => panic!("input {other}"),
+    /// Runs the cases of a year on the generated PAP and compares its outputs with those of the interpreter.
+    macro_rules! check {
+        ($pap:ident, $file:literal, [$($optional:ident),*]) => {{
+            let cases: serde_json::Value = serde_json::from_str(include_str!($file)).unwrap();
+            let dec = |v: &serde_json::Value| -> Dec {
+                let text = v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string());
+                let (whole, frac) = text.split_once('.').unwrap_or((&text, ""));
+                Dec::lit(format!("{whole}{frac}").parse().unwrap(), frac.len() as u32)
+            };
+            for (n, case) in cases.as_array().unwrap().iter().enumerate() {
+                let mut pap = $pap::default();
+                for (name, value) in case["inputs"].as_object().unwrap() {
+                    let int = || value.as_i64().unwrap();
+                    match name.as_str() {
+                        "LZZ" => pap.LZZ = int(),
+                        "STKL" => pap.STKL = int(),
+                        "R" => pap.R = int(),
+                        "PKV" => pap.PKV = int(),
+                        "PVZ" => pap.PVZ = int(),
+                        "PVS" => pap.PVS = int(),
+                        "KRV" => pap.KRV = int(),
+                        "af" => pap.af = int(),
+                        "ALTER1" => pap.ALTER1 = int(),
+                        "AJAHR" => pap.AJAHR = int(),
+                        "VJAHR" => pap.VJAHR = int(),
+                        "ZMVB" => pap.ZMVB = int(),
+                        "RE4" => pap.RE4 = dec(value),
+                        "ZKF" => pap.ZKF = dec(value),
+                        "KVZ" => pap.KVZ = dec(value),
+                        "PVA" => pap.PVA = dec(value),
+                        "PKPV" => pap.PKPV = dec(value),
+                        "f" => pap.f = dec(value),
+                        "LZZFREIB" => pap.LZZFREIB = dec(value),
+                        "LZZHINZU" => pap.LZZHINZU = dec(value),
+                        "VBEZ" => pap.VBEZ = dec(value),
+                        "VBEZM" => pap.VBEZM = dec(value),
+                        "JRE4" => pap.JRE4 = dec(value),
+                        "SONSTB" => pap.SONSTB = dec(value),
+                        "SONSTENT" => pap.SONSTENT = dec(value),
+                        "JFREIB" => pap.JFREIB = dec(value),
+                        $(stringify!($optional) => set!(pap, $optional, value, int, dec),)*
+                        other => panic!("input {other}"),
+                    }
+                }
+                pap.run();
+                let out = &case["outputs"];
+                let got = [pap.LSTLZZ, pap.SOLZLZZ, pap.BK, pap.STS, pap.SOLZS, pap.BKS];
+                for (name, value) in ["LSTLZZ", "SOLZLZZ", "BK", "STS", "SOLZS", "BKS"].iter().zip(got) {
+                    assert_eq!(
+                        value.compare_to(dec(&out[name])),
+                        0,
+                        "{} case {n} {name}: {} ≠ {}",
+                        $file,
+                        value.set_scale(2, Round::Down).units(2),
+                        out[name]
+                    );
                 }
             }
-            pap.run();
-            let out = &case["outputs"];
-            let got = [pap.LSTLZZ, pap.SOLZLZZ, pap.BK, pap.STS, pap.SOLZS, pap.BKS];
-            for (name, value) in ["LSTLZZ", "SOLZLZZ", "BK", "STS", "SOLZS", "BKS"].iter().zip(got) {
-                assert_eq!(
-                    value.compare_to(dec(&out[name])),
-                    0,
-                    "case {n} {name}: {} ≠ {}",
-                    value.set_scale(2, Round::Down).units(2),
-                    out[name]
-                );
-            }
-        }
+        }};
+    }
+
+    /// Sets an input only one year has.
+    macro_rules! set {
+        ($pap:ident, ALV, $value:ident, $int:ident, $dec:ident) => {
+            $pap.ALV = $int()
+        };
+        ($pap:ident, PKPVAGZ, $value:ident, $int:ident, $dec:ident) => {
+            $pap.PKPVAGZ = $dec($value)
+        };
+    }
+
+    /// The PAP as generated, against the same PAP run by the interpreter of `scripts/pap.py` on Python's decimals: 600
+    /// cases a year of every period, class and insurance – which the BMF's interface for programme tests computes
+    /// alike.
+    #[test]
+    fn the_paps_as_interpreted() {
+        check!(Pap2026, "../../tests/data/payroll/de-lst-2026.json", [ALV, PKPVAGZ]);
+        check!(Pap2025, "../../tests/data/payroll/de-lst-2025.json", []);
     }
 
     #[test]
@@ -281,7 +318,7 @@ mod tests {
         let with = wage_tax(2026, PayPeriod::Month, &wages, &church).unwrap();
         assert_eq!(with.tax, tax.tax);
         assert!(with.church_base < with.tax);
-        assert_eq!(wage_tax(2025, PayPeriod::Month, &wages, &facts), Err(WageTaxError::Year(2025)));
+        assert_eq!(wage_tax(2024, PayPeriod::Month, &wages, &facts), Err(WageTaxError::Year(2024)));
         assert_eq!(
             wage_tax(2026, PayPeriod::Month, &Wages { current: -1, ..Default::default() }, &facts),
             Err(WageTaxError::Amount)

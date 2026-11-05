@@ -10,7 +10,7 @@ redirect_from:
 **The open protocol for accounting data in Europe** – one model for bookings, receipts, invoices, reports and
 filings that the existing European formats translate into and out of.
 
-This is the documentation of version 0.20, a draft. Everything may change before 1.0.
+This is the documentation of version 0.21, a draft. Everything may change before 1.0.
 
 ## What it is
 

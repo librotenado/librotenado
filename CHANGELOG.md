@@ -2,6 +2,26 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.21.0 – 2026-11-06
+
+Payroll completed; trade tax by the law of 2025; the lines of the income tax forms.
+
+- [0013 Payroll](spec/0013-payroll.md): corrections (`replaces`, Rückrechnung) – in the returns of their period, as
+  differences in the Beitragsnachweis of the month paid and in the postings (`Payslip::correction_postings`); the
+  Märzklausel (§ 23a Abs. 4, 5 SGB IV) with the values of 2025; short-term employment (person group 110, flat tax of
+  25 % with its solidarity surcharge, U1 only above four weeks); minor employment in a private household (5 %, 5 %,
+  accident insurance, no insolvency levy); the Lohnsteuerbescheinigung (`EventSet::wage_tax_certificate`, names
+  `de-lstb/*`); the church taxes of all communities in the Lohnsteuer-Anmeldung (Kz 41, 63 to 78); the PAP of 2025
+  beside that of 2026. The cases of both PAPs were checked against the BMF's interface for programme tests. The
+  transmission of Beitragsnachweis and DEÜV needs an approved program (§ 95b SGB IV) – noted.
+- [0012 Taxes on profit](spec/0012-taxes-on-profit.md): the reduction for business land is the land tax booked as an
+  expense from 2025 (§ 9 Nr. 1 Satz 1 GewStG as amended, § 36 Abs. 4b) – attribute `trade_tax` `land-tax` on
+  Grundsteuer (SKR 03 2375, SKR 04 7680); `land_reduction` is what is stated beside it. The forms:
+  `ProfitTax::income_tax_lines` (Anlage G Kz 10, 64, 66; Anlage S Kz 100, forms of 2025); filing duties and deadlines.
+- Library: `Payslip::replaces`, `EventSet::recorded_payslips`, `PayrollProblem::Correction`,
+  `PayrollError::ShortTerm`, `GermanTax::short_term`, `GermanInsurance::household`; `scripts/pap.py` reads
+  `new BigDecimal(…)`.
+
 ## 0.20.0 – 2026-11-05
 
 Payroll.

@@ -118,6 +118,10 @@ pub struct GermanTax {
     /// The wages of a minor employment taxed at the flat rate of 2 % instead (§ 40a Abs. 2 EStG); left out otherwise.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub flat: bool,
+    /// The wages of a short-term employment taxed at the flat rate of 25 % instead (§ 40a Abs. 1 EStG); left out
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub short_term: bool,
 }
 
 /// An amount per year and per month.
@@ -165,6 +169,9 @@ pub struct GermanInsurance {
     /// The rate of U2.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub u2: Option<Decimal>,
+    /// A minor employment in a private household (§ 8a SGB IV), with its own flat rates; left out otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub household: bool,
 }
 
 fn is_zero(n: &u8) -> bool {
@@ -192,8 +199,11 @@ pub struct Payslip {
     pub from: Date,
     /// Its last day.
     pub to: Date,
-    /// The day the wages are paid.
+    /// The day the wages are paid – for a correction, the day the difference is paid or withheld.
     pub paid: Date,
+    /// The payslip of the same employment and period it corrects and replaces (Rückrechnung); absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub replaces: Option<PayslipId>,
     /// What the wages are made of.
     #[serde(deserialize_with = "crate::non_empty")]
     pub items: Vec<PayItem>,

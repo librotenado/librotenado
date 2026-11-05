@@ -1,7 +1,7 @@
 # 0012 Taxes on profit
 
-Version 0.19, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
-`ProfitTaxFacts`, `EventSet::income_tax`, `IncomeTax`, `IncomeTaxFacts`).
+Version 0.21, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
+`ProfitTaxFacts`, `EventSet::income_tax`, `IncomeTax`, `IncomeTaxFacts`, `ProfitTax::income_tax_lines`).
 
 The taxes a business pays on its profit follow from its books: the result of the financial year in the tax balance
 sheet (part 0001, `basis`), corrected for what the tax law does not count, and – for trade tax – what it adds and
@@ -26,6 +26,7 @@ earlier years, the size of holdings – is given with them.
 | | `licence` | is a fee for rights granted for a time (Buchstabe f) – one quarter |
 | | `partnership-loss` | is a share of the loss of a partnership (§ 8 Nr. 8) |
 | | `partnership-share` | is a share of the profit of a partnership (§ 9 Nr. 2) |
+| | `land-tax` | is land tax on business land, which reduces the trade income (§ 9 Nr. 1 Satz 1) |
 
 The chart of version 0.1 carries them on the accounts of SKR 03 and SKR 04 that DATEV marks for the programs of
 corporation tax and trade tax (`K`, `G`; DATEV, Kontenrahmen SKR 03 and SKR 04 valid for 2026), by the provision
@@ -61,7 +62,11 @@ For an owner with a `trade_tax_multiplier` (part 0008), from the profit before l
    Nr. 1 – in full, a fifth, a tenth, a half, a quarter by their attribute – above 200,000 euros; dividends left out
    of the profit from holdings below 15 % (Nr. 5); shares of losses of partnerships (Nr. 8); donations a corporation
    deducted (Nr. 9).
-2. **Reductions** ([§ 9](https://www.gesetze-im-internet.de/gewstg/__9.html)): for business land, as given (Nr. 1);
+2. **Reductions** ([§ 9](https://www.gesetze-im-internet.de/gewstg/__9.html)): for business land the land tax booked
+   as an expense in the year – the balance of the accounts `land-tax` – from 2025 (Nr. 1 Satz 1 as amended by the
+   law of 2 December 2024, [§ 36 Abs. 4b](https://www.gesetze-im-internet.de/gewstg/__36.html)), and what is stated
+   beside the books, such as the extended reduction of Satz 2 (until 0.20 this version took the reduction as stated
+   only, by the rule of 1.2 % of the Einheitswert that applied until 2024);
    shares of profits of partnerships (Nr. 2); donations up to 20 % of the profit with the additions of Nr. 9, or 4 per
    mille of turnover and wages (Nr. 5).
 3. **Losses carried forward:** up to 1 million euros in full, above it up to 60 % of the rest
@@ -126,6 +131,21 @@ computation, not the forms (OPEN, below).
 | holding | at least 15 %, at least 10 %, below 10 % – one for all holdings |
 | cash basis | whether profit is determined by receipts and payments |
 
+## The forms
+
+The returns of corporation tax, trade tax and income tax are filed electronically by the official data set
+([§ 31 Abs. 1a KStG](https://www.gesetze-im-internet.de/kstg_1977/__31.html),
+[§ 14a GewStG](https://www.gesetze-im-internet.de/gewstg/__14a.html),
+[§ 25 Abs. 4 EStG](https://www.gesetze-im-internet.de/estg/__25.html)), seven months after the year, with a tax adviser
+by the end of February of the year after next ([§ 149 Abs. 2, 3 AO](https://www.gesetze-im-internet.de/ao_1977/__149.html)).
+The forms of a year are published in the year after it; those of 2026 are not yet.
+
+`ProfitTax::income_tax_lines` gives the lines of a person's profit by the Kennzahlen of the forms of 2025 (Anlage G,
+2025AnlG231; Anlage S, 2025AnlS): Anlage G Kz 10, the profit of a sole proprietorship (line 4), Kz 64, the base amount
+of trade tax (line 51), and Kz 66, the trade tax to pay (line 52); Anlage S Kz 100, the profit of a freelancer (line
+6). The lines of KSt 1 with its Anlagen GK, ZVE, Z and Verluste and of GewSt 1 A are not published as forms – the
+states offer them only in ELSTER – and are OPEN.
+
 ## Open points
 
 - The size of each holding, rather than one for all; holdings in partnerships of corporations.
@@ -133,5 +153,6 @@ computation, not the forms (OPEN, below).
   the minimum taxation of losses carried back (§ 10d Abs. 1 EStG), groups (Organschaft, §§ 14 ff. KStG).
 - Whether corporation tax is rounded to full euros; the trade tax of a year that is not the calendar year
   (§ 10 Abs. 2 GewStG).
-- The forms – KSt 1, GewSt 1 A – and their fields; the reduction for business land from its value.
+- The forms KSt 1 and GewSt 1 A and their fields; the forms of 2026; the extended reduction for land (§ 9 Nr. 1
+  Satz 2) from the trade income.
 - The review by tax advisers of the attributes of every account.

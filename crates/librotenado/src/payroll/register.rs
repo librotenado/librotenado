@@ -65,6 +65,14 @@ pub enum PayrollProblem {
         /// The payslip.
         payslip: PayslipId,
     },
+    /// A correction of a payslip not recorded, of another employment or period, or replaced already.
+    #[error("event {event}: payslip {payslip} corrects a payslip it cannot replace")]
+    Correction {
+        /// The event.
+        event: EventHash,
+        /// The payslip.
+        payslip: PayslipId,
+    },
     /// A payslip whose period ends before it begins, lies outside the employment or spans two calendar months.
     #[error("event {event}: payslip {payslip} has a period it cannot have")]
     Period {
@@ -107,8 +115,9 @@ impl EventSet {
         found
     }
 
-    /// The payslips of the employments of `owner`, each once, in the agreed order.
-    pub fn payslips(&self, owner: &PartyId) -> Vec<Payslip> {
+    /// Every payslip of the employments of `owner`, each once, in the agreed order – corrections and those they
+    /// replace alike.
+    pub fn recorded_payslips(&self, owner: &PartyId) -> Vec<Payslip> {
         let mut employer: BTreeMap<EmploymentId, PartyId> = BTreeMap::new();
         let mut seen: Vec<PayslipId> = Vec::new();
         let mut payslips = Vec::new();
@@ -128,6 +137,13 @@ impl EventSet {
         payslips
     }
 
+    /// The payslips of the employments of `owner` that apply, in the agreed order: those no correction replaces.
+    pub fn payslips(&self, owner: &PartyId) -> Vec<Payslip> {
+        let recorded = self.recorded_payslips(owner);
+        let replaced: Vec<PayslipId> = recorded.iter().filter_map(|p| p.replaces.clone()).collect();
+        recorded.into_iter().filter(|p| !replaced.contains(&p.id)).collect()
+    }
+
     /// Checks the payroll: employments of owners that keep their employer and employee, payslips of known
     /// employments, each once, within the employment and a calendar month, not overlapping another, with the figures
     /// the rules give.
@@ -138,6 +154,7 @@ impl EventSet {
         let mut spans: BTreeMap<EmploymentId, Vec<(Date, Option<Date>)>> = BTreeMap::new();
         let mut recorded: BTreeMap<PayslipId, ()> = BTreeMap::new();
         let mut periods: BTreeMap<EmploymentId, Vec<(PayslipId, Date, Date)>> = BTreeMap::new();
+        let mut checked: Vec<(EventHash, Payslip)> = Vec::new();
         for (hash, event) in self.ordered() {
             match &event.payload {
                 Payload::EmploymentDescribed { employment } => {
@@ -181,6 +198,15 @@ impl EventSet {
                         problems.push(PayrollProblem::Period { event: hash, payslip: payslip.id.clone() });
                     }
                     let others = periods.entry(payslip.employment.clone()).or_default();
+                    // A correction replaces the payslip of the same employment and period that applies.
+                    if let Some(replaced) = &payslip.replaces {
+                        match others.iter().position(|(id, _, _)| id == replaced) {
+                            Some(i) if (others[i].1, others[i].2) == (payslip.from, payslip.to) => {
+                                others.remove(i);
+                            }
+                            _ => problems.push(PayrollProblem::Correction { event: hash, payslip: payslip.id.clone() }),
+                        }
+                    }
                     if let Some((other, _, _)) =
                         others.iter().find(|(_, from, to)| payslip.from <= *to && *from <= payslip.to)
                     {
@@ -191,15 +217,22 @@ impl EventSet {
                         });
                     }
                     others.push((payslip.id.clone(), payslip.from, payslip.to));
-                    // Only figures the rules can compute are checked: an employment under other law is not.
-                    if let Ok(figures) =
-                        self.payslip_figures(&payslip.employment, payslip.from, payslip.to, &payslip.items)
-                        && figures != payslip.figures
-                    {
-                        problems.push(PayrollProblem::Figures { event: hash, payslip: payslip.id.clone() });
-                    }
+                    checked.push((hash, payslip.clone()));
                 }
                 _ => {}
+            }
+        }
+        // The figures of the payslips that apply, from the payslips before them that apply; only figures the rules
+        // can compute are checked – an employment under other law is not.
+        let replaced: Vec<PayslipId> = checked.iter().filter_map(|(_, p)| p.replaces.clone()).collect();
+        for (hash, payslip) in checked {
+            if replaced.contains(&payslip.id) {
+                continue;
+            }
+            if let Ok(figures) = self.payslip_figures(&payslip.employment, payslip.from, payslip.to, &payslip.items)
+                && figures != payslip.figures
+            {
+                problems.push(PayrollProblem::Figures { event: hash, payslip: payslip.id.clone() });
             }
         }
         problems

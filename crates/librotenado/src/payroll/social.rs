@@ -29,6 +29,11 @@ pub(super) struct Year {
     pub minor_u1: i128,
     pub minor_u2: i128,
     pub minor_minimum: i128,
+    /// A minor employment in a private household: the employer's flat rates for health and pension, and the
+    /// accident insurance.
+    pub household_health: i128,
+    pub household_pension: i128,
+    pub household_accident: i128,
     /// The transition range: its upper limit per month in cents and the factor F as a fraction.
     pub transition_limit: i128,
     pub factor: (i128, i128),
@@ -53,13 +58,30 @@ pub(super) const Y2026: Year = Year {
     minor_u1: 8_000,
     minor_u2: 2_200,
     minor_minimum: 17_500,
+    household_health: 50_000,
+    household_pension: 50_000,
+    household_accident: 16_000,
     transition_limit: 200_000,
     factor: (6_619, 10_000),
 };
 
+/// The year 2025, for one-off payments of January to March attributed to it (§ 23a Abs. 4 SGB IV).
+pub(super) const Y2025: Year = Year {
+    health_ceiling: 6_615_000,
+    pension_ceiling: 9_660_000,
+    minor_limit: 55_600,
+    minor_u1: 11_000,
+    factor: (6_683, 10_000),
+    ..Y2026
+};
+
 /// The values of `year`, where this version has them.
 pub(super) fn year(year: u16) -> Option<Year> {
-    (year == 2026).then_some(Y2026)
+    match year {
+        2025 => Some(Y2025),
+        2026 => Some(Y2026),
+        _ => None,
+    }
 }
 
 /// What the contributions of a month depend on.
@@ -67,8 +89,12 @@ pub(super) fn year(year: u16) -> Option<Year> {
 pub(super) struct Month {
     /// The digits of the contribution groups: health, pension, unemployment, care.
     pub groups: [u8; 4],
-    /// The employment is minor (Personengruppe 109).
+    /// The employment is minor (Personengruppe 109), in a private household; short-term (Personengruppe 110),
+    /// lasting more than four weeks.
     pub minor: bool,
+    pub household: bool,
+    pub short_term: bool,
+    pub over_four_weeks: bool,
     /// The current wages of the month subject to contributions, and the one-off payments.
     pub current: i128,
     pub one_off: i128,
@@ -101,19 +127,32 @@ pub(super) fn contributions(y: &Year, m: &Month) -> BTreeMap<&'static str, i128>
     let mut out = BTreeMap::new();
     let [health, pension, unemployment, care] = m.groups;
     let wages = m.current + m.one_off;
+    if m.short_term {
+        // No contributions (Beitragsgruppe 0000); at the Minijob-Zentrale U1 only for more than four weeks, U2 and the
+        // insolvency levy always (Geringfügigkeits-Richtlinien 2026, G).
+        if m.over_four_weeks {
+            out.insert("u1", share(m.current, 1, y.minor_u1));
+        }
+        out.insert("u2", share(m.current, 1, y.minor_u2));
+        out.insert("u3", share(wages, 1, y.insolvency));
+        out.retain(|_, v| *v != 0);
+        return out;
+    }
     if m.minor {
+        let (health_rate, pension_rate) =
+            if m.household { (y.household_health, y.household_pension) } else { (y.minor_health, y.minor_pension) };
         // § 249b SGB V, § 168 Abs. 1 Nr. 1b SGB VI: the employer's flat rates on the wages; with compulsory pension
         // insurance the employee tops up to the full rate on at least the minimum base (§ 163 Abs. 8 SGB VI), the
         // employer's share computed first (§ 2 Abs. 3 BVV).
         if health == 6 {
-            out.insert("health_flat", share(wages, 1, y.minor_health));
+            out.insert("health_flat", share(wages, 1, health_rate));
         }
         match pension {
             5 => {
-                out.insert("pension_flat", share(wages, 1, y.minor_pension));
+                out.insert("pension_flat", share(wages, 1, pension_rate));
             }
             1 => {
-                let employer = share(wages, 1, y.minor_pension);
+                let employer = share(wages, 1, pension_rate);
                 let total = share(wages.max(y.minor_minimum), 1, y.pension);
                 out.insert("pension_flat", employer);
                 out.insert("pension_employee", total - employer);
@@ -123,7 +162,14 @@ pub(super) fn contributions(y: &Year, m: &Month) -> BTreeMap<&'static str, i128>
         out.insert("pension_base", wages);
         out.insert("u1", share(m.current, 1, y.minor_u1));
         out.insert("u2", share(m.current, 1, y.minor_u2));
-        out.insert("u3", share(wages, 1, y.insolvency));
+        // A private household pays the accident insurance with the levies and no insolvency levy (§ 8a SGB IV;
+        // Minijob-Zentrale).
+        if m.household {
+            out.insert("accident", share(wages, 1, y.household_accident));
+        } else {
+            out.insert("u3", share(wages, 1, y.insolvency));
+        }
+        out.retain(|_, v| *v != 0);
         return out;
     }
     // Current wages up to the ceiling of the days; one-off payments up to what the ceiling of the year so far leaves
@@ -316,5 +362,19 @@ mod tests {
         // 13 % = 78.00; pension 15 % = 90.00 and the employee 18.6 % − that = 111.60 − 90.00 = 21.60.
         assert_eq!((c["health_flat"], c["pension_flat"], c["pension_employee"]), (7_800, 9_000, 2_160));
         assert_eq!((c["u1"], c["u2"], c["u3"]), (480, 132, 90));
+        // In a private household: 5 % and 5 %, the employee 13.6 %, accident insurance 1.6 %, no insolvency levy.
+        let c = contributions(&Y2026, &Month { household: true, ..m });
+        assert_eq!((c["health_flat"], c["pension_flat"], c["pension_employee"]), (3_000, 3_000, 8_160));
+        assert_eq!((c["accident"], c.get("u3")), (960, None));
+    }
+
+    #[test]
+    fn a_short_term_employment() {
+        let m = Month { short_term: true, current: 150_000, days: 10, ..Month::default() };
+        let c = contributions(&Y2026, &m);
+        assert_eq!((c.get("u1"), c["u2"], c["u3"]), (None, 330, 225));
+        let c = contributions(&Y2026, &Month { over_four_weeks: true, ..m });
+        assert_eq!(c["u1"], 1_200);
+        assert!(!c.keys().any(|k| k.contains("employee")));
     }
 }
