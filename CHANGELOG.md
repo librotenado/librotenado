@@ -2,6 +2,16 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.12.0 – 2026-11-05
+
+Filings per customer.
+
+- [0007 Filings](spec/0007-filings.md): the three ways a report content is derived – over the period, from the
+  balances on the last day, per customer over the period; bookings a report per customer cannot place stay out of the
+  filing and go to the review list.
+- Library: `Derivation::Customers`, so that `EventSet::report_content` derives the recapitulative statement as it
+  derives the other filings. A new variant of a public enum: code that matches on `Derivation` needs an arm for it.
+
 ## 0.11.0 – 2026-11-04
 
 The recapitulative statement.

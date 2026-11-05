@@ -1,6 +1,6 @@
 # 0007 Filings
 
-Version 0.11, draft. Implemented in the reference library: filings and their events (`Filing`,
+Version 0.12, draft. Implemented in the reference library: filings and their events (`Filing`,
 `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`) and what an implementation and an
 adapter send each other (`Submission`, `SubmissionStatus`, `Receipt`, `AdapterError`).
 
@@ -27,6 +27,11 @@ A report content (type `report_content`) is `report` and `version` – of the re
 0009) – and `fields`: position → money, in the filer's functional currency (part 0001), positions without an amount
 left out, and `fields` itself absent when no position has one: a VAT return with nothing to report is filed all the
 same. A mandatory position of the mapping without an amount is stated as empty by the adapter.
+
+A report content is derived in one of three ways (part 0009), as the column *Derived* below says: **over the period**
+from the postings dated within it; from the **balances on the last day**; or **per customer over the period**, with
+fields `<VAT identification number>/<base>`. A booking a report per customer cannot place is left out of the content
+and reported on the review list, not in the filing.
 
 | `kind` | Content | Derived | Germany |
 |---|---|---|---|

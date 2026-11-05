@@ -113,13 +113,17 @@ impl Object for ReportContent {
     const TYPE: &'static str = "report_content";
 }
 
-/// How a report is derived: over a period from the postings, or on the last day from the balances.
+/// How a report is derived: over a period from the postings, on the last day from the balances, or over a period per
+/// customer (spec part 0009).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Derivation {
     /// From the postings of the period – a VAT return, a profit and loss account, an income statement.
     Period,
     /// From the balances on the last day – a balance sheet.
     Balances,
+    /// From the postings of the period, per customer – a recapitulative statement. Bookings it cannot place are left
+    /// out; [`EventSet::customer_report`] names them for the review list.
+    Customers,
 }
 
 impl EventSet {
@@ -140,6 +144,7 @@ impl EventSet {
         let units = match derivation {
             Derivation::Period => self.period_report(mapping, taxes, chart, filer, from, to)?,
             Derivation::Balances => self.account_report(mapping, chart, filer, Some(to))?,
+            Derivation::Customers => self.customer_report(mapping, chart, filer, from, to)?.0,
         };
         let fields = units
             .into_iter()

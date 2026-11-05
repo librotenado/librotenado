@@ -1017,6 +1017,24 @@ mod tests {
             problems,
             vec![CustomerProblem::NoVatId { event: without }, CustomerProblem::SeveralVatIds { event: both }]
         );
+        // As the content of a filing: the same fields, in money of the functional currency.
+        let eur: crate::Currency = "EUR".parse().unwrap();
+        let content = set
+            .report_content(
+                &ReportMapping::de_zm_2026(),
+                crate::Derivation::Customers,
+                &crate::TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                &eur,
+                "2026-01-01".parse().unwrap(),
+                "2026-03-31".parse().unwrap(),
+            )
+            .unwrap();
+        assert_eq!((content.report.as_str(), content.version.as_str()), ("de-zm", "2026"));
+        let units: BTreeMap<String, i128> =
+            content.fields.iter().map(|(field, money)| (field.clone(), money.base_units())).collect();
+        assert_eq!(units, fields);
     }
 
     /// A change of `year_start` makes a short financial year (§ 8b Satz 2 Nr. 2 EStDV).
