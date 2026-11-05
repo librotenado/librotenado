@@ -1,6 +1,6 @@
 # 0007 Filings
 
-Version 0.14, draft. Implemented in the reference library: filings and their events (`Filing`,
+Version 0.15, draft. Implemented in the reference library: filings and their events (`Filing`,
 `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`) and what an implementation and an
 adapter send each other (`Submission`, `SubmissionStatus`, `Receipt`, `AdapterError`).
 
@@ -41,8 +41,11 @@ and reported on the review list, not in the filing.
 | `recapitulative_statement` | supplies to businesses in other EU member states, per customer | per customer over the period | Zusammenfassende Meldung (`de-zm`) |
 
 - **A filing is derived from the books and records from what.** `basis` is the state of the books when it was
-  derived: whoever has the same events derives it again and gets the same content. When an event that concerns its
-  period arrives later, the state no longer matches – the filing may need a correction.
+  derived: whoever has the same events derives it again and gets the same content. A filing is **outdated** when its
+  content derived again from the books as they are now – the same reports, the same period – differs from the content
+  it was filed with. That holds for every kind alike: an event that does not change a field – a booking outside the
+  period, a document without bookings, a new contact – does not make it outdated, whatever it changes of the state.
+  An outdated filing that was submitted may need a correction (below); one only prepared is prepared again.
 - **A filing is never changed.** A correction is a new filing whose `corrects` names the first, as a reversal does
   for a booking.
 
@@ -114,6 +117,5 @@ income statement on a cash basis as the Anlage EÜR with the income tax or trade
 - The conditions of using ERiC, and its data formats, which are published to registered developers only.
 - The master data the E-Bilanz needs beyond part 0008 (GCD: report type, legal form, Finanzamt), and the other
   modules of the taxonomy.
-- Which events concern a filing's period – and so make its `basis` outdated – per kind.
 - Further kinds: the annual VAT return, the income, corporation and trade
   tax returns.

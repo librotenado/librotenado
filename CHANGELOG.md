@@ -2,6 +2,22 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.15.0 – 2026-11-05
+
+Corrections, notifications, outdated filings, shortened balance sheets.
+
+- [0005 Documents](spec/0005-documents.md): `document_corrected` – the data of a recorded document corrected by a
+  later event, its original never replaced; reported – a correction of a document not recorded, or with another
+  original. The intraday report camt.052 and the notification camt.054 are read like camt.053.
+- [0007 Filings](spec/0007-filings.md): a filing is outdated when its content derived again differs from the one it
+  was filed with – for every kind alike.
+- [0009 Reports](spec/0009-reports.md): the shortened balance sheets of small and micro companies (§ 266 Abs. 1
+  Satz 3 and 4 HGB) follow from the positions.
+- [0010 Audit](spec/0010-audit.md): the data transfer of the GoBD names each account's number in the national chart.
+- Library: `Payload::DocumentCorrected`, `EventSet::documents`, `DocumentProblem::UnknownCorrection` and
+  `OriginalChanged`; `camt::read` takes camt.052 and camt.054 (`FORMAT_REPORT`, `FORMAT_NOTIFICATION`);
+  `hgb_shortened`, `HgbSize`. `gobd::export` takes the national chart as a new last argument.
+
 ## 0.14.0 – 2026-11-05
 
 The annual VAT return, the ten-day rule, fixed assets.

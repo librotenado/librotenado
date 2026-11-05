@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Reading bank statements in ISO 20022 camt.053 (spec part 0005): versions 001.02 and 001.08, as German banks
-//! deliver them. Elements are matched by their local names, whatever their namespace.
+//! deliver them – and the intraday report camt.052 and the notification camt.054, which carry entries the same way.
+//! Elements are matched by their local names, whatever their namespace.
 
 use roxmltree::{Document as Xml, Node};
 
@@ -11,6 +12,10 @@ use crate::{
 
 /// The name of the format.
 pub const FORMAT: &str = "iso20022-camt.053";
+/// The name of the format of an intraday report.
+pub const FORMAT_REPORT: &str = "iso20022-camt.052";
+/// The name of the format of a notification of debits and credits.
+pub const FORMAT_NOTIFICATION: &str = "iso20022-camt.054";
 
 type Result<T> = std::result::Result<T, ReadError>;
 
@@ -153,8 +158,8 @@ fn entry(ntry: Node, currencies: &CurrencyTable) -> Result<Option<StatementEntry
     }))
 }
 
-fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
-    let number = text(stmt, &["Id"]).ok_or(ReadError::Missing("Stmt/Id"))?;
+fn statement(stmt: Node, format: &'static str, currencies: &CurrencyTable) -> Result<ReadStatement> {
+    let number = text(stmt, &["Id"]).ok_or(ReadError::Missing("Id"))?;
     let created = text(stmt, &["CreDtTm"]).ok_or(ReadError::Missing("CreDtTm"))?;
     let date = created
         .get(..10)
@@ -183,7 +188,7 @@ fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
     let entries =
         all(stmt, "Ntry").map(|n| entry(n, currencies)).collect::<Result<Vec<_>>>()?.into_iter().flatten().collect();
     Ok(ReadStatement {
-        format: FORMAT,
+        format,
         kind: DocumentKind::BankStatement,
         number: Some(number),
         date,
@@ -198,10 +203,20 @@ fn statement(stmt: Node, currencies: &CurrencyTable) -> Result<ReadStatement> {
     })
 }
 
-/// Reads the statements of a camt.053 file – one per `Stmt`.
+/// Reads the statements of a camt.053 file – one per `Stmt` –, of a camt.052 report – one per `Rpt` – or of a
+/// camt.054 notification – one per `Ntfctn`.
 pub fn read(xml: &[u8], currencies: &CurrencyTable) -> Result<Vec<ReadStatement>> {
     let text = std::str::from_utf8(xml).map_err(|e| ReadError::Encoding(e.to_string()))?;
     let doc = Xml::parse(text).map_err(|e| ReadError::Encoding(e.to_string()))?;
-    let message = at(doc.root_element(), &["BkToCstmrStmt"]).ok_or(ReadError::Syntax(FORMAT))?;
-    all(message, "Stmt").map(|stmt| statement(stmt, currencies)).collect()
+    let root = doc.root_element();
+    let kinds = [
+        ("BkToCstmrStmt", "Stmt", FORMAT),
+        ("BkToCstmrAcctRpt", "Rpt", FORMAT_REPORT),
+        ("BkToCstmrDbtCdtNtfctn", "Ntfctn", FORMAT_NOTIFICATION),
+    ];
+    let (message, part, format) = kinds
+        .into_iter()
+        .find_map(|(message, part, format)| Some((at(root, &[message])?, part, format)))
+        .ok_or(ReadError::Syntax(FORMAT))?;
+    all(message, part).map(|node| statement(node, format, currencies)).collect()
 }

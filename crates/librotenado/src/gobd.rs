@@ -37,7 +37,7 @@ struct Table {
 /// The export of the books of `owner` for the bookings dated from `from` to `to`: `index.xml`, `konten.csv`
 /// (accounts), `buchungen.csv` (the journal, one row per posting) and `belege.csv` (documents). Each document's
 /// original is listed as `belege/<hash>`; the caller adds those files from its store. Names of accounts come from
-/// `names`.
+/// `names`; their numbers from `national`, the national chart the owner works with, where it has one.
 #[allow(clippy::too_many_arguments)]
 pub fn export(
     books: &EventSet,
@@ -48,17 +48,13 @@ pub fn export(
     owner: &PartyId,
     from: Date,
     to: Date,
+    national: Option<&crate::ChartTranslation>,
 ) -> Vec<ExportFile> {
+    let number = |id: &AccountId| national.and_then(|n| n.national(id)).unwrap_or_default().to_owned();
     let kinds = books.account_kinds(chart);
     let parents = books.account_parents(chart);
-    let documents: BTreeMap<_, &Document> = books
-        .ordered()
-        .into_iter()
-        .filter_map(|(_, event)| match &event.payload {
-            Payload::DocumentRecorded { document } => Some((document.id.clone(), document)),
-            _ => None,
-        })
-        .collect();
+    let documents: BTreeMap<_, &Document> =
+        books.documents().into_iter().map(|(id, document)| (id.clone(), document)).collect();
 
     // The number of decimals of the amounts: the most any currency of the export has.
     let decimals_of = |code: &crate::Currency| currencies.get(code).and_then(|d| d.decimals()).unwrap_or(0);
@@ -109,6 +105,7 @@ pub fn export(
                     event.time.device.as_str().to_owned(),
                     booking.text.clone(),
                     posting.account.to_string(),
+                    number(&posting.account),
                     names.get(posting.account.as_str()).unwrap_or_default().to_owned(),
                     kind.map(account_kind).unwrap_or("sonstige").to_owned(),
                     kind.map(account_type).unwrap_or("sonstige").to_owned(),
@@ -162,6 +159,7 @@ pub fn export(
             let kind = kinds.get(id).copied();
             vec![
                 id.to_string(),
+                number(id),
                 names.get(id.as_str()).unwrap_or_default().to_owned(),
                 kind.map(account_kind).unwrap_or("sonstige").to_owned(),
                 kind.map(account_type).unwrap_or("sonstige").to_owned(),
@@ -210,6 +208,7 @@ pub fn export(
             description: "Konten, auf die gebucht wurde, und die Konten, die sie verfeinern",
             columns: vec![
                 Text("KONTO_ID", "Identität des Kontos (UUID)"),
+                Text("KONTONUMMER", "Nummer des Kontos im nationalen Kontenrahmen, etwa SKR 03; leer ohne"),
                 Text("BEZEICHNUNG", "Bezeichnung"),
                 Text("KONTOART", "Kontoart (Aktiva, Passiva, Kapital, Aufwand, Ertrag, sonstige)"),
                 Text("KONTOTYP", "Kontotyp (Bilanz, GuV, sonstige)"),
@@ -230,6 +229,7 @@ pub fn export(
                 Text("ERFASST_AUF", "Gerät, auf dem erfasst wurde"),
                 Text("BUCHUNGSTEXT", "Buchungstext"),
                 Text("KONTO_ID", "Konto"),
+                Text("KONTONUMMER", "Nummer des Kontos im nationalen Kontenrahmen"),
                 Text("KONTOBEZEICHNUNG", "Bezeichnung des Kontos"),
                 Text("KONTOART", "Kontoart"),
                 Text("KONTOTYP", "Kontotyp"),

@@ -1,6 +1,6 @@
 # 0010 Audit and retention
 
-Version 0.9, draft. Implemented in the reference library (`gobd::export`).
+Version 0.15, draft. Implemented in the reference library (`gobd::export`).
 
 Books must be kept so that an auditor can follow every business transaction from its document to the statements and
 back, for years. This part says what the protocol guarantees for that, and how books are handed over to an auditor
@@ -63,8 +63,8 @@ as `DD.MM.YYYY`.
 
 | File | Table | One row per |
 |---|---|---|
-| `konten.csv` | Konten | account posted on, and the accounts it refines: identity, name, kind (Aktiva, Passiva, Kapital, Aufwand, Ertrag, sonstige), type (Bilanz, GuV, sonstige), parent, chart or opened |
-| `buchungen.csv` | Buchungen | posting: booking (event hash) and position, booking date, time and device of entry, text, account with name, kind and type, debit, credit, currency, exchange rate, debit and credit in the functional currency and that currency, tax code and rate, documents with numbers and dates, the booking a reversal reverses, note |
+| `konten.csv` | Konten | account posted on, and the accounts it refines: identity, number in the national chart the owner works with (empty where it has none), name, kind (Aktiva, Passiva, Kapital, Aufwand, Ertrag, sonstige), type (Bilanz, GuV, sonstige), parent, chart or opened |
+| `buchungen.csv` | Buchungen | posting: booking (event hash) and position, booking date, time and device of entry, text, account with its national number, name, kind and type, debit, credit, currency, exchange rate, debit and credit in the functional currency and that currency, tax code and rate, documents with numbers and dates, the booking a reversal reverses, note |
 | `belege.csv` | Belege | document of the exported bookings: identity, kind, number, date, day received, its original in the export (`belege/<hash>`) with hash, media type and file name, seller and buyer with VAT identification and tax numbers, net, VAT, gross, currency |
 
 The originals are added to the export by the implementation from its store. The reference library's `index.xml`
@@ -77,7 +77,6 @@ validates against the DTD (the DTD's own content model of `Media` is not determi
   follows it once it is final.
 - Fields of GoBD Rz. 94 the protocol does not record yet: authorisation by a person rather than a device, the booking
   period of the VAT return.
-- Account numbers of a national chart alongside the identities in the export.
 - The terms of use of the DTD and of the description of the Beschreibungsstandard, which are not published under a
   licence; the library writes the reference to the DTD, not the DTD.
 - How erasing books after their retention period is recorded.

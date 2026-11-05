@@ -264,13 +264,17 @@ fn identity(statement: &StatementData, entry: &StatementEntry) -> (String, Strin
 }
 
 impl EventSet {
-    /// The bank statements recorded, by document, in the agreed order.
+    /// The bank statements recorded, by document, in the agreed order of their recording – with their data as
+    /// corrected.
     pub fn statements(&self) -> Vec<(DocumentId, &StatementData)> {
+        let documents = self.documents();
+        let mut seen = std::collections::BTreeSet::new();
         self.ordered()
             .into_iter()
             .filter_map(|(_, event)| match &event.payload {
-                Payload::DocumentRecorded { document } => {
-                    document.statement.as_deref().map(|statement| (document.id.clone(), statement))
+                Payload::DocumentRecorded { document } if seen.insert(&document.id) => {
+                    let current = documents.get(&document.id)?;
+                    current.statement.as_deref().map(|statement| (document.id.clone(), statement))
                 }
                 _ => None,
             })

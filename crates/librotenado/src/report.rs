@@ -11,6 +11,41 @@ use crate::{
     TaxDirection, TaxTable,
 };
 
+/// How far a German balance sheet is shortened (§ 266 Abs. 1 Satz 3 and 4 HGB).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HgbSize {
+    /// A small company (§ 267 Abs. 1): only the items with letters and Roman numerals.
+    Small,
+    /// A micro company (§ 267a): only the items with letters.
+    Micro,
+}
+
+/// A balance sheet after § 266 HGB, its positions written as their place in the law (`aktiv.A.II.1`), shortened for a
+/// small or micro company: each amount counted on its nearest position of a letter and – for a small company – a
+/// Roman numeral (`aktiv.A.II`, `passiv.C`). Positions outside the scheme of the law (`aktiv.extra.…`) stay as they are.
+pub fn hgb_shortened(fields: &BTreeMap<String, i128>, size: HgbSize) -> BTreeMap<String, i128> {
+    let roman = |part: &str| !part.is_empty() && part.chars().all(|c| matches!(c, 'I' | 'V' | 'X'));
+    let mut shortened: BTreeMap<String, i128> = BTreeMap::new();
+    for (position, units) in fields {
+        let parts: Vec<&str> = position.split('.').collect();
+        let side = parts.first().copied().unwrap_or_default();
+        let lettered = parts.get(1).is_some_and(|p| p.len() == 1 && p.chars().all(|c| c.is_ascii_uppercase()));
+        let key = if !matches!(side, "aktiv" | "passiv") || !lettered {
+            position.clone()
+        } else {
+            let keep = match size {
+                HgbSize::Micro => 2,
+                HgbSize::Small if parts.get(2).is_some_and(|p| roman(p)) => 3,
+                HgbSize::Small => 2,
+            };
+            parts[..keep.min(parts.len())].join(".")
+        };
+        *shortened.entry(key).or_default() += units;
+    }
+    shortened.retain(|_, units| *units != 0);
+    shortened
+}
+
 /// A booking a report per customer cannot place (spec part 0009): never resolved silently.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CustomerProblem {
@@ -431,12 +466,7 @@ impl EventSet {
             ancestry(account, &parents).into_iter().any(|id| vat.output.contains(id) || vat.input.contains(id))
         };
         let (organisations, _) = self.parties();
-        let mut documents = BTreeMap::new();
-        for (_, event) in self.ordered() {
-            if let Payload::DocumentRecorded { document } = &event.payload {
-                documents.entry(&document.id).or_insert(document);
-            }
-        }
+        let documents = self.documents();
         let vat_id_of = |buyer: &crate::InvoiceParty| -> Option<String> {
             buyer.vat_id.clone().or_else(|| {
                 let organisation = organisations.get(buyer.party.as_ref()?)?;
@@ -742,6 +772,36 @@ mod tests {
         let field = |kz: &str| euer.get(kz).copied();
         assert_eq!((field("1.102"), field("1.112"), field("1.140")), (Some(500_000), None, Some(95_000)));
         assert_eq!(field("2.135"), Some(300_000));
+    }
+
+    /// A balance sheet shortened for a small and a micro company (§ 266 Abs. 1 Satz 3 and 4 HGB).
+    #[test]
+    fn balance_sheets_are_shortened_by_size() {
+        let fields: BTreeMap<String, i128> = [
+            ("aktiv.A.II.1", 500),
+            ("aktiv.A.II.3", 200),
+            ("aktiv.B.IV", 300),
+            ("passiv.A.I", 400),
+            ("passiv.C.2", 250),
+            ("passiv.C.4", 350),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v))
+        .collect();
+        let small = crate::hgb_shortened(&fields, crate::HgbSize::Small);
+        let expected: BTreeMap<String, i128> =
+            [("aktiv.A.II", 700), ("aktiv.B.IV", 300), ("passiv.A.I", 400), ("passiv.C", 600)]
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v))
+                .collect();
+        assert_eq!(small, expected);
+        let micro = crate::hgb_shortened(&fields, crate::HgbSize::Micro);
+        let expected: BTreeMap<String, i128> =
+            [("aktiv.A", 700), ("aktiv.B", 300), ("passiv.A", 400), ("passiv.C", 600)]
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v))
+                .collect();
+        assert_eq!(micro, expected);
     }
 
     #[test]

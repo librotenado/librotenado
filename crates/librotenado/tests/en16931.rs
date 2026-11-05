@@ -217,6 +217,7 @@ mod data_transfer {
             &owner,
             date,
             date,
+            Some(&librotenado::ChartTranslation::fr_pcg()),
         )
     }
 
@@ -256,6 +257,11 @@ mod data_transfer {
         assert_eq!(journal.lines().count(), 1 + 5, "header, two net amounts, two VAT amounts, the supplier");
         assert!(journal.contains("\"de-in-19\";\"19\""), "{journal}");
         assert!(journal.contains("\"Sonstiges Material\";\"Aufwand\""), "German account names: {journal}");
+        // The accounts with the numbers of a national chart – here the PCG – beside their identities.
+        let accounts = text("konten.csv");
+        let numbered =
+            accounts.lines().skip(1).filter(|line| line.split(';').nth(1).is_some_and(|n| n.len() > 2)).count();
+        assert!(numbered > 0, "{accounts}");
         assert!(text("belege.csv").contains(&format!("\"{}\"", read("03.01a-INVOICE_ubl.xml").number)));
     }
 }

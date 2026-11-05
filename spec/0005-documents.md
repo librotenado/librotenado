@@ -1,7 +1,8 @@
 # 0005 Documents
 
-Version 0.4, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
-`propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kind `document_recorded`).
+Version 0.15, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+`propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kinds `document_recorded` and
+`document_corrected`; `EventSet::documents`).
 
 A document is what a booking is based on: an invoice, a credit note, a receipt, a bank statement. It is a **record of
 its own**: its data – kind, number, date – stand in the document, never only in its file. The file it came as, the
@@ -250,6 +251,12 @@ annex 3 (Spezifikation der Datenformate; version 3.7 of 5 April 2023 found, whet
   `Pty`, `Id/IBAN` of their account –, its BIC from `RltdAgts`, `RmtInf/Ustrd` joined by spaces, and `AmtDtls/TxAmt/Amt`
   where an entry has more than one.
 
+The intraday report **camt.052** (BankToCustomerAccountReport, `BkToCstmrAcctRpt/Rpt`) and the notification of debits
+and credits **camt.054** (BankToCustomerDebitCreditNotification, `BkToCstmrDbtCdtNtfctn/Ntfctn`) carry their account
+and entries the same way and are read the same way – their format `iso20022-camt.052` and `iso20022-camt.054`. Only
+booked entries are taken, as above; a notification has no balances. A report or a notification and the statement
+that follows show the same entries: the review names them as shown twice (below), and each is booked once.
+
 ### Reading MT940
 
 SWIFT MT940 (Customer Statement Message, SWIFT Standards MT, category 9) as German banks write it under annex 3 of the
@@ -297,17 +304,22 @@ ISO 8859-1. Which bank writes which names is OPEN; layouts that are not recognis
 
 ### One entry point
 
-`read_statements` tells the formats apart by their content: XML is camt.053, a file beginning with `:20:` or a SWIFT
+`read_statements` tells the formats apart by their content: XML is camt.053, .052 or .054, a file beginning with `:20:` or a SWIFT
 header is MT940, anything else is read as CSV.
 
 ## Events
 
 - `document_recorded` with `document` – a document was recorded with its data and original (part 0002).
+- `document_corrected` with `document` and `reason` – the data of a recorded document were corrected: its number,
+  dates, kind, the data of its invoice or statement – a date read wrongly, the organisation or person a seller is
+  (part 0008). The document carries the identity it was recorded with and the same original: an original is never
+  replaced. The latest correction in the agreed order applies; the document as recorded stays in the books.
 - A booking MAY list the documents it is based on in `documents`, as an array of document identities; the member is
   absent when there are none (part 0001). A document may back several bookings (an invoice and its payment), a
   booking may rest on several documents.
 - An implementation MUST report, and MUST NOT silently resolve, a booking based on a document that has not been
-  recorded (it may not have arrived yet), and a document recorded twice under the same identity.
+  recorded (it may not have arrived yet), a document recorded twice under the same identity, a correction of a
+  document not recorded, and a correction that names another original – which does not apply.
 - A booking of what a bank statement shows names the entries it books in `entries`: an array of entry references
   (type `entry_reference`) – `document`, a recorded bank statement, and `entry`, the position of the entry, from 1 –,
   absent when there are none (part 0001). An implementation MUST report, and MUST NOT silently resolve:
@@ -328,8 +340,7 @@ header is MT940, anything else is read as CSV.
   `fx:ConformanceLevel` XRECHNUNG follow a vendor's documentation of the ZUGFeRD / Factur-X specification
   ([IDEAL Software](https://idealsoftware.com/manuals/ctrl/setfacturxparams.html)) and are accepted by Mustang;
   verified against the specification of FeRD itself: OPEN.
-- Correcting the data of a recorded document by a later event.
-- The intraday reports camt.052 and camt.054; the sections of annex 3 that structure MT940 and its field `:86:`.
+- The sections of annex 3 that structure MT940 and its field `:86:`.
 - Whether the names and definitions of the business terms of EN 16931 – a standard of CEN, © CEN and its members –
   may be quoted in a specification under CC BY; this part names their identifiers only.
 - Whether the names of formats should be the identifiers the standards define (e.g. the specification identifier of

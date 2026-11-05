@@ -126,6 +126,15 @@ pub enum Payload {
         /// The document.
         document: Document,
     },
+    /// The data of a recorded document were corrected: number, dates, kind, invoice or statement data – its original
+    /// stays the same (spec part 0005).
+    DocumentCorrected {
+        /// The document as corrected, under the identity it was recorded with.
+        document: Document,
+        /// Why it was corrected.
+        #[serde(deserialize_with = "crate::text")]
+        reason: String,
+    },
     /// A fixed asset was acquired, or made or brought into the business (spec part 0011).
     AssetAcquired {
         /// The asset.
@@ -409,6 +418,22 @@ pub enum DocumentProblem {
     #[error("document {document} is recorded again in event {event}")]
     Duplicate {
         /// The later event.
+        event: EventHash,
+        /// The document.
+        document: DocumentId,
+    },
+    /// A correction of a document that has not been recorded – perhaps not arrived yet.
+    #[error("event {event} corrects document {document}, which has not been recorded")]
+    UnknownCorrection {
+        /// The correction.
+        event: EventHash,
+        /// The document.
+        document: DocumentId,
+    },
+    /// A correction that names another original than the document's: an original is never replaced.
+    #[error("event {event} gives document {document} another original")]
+    OriginalChanged {
+        /// The correction.
         event: EventHash,
         /// The document.
         document: DocumentId,
@@ -897,6 +922,28 @@ impl EventSet {
         state_of(&hashes)
     }
 
+    /// The documents as they stand: each as first recorded, with the latest correction in the agreed order that keeps
+    /// its original (spec part 0005).
+    pub fn documents(&self) -> BTreeMap<&DocumentId, &Document> {
+        let mut documents: BTreeMap<&DocumentId, &Document> = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            match &event.payload {
+                Payload::DocumentRecorded { document } => {
+                    documents.entry(&document.id).or_insert(document);
+                }
+                Payload::DocumentCorrected { document, .. } => {
+                    if let Some(current) = documents.get_mut(&document.id)
+                        && current.original == document.original
+                    {
+                        *current = document;
+                    }
+                }
+                _ => {}
+            }
+        }
+        documents
+    }
+
     /// Checks the documents: each recorded once, and every document a booking is based on recorded. Whether the
     /// bytes of the originals are at hand is a question of the store, not of the events.
     pub fn review_documents(&self) -> Vec<DocumentProblem> {
@@ -907,6 +954,24 @@ impl EventSet {
                 && !recorded.insert(&document.id)
             {
                 problems.push(DocumentProblem::Duplicate { event: hash, document: document.id.clone() });
+            }
+        }
+        let mut originals: BTreeMap<&DocumentId, &crate::Original> = BTreeMap::new();
+        for (hash, event) in self.ordered() {
+            match &event.payload {
+                Payload::DocumentRecorded { document } => {
+                    originals.entry(&document.id).or_insert(&document.original);
+                }
+                Payload::DocumentCorrected { document, .. } => {
+                    match originals.get(&document.id) {
+                        None => problems
+                            .push(DocumentProblem::UnknownCorrection { event: hash, document: document.id.clone() }),
+                        Some(original) if **original != document.original => problems
+                            .push(DocumentProblem::OriginalChanged { event: hash, document: document.id.clone() }),
+                        Some(_) => {}
+                    }
+                }
+                _ => {}
             }
         }
         for (hash, event) in self.ordered() {
@@ -1260,6 +1325,52 @@ mod tests {
         }
         let problems = set.review_documents();
         assert!(matches!(problems.as_slice(), [DocumentProblem::Duplicate { document, .. }] if *document == id));
+    }
+
+    /// A document's data are corrected by a later event; its original never changes.
+    #[test]
+    fn documents_are_corrected_but_keep_their_original() {
+        use crate::{Document, DocumentKind, Original};
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let id: DocumentId = "0192f1e4-0000-7000-8000-0000000000d1".parse().unwrap();
+        let document = Document {
+            id: id.clone(),
+            kind: DocumentKind::Receipt,
+            number: None,
+            date: "2026-10-24".parse().unwrap(),
+            received: "2026-10-24".parse().unwrap(),
+            original: Original::of(b"a receipt", "image/jpeg"),
+            invoice: None,
+            statement: None,
+        };
+        append(&mut set, &mut clock, 1, Payload::DocumentRecorded { document: document.clone() });
+        let corrected =
+            Document { number: Some("R-17".into()), date: "2026-10-23".parse().unwrap(), ..document.clone() };
+        let reason = "the date read wrongly".to_owned();
+        append(
+            &mut set,
+            &mut clock,
+            2,
+            Payload::DocumentCorrected { document: corrected.clone(), reason: reason.clone() },
+        );
+        assert_eq!(set.documents()[&id], &corrected);
+        assert!(set.review_documents().is_empty());
+        // Another original is not taken, and reported; nor is a correction of a document not recorded.
+        let other = Document { original: Original::of(b"another file", "image/jpeg"), ..corrected.clone() };
+        let changed =
+            append(&mut set, &mut clock, 3, Payload::DocumentCorrected { document: other, reason: reason.clone() });
+        let unknown_id: DocumentId = "0192f1e4-0000-7000-8000-0000000000d2".parse().unwrap();
+        let unknown = Document { id: unknown_id.clone(), ..corrected.clone() };
+        let early = append(&mut set, &mut clock, 4, Payload::DocumentCorrected { document: unknown, reason });
+        assert_eq!(set.documents()[&id], &corrected);
+        assert_eq!(
+            set.review_documents(),
+            [
+                DocumentProblem::OriginalChanged { event: changed, document: id },
+                DocumentProblem::UnknownCorrection { event: early, document: unknown_id }
+            ]
+        );
     }
 
     #[test]

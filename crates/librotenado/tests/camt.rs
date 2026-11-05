@@ -185,3 +185,35 @@ fn entries_are_booked_once_and_statements_close_at_the_books() {
 fn owner_of() -> librotenado::PartyId {
     "0192f1e4-0000-7000-8000-0000000000a1".parse().unwrap()
 }
+
+/// An intraday report (camt.052) and a notification (camt.054) carry their entries as a statement does; a
+/// notification has no balances.
+#[test]
+fn reports_and_notifications_are_read_as_statements() {
+    let text = std::str::from_utf8(OCTOBER).unwrap();
+    let report =
+        text.replace("BkToCstmrStmt", "BkToCstmrAcctRpt").replace("<Stmt>", "<Rpt>").replace("</Stmt>", "</Rpt>");
+    let read = camt::read(report.as_bytes(), &CurrencyTable::v0_1()).unwrap();
+    assert_eq!((read.len(), read[0].format), (1, "iso20022-camt.052"));
+    assert_eq!(read[0].statement.entries.len(), 3);
+    let notification = text
+        .replace("BkToCstmrStmt", "BkToCstmrDbtCdtNtfctn")
+        .replace("<Stmt>", "<Ntfctn>")
+        .replace("</Stmt>", "</Ntfctn>");
+    let notification: String = {
+        // A notification carries no balances.
+        let mut out = String::new();
+        let mut rest = notification.as_str();
+        while let Some(start) = rest.find("<Bal>") {
+            out.push_str(&rest[..start]);
+            let end = rest[start..].find("</Bal>").unwrap() + start + "</Bal>".len();
+            rest = &rest[end..];
+        }
+        out.push_str(rest);
+        out
+    };
+    let read = camt::read(notification.as_bytes(), &CurrencyTable::v0_1()).unwrap();
+    assert_eq!(read[0].format, "iso20022-camt.054");
+    assert_eq!((read[0].statement.opening.clone(), read[0].statement.closing.clone()), (None, None));
+    assert_eq!(read[0].statement.entries.len(), 3);
+}

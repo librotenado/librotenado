@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.14, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.15, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`, `EventSet::customer_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
@@ -113,6 +113,12 @@ resolve:
   (receivables from trade), `passiv.C.2` § 266 Abs. 3 C. 2., `gkv.6.a` § 275 Abs. 2 Nr. 6 Buchst. a. Positions the
   HGB does not list, which a French account may still carry – formation expenses, regulated provisions, investment
   grants – are written `aktiv.extra.…` and `passiv.extra.…`; a German set of books does not use those accounts.
+- **Shortened balance sheets:** a small company (§ 267 Abs. 1 HGB) needs to show only the items with letters and Roman
+  numerals, a micro company (§ 267a) only those with letters
+  ([§ 266 Abs. 1 Satz 3 and 4 HGB](https://www.gesetze-im-internet.de/hgb/__266.html)). They follow from the
+  positions: each amount counts on its nearest position of a letter and, for a small company, a Roman numeral –
+  `aktiv.A.II.1` on `aktiv.A.II` or `aktiv.A`, `passiv.C.2` on `passiv.C` (`hgb_shortened`). Which size applies is the
+  company's to determine.
 - **Names of the positions** stand in the translation data (part 0001) under `<report>/<position>`: the German names
   of the HGB positions are the wording of the law, those of the VAT return and the Anlage EÜR the wording of the
   official forms of the BMF letters named above (`de-ustva/81`, `de-euer/2.280`) – of the latest year where a form
@@ -223,12 +229,9 @@ number its other member state gave it and the sum of the assessment bases (Abs. 
 
 - Review of the German mappings by tax advisers; until then they are drafts.
 - The profit and loss account by function of expense (§ 275 Abs. 3), which needs costs by function, not by account.
-- The notes the HGB requires on positions (§ 268 Abs. 4 and 5: remaining terms; "davon" items), and the shortened
-  balance sheets of small and micro companies (§ 266 Abs. 1, § 267, § 267a) – the latter follow from the positions by
-  dropping levels.
-- The Anlage EÜR: the annex for depreciation (Anlage AVEÜR), which the lines of depreciation are carried from; the
-  split of business entertainment into its deductible and non-deductible part (§ 4 Abs. 5 Satz 1 Nr. 2 EStG), which
-  the books record on two accounts; the 10-day rule for regular payments (§ 11 Abs. 1 Satz 2, Abs. 2 Satz 2 EStG).
+- The notes the HGB requires on positions (§ 268 Abs. 4 and 5: remaining terms; "davon" items).
+- The Anlage EÜR: business entertainment is split into its deductible and non-deductible part on two accounts by
+  whoever books (§ 4 Abs. 5 Satz 1 Nr. 2 EStG); filing the Anlage AVEÜR (part 0011) together with it.
 - The E-Bilanz: the positions that depend on the legal form (partnerships' capital accounts, the Mussfelder of
   sole proprietors, corporations and partnerships alone), the reconciliation to the tax balance sheet
   (Überleitungsrechnung), the split of reductions of sales by VAT, the other modules of the taxonomy (GCD master data,
