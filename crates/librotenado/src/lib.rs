@@ -102,6 +102,7 @@ pub mod mt940;
 mod names;
 mod object;
 mod party;
+mod profit_tax;
 mod report;
 mod statement;
 mod tax;
@@ -144,6 +145,7 @@ pub use party::{
     BankAccount, Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region,
     Registration, Relation, RelationKind, ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
+pub use profit_tax::{Holding, ProfitTax, ProfitTaxError, ProfitTaxFacts, TaxSubject, TradeTax, corporation_tax_rate};
 pub use report::{
     CustomerProblem, HgbSize, MappingStatus, ReportMapping, TaxRule, Terms, VatAccounts, VatSettlement, hgb_shortened,
 };

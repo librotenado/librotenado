@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.17, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
+Version 0.18, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -58,6 +58,7 @@ Attributes of version 0.16:
 |---|---|---|
 | `iban` | an IBAN | the bank account an account is kept for (below, part 0005) |
 | `term` | `up-to-1-year`, `over-1-year`, `1-to-5-years`, `over-5-years` | the remaining term of the receivables or liabilities on the account – from the balance sheet date to when they are due –, for the notes of part 0009 |
+| `profit`, `trade_tax` | see part 0012 | how the balance counts for the taxes on profit |
 | `tax` | a tax code (part 0001) | the tax code postings on the account carry: an implementation proposes it for a posting without one, and SHOULD tell whoever books when a posting on the account carries another |
 
 In Germany the accounts DATEV computes VAT on – its automatic accounts, `AM` for output tax and `AV` for input tax

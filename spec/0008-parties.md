@@ -1,6 +1,6 @@
 # 0008 Parties
 
-Version 0.16, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, `BankAccount`,
+Version 0.18, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, `BankAccount`,
 `Relation`, event kinds `organisation_described`, `person_described`, `relation_described`, `owner_added`,
 `owner_removed`, `owner_configured`, `invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`,
 `Series`; `EventSet::relations`, `EventSet::match_parties`).
@@ -150,6 +150,7 @@ configuration (type `configuration`):
 | `chart` | the national chart of accounts the owner works with, as a code (`de-skr03`); its translation valid on a date (part 0004) applies; absent when none |
 | `accounting` | how profit is determined, as a code (below); absent when the owner determines none – a private household |
 | `vat` | how the owner is treated for VAT (type `vat_scheme`, below); absent when it is not liable – not an entrepreneur |
+| `trade_tax_multiplier` | the trade tax multiplier of the owner's municipality in percent, an integer; absent when the owner is not subject to trade tax or it is not known (part 0012) |
 | `region` | the subdivision of the country whose public holidays move the owner's deadlines – where its tax authority sits –, as an ISO 3166-2 code (`DE-BY`); absent when not known |
 
 A VAT scheme is `scheme`, a code (below), `basis` – `accrual` when VAT is due on what was agreed, `cash` when on what
@@ -179,6 +180,7 @@ OPEN – not every month has the day.
 | `currency` | `EUR` | the euro ([§ 244 HGB](https://www.gesetze-im-internet.de/hgb/__244.html)) |
 | `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)); a change makes a short financial year, which the law allows when an owner moves its regular closing to another day – away from the calendar year only in agreement with the tax office ([§ 8b EStDV](https://www.gesetze-im-internet.de/estdv_1955/__8b.html), § 4a Abs. 1 Nr. 2 EStG) |
 | `year_start_day` | `2` to `28` | a financial year from the middle of a month: § 4a EStG and § 8b EStDV ask for twelve months and the period of regular closings, not for the first of a month; rare – a business founded mid-month that closes after twelve months (OPEN: whether a tax office or the E-Bilanz has objections) |
+| `trade_tax_multiplier` | `200` or more | the Hebesatz the municipality sets for trade tax, at least 200 % ([§ 16 GewStG](https://www.gesetze-im-internet.de/gewstg/__16.html)); absent for a freelancer (§ 18 EStG), who is not subject to it |
 | `chart` | `de-skr03`, `de-skr04` | DATEV's standard charts SKR 03 and SKR 04 (part 0004) – common, not prescribed |
 | `accounting` | `de-cash-basis` | income over expenses ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html)), reported in the Anlage EÜR |
 | `accounting` | `de-double-entry` | double-entry bookkeeping ([§§ 238 ff. HGB](https://www.gesetze-im-internet.de/hgb/__238.html), [§ 141 AO](https://www.gesetze-im-internet.de/ao_1977/__141.html)), profit by comparing net assets (§ 4 Abs. 1, § 5 EStG) |

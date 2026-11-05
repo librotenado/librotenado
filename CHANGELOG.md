@@ -2,6 +2,23 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.18.0 – 2026-11-05
+
+Taxes on profit: corporation tax, the solidarity surcharge and trade tax.
+
+- [0012 Taxes on profit](spec/0012-taxes-on-profit.md), new: the taxable profit from the tax balance sheet – expenses
+  not deductible and income exempt, holdings in corporations (§ 8b KStG, § 3 Nr. 40 EStG), donations, remunerations
+  of partners, losses carried forward (§ 10d EStG) –; corporation tax by year (§ 23 KStG) and the solidarity
+  surcharge; trade tax with the additions of § 8 and the reductions of § 9 GewStG, losses (§ 10a), rounding,
+  allowances, the base amount of 3.5 % and the multiplier.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the attributes `profit` and `trade_tax`, on the 148
+  accounts of SKR 03 and SKR 04 DATEV marks for corporation tax and trade tax.
+- [0008 Parties](spec/0008-parties.md): `trade_tax_multiplier` in the configuration.
+- Library: `EventSet::profit_tax`, `ProfitTax`, `TradeTax`, `ProfitTaxFacts`, `TaxSubject`, `Holding`,
+  `ProfitTaxError`, `corporation_tax_rate`, `ProfitTax::fields`, `TradeTax::fields` (names `de-kst/*`, `de-gewst/*`);
+  `Configuration::trade_tax_multiplier`. On a cash basis a booking counts on
+  the day it is attributed to.
+
 ## 0.17.0 – 2026-11-05
 
 The tax codes of DATEV's automatic accounts, and the cash discounts of SKR 03 and SKR 04.

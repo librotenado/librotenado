@@ -462,6 +462,10 @@ pub struct Configuration {
     /// How the owner is treated for VAT; left out when it is not liable.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub vat: Option<VatScheme>,
+    /// The trade tax multiplier of the owner's municipality in percent (Hebesatz, § 16 GewStG); left out when the owner
+    /// is not subject to trade tax or it is not known.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub trade_tax_multiplier: Option<u32>,
     /// The subdivision of the country whose public holidays move the owner's deadlines – where its tax authority
     /// sits (`DE-BY`); left out when not known.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
