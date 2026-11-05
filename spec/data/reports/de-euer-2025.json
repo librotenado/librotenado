@@ -1,4 +1,15 @@
-{"type": "report_mapping", "report": "de-euer", "country": "DE", "version": "2025", "valid_from": "2025-01-01", "into": "librotenado/0.1", "status": "draft", "cash_basis": true, "accounts": {
+{"type": "report_mapping", "report": "de-euer", "country": "DE", "version": "2025", "valid_from": "2025-01-01", "into": "librotenado/0.1", "status": "draft", "cash_basis": true, "accounts_first": ["01a18406-adc8-767e-9e30-29a5ad6ad509", "01a18406-adc8-767e-9e30-29a34877002b", "01a18406-adc7-732c-940b-8e167f21bcf0", "01a18406-adc8-767e-9e30-29a4dd936ed3", "01a18406-adc8-767e-9e30-29a6bf4635ee", "01a18406-adc8-767e-9e30-29a77aba4e1e", "01a18406-adc8-767e-9e30-29a8aaa7bb81", "01a18406-ada7-73ad-88aa-95d7c1e741ed", "01a18406-ada7-73ad-88aa-95d63d58c9a9", "01a18406-ada8-73eb-b149-84c997d41ed6", "01a18406-ada8-73eb-b149-84ca82c51524", "01a18406-ada8-73eb-b149-84cbd953afb5", "01a18406-ada8-73eb-b149-84cc2561d416", "01a18406-ada8-73eb-b149-84cde48c4901"], "accounts": {
+  "01a18406-ada7-73ad-88aa-95d7c1e741ed": "1.102",
+  "01a18406-ada7-73ad-88aa-95d63d58c9a9": "1.102",
+  "01a18406-ada8-73eb-b149-84c997d41ed6": "1.102",
+  "01a18406-ada8-73eb-b149-84ca82c51524": "1.102",
+  "01a18406-ada8-73eb-b149-84cbd953afb5": "1.102",
+  "01a18406-ada8-73eb-b149-84cc2561d416": "1.102",
+  "01a18406-ada8-73eb-b149-84cde48c4901": "1.102",
+  "01a18406-ada8-73eb-b149-84ce798b121a": "2.135",
+  "01a18406-ada8-73eb-b149-84cf72149503": "2.135",
+  "01a18406-ada8-73eb-b149-84d0e8957c36": "2.135",
+  "01a18406-ada8-73eb-b149-84d1304478e5": "2.135",
   "01a18406-adb8-71f2-88bf-2f06431e56bf": "2.131",
   "01a18406-adb9-734a-82c0-6ab901f8fcd2": "2.131",
   "01a18406-adb9-734a-82c0-6abaff3dee35": "2.131",
@@ -280,6 +291,10 @@
   "01a18406-b5f3-71ba-82e7-c91bff65c36f": "2.225",
   "01a18406-b684-7300-955d-43c1bf051ae8": "2.183"
 }, "credit_accounts": {
+  "01a18406-ada8-73eb-b149-84ce798b121a": "2.135",
+  "01a18406-ada8-73eb-b149-84cf72149503": "2.135",
+  "01a18406-ada8-73eb-b149-84d0e8957c36": "2.135",
+  "01a18406-ada8-73eb-b149-84d1304478e5": "2.135",
   "01a182f7-1df7-77c4-9903-002289b0352e": "5.123",
   "01a18406-adc3-762a-9033-dad8e48d6f07": "2.142",
   "01a18406-adc7-732c-940b-8e167f21bcf0": "1.102",

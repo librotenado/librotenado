@@ -134,6 +134,10 @@ pub struct ReportMapping {
     /// `attributed` to, where it has one, else on its date.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cash_basis: bool,
+    /// Accounts whose position applies before the `base` of a tax rule – the proceeds of fixed assets sold, which the
+    /// Anlage EÜR wants on a line of their own whatever their VAT. An account holds for every account that refines it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub accounts_first: Vec<AccountId>,
     /// A report of the fixed assets (spec part 0011): account → group, for the assets depreciated on a straight
     /// line or not at all. An account holds for every account that refines it, unless a refinement has its own.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -357,9 +361,13 @@ impl EventSet {
                 // in the same field.
                 let credit = if reversal { units > 0 } else { units < 0 };
                 let position = mapping.position(&posting.account, &parents, credit);
+                let first = !on_output
+                    && !on_input
+                    && ancestry(&posting.account, &parents).into_iter().any(|id| mapping.accounts_first.contains(id));
                 let rule = posting
                     .tax
                     .as_ref()
+                    .filter(|_| !first)
                     .and_then(|code| mapping.taxes.iter().find(|rule| rule.tax == *code && rule.applies(position)));
                 if let Some(rule) = rule {
                     let sales = taxes.get(&rule.tax).is_some_and(|d| d.direction == TaxDirection::Output);
@@ -698,6 +706,42 @@ mod tests {
         assert!(set.review_bookings().is_empty());
         let late = add(&mut set, "2027-02-01", Some("2026-12-31"));
         assert_eq!(set.review_bookings(), [crate::BookingProblem::Attribution { event: late }]);
+    }
+
+    /// A vehicle sold for 5,000 + 950 VAT with a book value of 3,000: the proceeds on line 19 of the Anlage EÜR
+    /// without VAT, the VAT on line 21, the book value on line 39 – whatever the tax code says of the proceeds.
+    #[test]
+    fn an_asset_sold_reaches_its_own_lines_of_the_euer() {
+        let skr = ChartTranslation::de_skr03();
+        let posting = |number: &str, units: i128, tax: Option<&str>| Posting {
+            owner: party(1),
+            account: skr.accounts[number].clone(),
+            amount: Money::new(units, "EUR".parse().unwrap()).unwrap(),
+            note: None,
+            tax: tax.map(|t| t.parse().unwrap()),
+            exchange: None,
+        };
+        let set = books(vec![
+            vec![
+                posting("1200", 595_000, None),
+                posting("8820", -500_000, Some("de-out-19")),
+                posting("1776", -95_000, Some("de-out-19")),
+            ],
+            vec![posting("2315", 300_000, None), posting("0320", -300_000, None)],
+        ]);
+        let euer = set
+            .period_report(
+                &ReportMapping::de_euer_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-01-01".parse().unwrap(),
+                "2026-12-31".parse().unwrap(),
+            )
+            .unwrap();
+        let field = |kz: &str| euer.get(kz).copied();
+        assert_eq!((field("1.102"), field("1.112"), field("1.140")), (Some(500_000), None, Some(95_000)));
+        assert_eq!(field("2.135"), Some(300_000));
     }
 
     #[test]
@@ -1047,6 +1091,7 @@ mod tests {
             taxes: vec![],
             mandatory: vec![],
             cash_basis: false,
+            accounts_first: vec![],
             asset_groups: BTreeMap::new(),
             asset_fields: BTreeMap::new(),
             pools: vec![],

@@ -29,6 +29,7 @@ A report mapping is a root object of type `report_mapping`:
 | `vat_settlement` | `debit` and `credit`: the fields for VAT paid to and refunded by the tax office |
 | `taxes` | per tax code, the fields it fills (below); absent for a report computed from accounts alone |
 | `mandatory` | positions to state even without an amount (the E-Bilanz below); absent when none |
+| `accounts_first` | accounts whose position applies before the `base` of a tax rule – e.g. the proceeds of fixed assets sold, which the Anlage EÜR wants on line 19 whatever their VAT; absent when none |
 | `cash_basis` | `true` for a report that counts receipts and payments (§ 11 EStG): it takes a booking's `attributed` day where given (part 0001); absent otherwise |
 
 ### Reports from accounts
@@ -140,7 +141,8 @@ resolve:
   specialist literature `2.229`, the proprietor's hotel and incidental travel costs `2.221`, the travel costs of
   employees `2.120` (with the staff), the proprietor's meals away `2.171`, entertainment `2.165`/`2.175`, gifts
   `2.164`/`2.174`, vehicle costs `2.144` to `2.147`, rooms `2.150`/`2.151`, residual book values of assets disposed of
-  `2.135`, the cost of current assets of § 4 Abs. 3 Satz 4 EStG when the proceeds come in `2.100`, the formation of
+  `2.135` – also those of a sale at a gain, which the SKR keep among income –, the proceeds of fixed assets sold
+  `1.102`, before the tax code (`accounts_first`), the cost of current assets of § 4 Abs. 3 Satz 4 EStG when the proceeds come in `2.100`, the formation of
   reserves in section 4. The proceeds of an asset sold at a loss, which the SKR keep on an account of expense, are
   income of line 19 (`1.102`, credit side).
 - **Left out** (`excluded`): what a set of books determining its profit on a cash basis does not have – imputed costs

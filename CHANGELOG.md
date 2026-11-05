@@ -21,7 +21,9 @@ The annual VAT return, the ten-day rule, fixed assets.
   return, not part of the recapitulative statement (§ 18a Abs. 6 Nr. 1 UStG).
 - [0009 Reports](spec/0009-reports.md), Anlage EÜR 2025 and 2026: the accounts of depreciation reach their own lines
   instead of all line 130 – intangible assets 131, buildings and the home office 136, low-value assets 132, pools
-  137, special depreciation 134, reductions under § 7g Abs. 2 EStG 138.
+  137, special depreciation 134, reductions under § 7g Abs. 2 EStG 138. The proceeds of fixed assets sold reach line
+  19 (1.102) whatever their tax code – new member `accounts_first` of a mapping –, and the book values of assets sold
+  at a gain line 39 (2.135); before, those of a sale at a gain had no line.
 - [0001 Base types](spec/0001-base-types.md): the tax codes `de-out-exempt-letting` (§ 4 Nr. 12 UStG) and
   `de-in-13b-eu-service-7`, `de-in-13b-domestic-7` (reverse charge at 7 %).
 - [0005 Documents](spec/0005-documents.md): under reverse charge and for intra-Community acquisitions, the VAT owed and
@@ -34,7 +36,7 @@ The annual VAT return, the ten-day rule, fixed assets.
   `BookingProblem::Attribution`. `Booking` has a new member: code that writes it needs `attributed: None`.
   `Asset`, `AssetId`, `Disposal`, `Depreciation`, `AssetState`, `AssetFields`, `AssetProblem`,
   `Payload::AssetAcquired`, `Payload::AssetDisposed`, `EventSet::assets`, `EventSet::review_assets`,
-  `EventSet::asset_report`, `ReportMapping::de_aveuer_2026`; `ReportMapping` has the new members `asset_groups`,
+  `EventSet::asset_report`, `ReportMapping::de_aveuer_2026`; `ReportMapping` has the new members `accounts_first`, `asset_groups`,
   `asset_fields`, `pools`.
 
 ## 0.13.0 – 2026-11-05
