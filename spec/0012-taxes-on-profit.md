@@ -1,7 +1,7 @@
 # 0012 Taxes on profit
 
-Version 0.18, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
-`ProfitTaxFacts`).
+Version 0.19, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
+`ProfitTaxFacts`, `EventSet::income_tax`, `IncomeTax`, `IncomeTaxFacts`).
 
 The taxes a business pays on its profit follow from its books: the result of the financial year in the tax balance
 sheet (part 0001, `basis`), corrected for what the tax law does not count, and – for trade tax – what it adds and
@@ -70,6 +70,38 @@ For an owner with a `trade_tax_multiplier` (part 0008), from the profit before l
    associations and like bodies, none for corporations; times 3.5 %, the base amount
    ([§ 11](https://www.gesetze-im-internet.de/gewstg/__11.html)); times the multiplier, the trade tax.
 
+## Income tax
+
+A person running a business pays income tax on its profit together with all other income. The books give the
+profit – the income of the taxes on profit for a person, from the bookings of the calendar year –; what they do not
+hold, the person states: other positive income (of both spouses where they are assessed jointly), deductions –
+special expenses, extraordinary burdens, allowances –, losses carried forward, and the rate of church tax.
+
+1. **Taxable income:** profit and other income, less losses carried forward – up to 1 million euros, 2 million for
+   spouses, in full, above it up to 70 % of the rest (§ 10d Abs. 2 EStG) –, less the deductions; rounded down to
+   full euros.
+2. **The tariff** of 2026 ([§ 32a Abs. 1 EStG](https://www.gesetze-im-internet.de/estg/__32a.html)): none up to
+   12,348 euros; (914.51 · y + 1,400) · y up to 17,799 euros, y a ten-thousandth of what exceeds 12,348; (173.10 · z
+   + 2,397) · z + 1,034.87 up to 69,878 euros, z a ten-thousandth of what exceeds 17,799; 0.42 · x − 11,135.63 up to
+   277,825 euros; 0.45 · x − 19,470.38 above; rounded down to full euros. Spouses pay twice the tax on half their
+   income (Abs. 5). The tariffs of earlier years are not part of this version (OPEN).
+3. **The reduction for trade tax** ([§ 35 Abs. 1 EStG](https://www.gesetze-im-internet.de/estg/__35.html)): four
+   times the base amount of trade tax, no more than the trade tax, nor than the share of the tariff tax that falls on
+   the profit of the business among the positive income.
+4. **The income tax assessed:** the tariff tax less the reduction. The **solidarity surcharge** is 5.5 % of it, none
+   up to 20,350 euros – 40,700 euros for spouses – and no more than 11.9 % of what exceeds that limit
+   ([§ 3 Abs. 3, § 4 SolZG](https://www.gesetze-im-internet.de/solzg_1995/__4.html)); **church tax** is the rate of
+   the person's church – 8 % in Bavaria and Baden-Württemberg, 9 % elsewhere – of the tariff tax without the reduction
+   for trade tax ([§ 51a Abs. 2 Satz 3 EStG](https://www.gesetze-im-internet.de/estg/__51a.html)).
+5. **Advance payments:** a quarter of the income tax assessed, due on 10 March, June, September and December, none
+   below 400 euros a year or 100 euros a payment
+   ([§ 37 Abs. 1 and 5 EStG](https://www.gesetze-im-internet.de/estg/__37.html)).
+
+Children's allowances and their effect on the solidarity surcharge and church tax (§ 32 Abs. 6 EStG, § 3 Abs. 2
+SolZG), income taxed at a flat rate (§ 32d EStG), income under special tariffs (§§ 32b, 34 EStG), partners'
+shares of a partnership's profit and the reduction of § 35 for them, and the exemption limits of the solidarity
+surcharge for years other than 2026 are not part of this version (OPEN).
+
 ## The figures
 
 The figures are the fields of two reports, named in the translation data under `de-kst/<field>` and
@@ -77,7 +109,9 @@ The figures are the fields of two reports, named in the translation data under `
 `donations_deducted`, `income`, `loss_deduction`, `taxable`, `corporation_tax`, `solidarity`; and `profit`,
 `financing_a` to `financing_f` – the parts of § 8 Nr. 1 at their fractions –, `financing_addition`, `dividends`,
 `partnership_losses`, `donations_added`, `land`, `partnership_profits`, `donations`, `trade_income`,
-`loss_deduction`, `rounded`, `allowance`, `base`, `tax`. Fields without an amount are left out. They are the
+`loss_deduction`, `rounded`, `allowance`, `base`, `tax`; and for income tax, under `de-est/<field>`: `business`,
+`other_income`, `loss_deduction`, `deductions`, `taxable`, `tariff`, `trade_tax_credit`, `assessed`, `solidarity`,
+`church`, `advance_payment`. Fields without an amount are left out. They are the
 computation, not the forms (OPEN, below).
 
 ## What is given

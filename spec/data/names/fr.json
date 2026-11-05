@@ -2480,5 +2480,16 @@
   "de-gewst/rounded": "Produit industriel arrondi à 100 euros",
   "de-gewst/allowance": "Abattement (§ 11 Abs. 1 GewStG)",
   "de-gewst/base": "Montant de base (3,5 %)",
-  "de-gewst/tax": "Taxe professionnelle (Gewerbesteuer)"
+  "de-gewst/tax": "Taxe professionnelle (Gewerbesteuer)",
+  "de-est/business": "Revenus d'activité industrielle ou non commerciale",
+  "de-est/other_income": "Autres revenus (déclarés)",
+  "de-est/loss_deduction": "Déficits reportés imputés (§ 10d EStG)",
+  "de-est/deductions": "Dépenses spéciales, charges exceptionnelles, abattements (déclarés)",
+  "de-est/taxable": "Revenu imposable",
+  "de-est/tariff": "Impôt sur le revenu selon le barème (§ 32a EStG)",
+  "de-est/trade_tax_credit": "Réduction pour revenus industriels (§ 35 EStG)",
+  "de-est/assessed": "Impôt sur le revenu à établir",
+  "de-est/solidarity": "Contribution de solidarité",
+  "de-est/church": "Impôt d'Église",
+  "de-est/advance_payment": "Acompte par échéance (§ 37 EStG)"
 }}

@@ -2842,5 +2842,16 @@
   "de-gewst/rounded": "Trade income rounded down to 100 euros",
   "de-gewst/allowance": "Allowance (§ 11 Abs. 1 GewStG)",
   "de-gewst/base": "Base amount (3.5 %)",
-  "de-gewst/tax": "Trade tax"
+  "de-gewst/tax": "Trade tax",
+  "de-est/business": "Income from trade or self-employment",
+  "de-est/other_income": "Other income (stated)",
+  "de-est/loss_deduction": "Losses carried forward used (§ 10d EStG)",
+  "de-est/deductions": "Special expenses, extraordinary burdens, allowances (stated)",
+  "de-est/taxable": "Taxable income",
+  "de-est/tariff": "Tariff income tax (§ 32a EStG)",
+  "de-est/trade_tax_credit": "Reduction for income from trade (§ 35 EStG)",
+  "de-est/assessed": "Income tax assessed",
+  "de-est/solidarity": "Solidarity surcharge",
+  "de-est/church": "Church tax",
+  "de-est/advance_payment": "Advance payment per date (§ 37 EStG)"
 }}

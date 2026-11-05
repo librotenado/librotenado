@@ -384,12 +384,12 @@ impl EventSet {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::{Booking, ChartTranslation, Clock, Event, Money, Posting, party::tests::party};
 
     /// Books of owner 1 in SKR 03: each booking `number`, units (debit positive), against the bank.
-    fn books(lines: &[(&str, i128)]) -> EventSet {
+    pub(crate) fn books(lines: &[(&str, i128)]) -> EventSet {
         let skr03 = ChartTranslation::de_skr03();
         let mut set = EventSet::new();
         let mut clock = Clock::new("a".parse().unwrap());
@@ -418,7 +418,7 @@ mod tests {
         set
     }
 
-    fn facts(subject: TaxSubject) -> ProfitTaxFacts {
+    pub(crate) fn facts(subject: TaxSubject) -> ProfitTaxFacts {
         ProfitTaxFacts {
             subject,
             multiplier: Some(400),

@@ -2,6 +2,17 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.19.0 – 2026-11-05
+
+Income tax of a person running a business.
+
+- [0012 Taxes on profit](spec/0012-taxes-on-profit.md): income tax – the profit of the books with other income,
+  deductions and losses the person states; the tariff of 2026 (§ 32a EStG) and splitting; the reduction for trade
+  tax (§ 35 EStG); the solidarity surcharge with its exemption limit and transition zone; church tax without the
+  reduction; advance payments (§ 37 EStG).
+- Library: `EventSet::income_tax`, `IncomeTax`, `IncomeTaxFacts`, `income_tax_tariff`, `solidarity_surcharge`;
+  names `de-est/*`.
+
 ## 0.18.0 – 2026-11-05
 
 Taxes on profit: corporation tax, the solidarity surcharge and trade tax.

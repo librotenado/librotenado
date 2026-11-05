@@ -2842,5 +2842,16 @@
   "de-gewst/rounded": "Gewerbeertrag, auf volle 100 Euro abgerundet",
   "de-gewst/allowance": "Freibetrag (§ 11 Abs. 1 GewStG)",
   "de-gewst/base": "Steuermessbetrag (3,5 %)",
-  "de-gewst/tax": "Gewerbesteuer"
+  "de-gewst/tax": "Gewerbesteuer",
+  "de-est/business": "Einkünfte aus Gewerbebetrieb bzw. selbständiger Arbeit",
+  "de-est/other_income": "Andere Einkünfte (angegeben)",
+  "de-est/loss_deduction": "Verlustabzug (§ 10d EStG)",
+  "de-est/deductions": "Sonderausgaben, außergewöhnliche Belastungen, Freibeträge (angegeben)",
+  "de-est/taxable": "Zu versteuerndes Einkommen",
+  "de-est/tariff": "Tarifliche Einkommensteuer (§ 32a EStG)",
+  "de-est/trade_tax_credit": "Steuerermäßigung bei Einkünften aus Gewerbebetrieb (§ 35 EStG)",
+  "de-est/assessed": "Festzusetzende Einkommensteuer",
+  "de-est/solidarity": "Solidaritätszuschlag",
+  "de-est/church": "Kirchensteuer",
+  "de-est/advance_payment": "Vorauszahlung je Termin (§ 37 EStG)"
 }}

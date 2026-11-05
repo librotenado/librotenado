@@ -96,6 +96,7 @@ mod encryption;
 mod event;
 mod filing;
 pub mod gobd;
+mod income_tax;
 mod invoice;
 mod money;
 pub mod mt940;
@@ -132,6 +133,7 @@ pub use filing::{
     AdapterError, Derivation, Filer, Filing, FilingId, FilingKind, FilingProblem, FilingState, Receipt, ReportContent,
     Submission, SubmissionError, SubmissionState, SubmissionStatus,
 };
+pub use income_tax::{IncomeTax, IncomeTaxFacts, income_tax_tariff, solidarity_surcharge};
 pub use invoice::{
     AllowanceCharge, Classification, CreditTransfer, Delivery, DirectDebit, Endpoint, Identifier, InvoiceContact,
     InvoiceData, InvoiceLine, InvoiceNote, InvoiceParty, InvoiceReferences, InvoiceSide, InvoiceTotals, ItemAttribute,
