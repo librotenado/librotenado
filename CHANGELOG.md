@@ -2,6 +2,40 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.16.0 – 2026-11-05
+
+Withdrawn currencies, a financial year from the middle of a month, remaining terms, the E-Bilanz per legal form and
+its reconciliation, the extension of XRechnung, code lists, sealed names and padded envelopes.
+
+- [0001 Base types](spec/0001-base-types.md): the 21 currencies the euro replaced, with the month ISO 4217 withdrew
+  them (`withdrawn`) and the rate the Council fixed (`fixed_rate`), converted after Regulation (EC) No 1103/97; the
+  divisions of bitcoin and ether with their sources; units without a minor unit (XAU, XDR, XTS, XXX) are not
+  currencies of the books. `basis` on a booking – one that counts in the commercial or the tax balance sheet only.
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the attribute `term`, the remaining term of receivables
+  and liabilities, on every account of the SKR that names one. Fixed in the chart of version 0.1: 21 accounts with a
+  remaining term of more than one year (or of one to five, of more than five years) refined the account of up to one
+  year; they now refine the account above it, and their names lose the term of the other.
+- [0005 Documents](spec/0005-documents.md): the extension of XRechnung – sub-lines (BG-DEX-01) and payments for third
+  parties (BG-DEX-09), read and written in UBL with the specification identifier of the extension; payments for
+  third parties on transit items in a booking proposal. Codes are checked against the code lists of EN 16931
+  (validation artefacts 1.3.16, `spec/data/codelists/en16931.json`) before an invoice is written.
+- [0006 Encryption](spec/0006-encryption.md): sealed names in the member list; `until`, access for a time; envelopes
+  padded to powers of two (ISO/IEC 9797-1, method 2); seeds in the key store of the operating system; the comparison
+  with MLS sourced in RFC 9420.
+- [0008 Parties](spec/0008-parties.md): `year_start_day`, a financial year that begins on the 2nd to the 28th of a
+  month.
+- [0009 Reports](spec/0009-reports.md): remaining terms per position (§ 268 Abs. 4 and 5 HGB); the Mussfelder of the
+  E-Bilanz per group of legal forms (`legal_forms`, `mandatory_by_form`); the reconciliation to the tax balance sheet
+  (Überleitungsrechnung) from the bookings with `basis`; which master data (GCD) the books give.
+- Library: `Withdrawn`, `FixedRate`, `CurrencyDefinition::withdrawal` and `fixed_rate`, `CurrencyTable::convert_fixed`,
+  `ParseError::Month`; `Configuration::year_start_day` and `year_start_date`; `Basis`, `Booking::basis` and
+  `counts_in`, `EventSet::functional_balances_in`, `account_report_in`, `reconciliation`, `term_report`, `Terms`;
+  `ReportMapping::legal_forms`, `mandatory_by_form`, `mandatory_for`; `InvoiceLine::sub_lines`, `ThirdPartyPayment`,
+  `InvoiceData::third_party_payments`, `ProposalAccounts::transit`, `en16931::XRECHNUNG_EXTENSION`, `needs_extension`,
+  `CodeLists`, `check_codes`, `WriteError::Code` and `Extension`; `Member::sealed_name`, `until`, `with_sealed_name`,
+  `display_name`, `is_active_on`, `SealedName`, `MemberList::active_member` and `expired`, `Envelope::padded`.
+  Balances and reports from accounts are those of the commercial balance sheet.
+
 ## 0.15.0 – 2026-11-05
 
 Corrections, notifications, outdated filings, shortened balance sheets.

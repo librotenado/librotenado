@@ -55,8 +55,8 @@ jobs:
             2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8 configuration.zip | sha256sum -c -
           unzip -q configuration.zip -d configuration
           mkdir written
-      - name: Every test invoice written as XRechnung in UBL and CII
-        run: LIBROTENADO_EXPORT="$RUNNER_TEMP/written" cargo test --locked --test en16931 written_invoices_read_back_the_same
+      - name: Every test invoice written as XRechnung in UBL and CII, those of the extension in UBL
+        run: LIBROTENADO_EXPORT="$RUNNER_TEMP/written" cargo test --locked --test en16931 read_back_the_same
       - name: All of them accepted
         working-directory: ${{ runner.temp }}
         run: |

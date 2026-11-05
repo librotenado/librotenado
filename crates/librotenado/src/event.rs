@@ -848,16 +848,18 @@ impl EventSet {
             }
         }
         // Per owner: a change of the financial year begins the new year.
-        let mut by_from: BTreeMap<(&PartyId, Date), (EventHash, u8)> = BTreeMap::new();
+        // Per owner and day: the configuration and the start of its financial year, month and day.
+        type YearStart = (u8, u8);
+        let mut by_from: BTreeMap<(&PartyId, Date), (EventHash, YearStart)> = BTreeMap::new();
         for (hash, event) in self.ordered() {
             if let Payload::OwnerConfigured { configuration } = &event.payload {
-                by_from.insert((&configuration.owner, configuration.from), (hash, configuration.year_start));
+                by_from.insert((&configuration.owner, configuration.from), (hash, configuration.year_start_date()));
             }
         }
-        let mut previous: Option<(&PartyId, u8)> = None;
+        let mut previous: Option<(&PartyId, YearStart)> = None;
         for ((owner, from), (hash, year_start)) in &by_from {
             let changed = previous.is_some_and(|(o, y)| o == *owner && y != *year_start);
-            if changed && (from.day() != 1 || from.month() != *year_start) {
+            if changed && (from.month(), from.day()) != *year_start {
                 problems.push(PartyProblem::YearChangedWithin { event: *hash, owner: (*owner).clone() });
             }
             previous = Some((owner, *year_start));
@@ -1064,6 +1066,7 @@ mod tests {
     fn booking(base_units: i128) -> Booking {
         let money = |units: i128| Money::new(units, "EUR".parse().unwrap()).unwrap();
         Booking {
+            basis: None,
             attributed: None,
             date: "2026-10-24".parse().unwrap(),
             text: "groceries".into(),

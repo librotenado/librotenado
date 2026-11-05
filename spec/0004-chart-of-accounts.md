@@ -1,6 +1,6 @@
 # 0004 Chart of accounts
 
-Version 0.10, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
+Version 0.16, draft. Implemented in the reference library (`Chart`, `ChartTranslation`, `Balances`, `Names`).
 
 librotenado has one **harmonised chart of accounts**. National charts – prescribed ones such as France's Plan
 comptable général and common ones such as Germany's standard charts – are **translations** of it. Where a national
@@ -51,6 +51,13 @@ A chart is an object of type `chart` with `name`, `version` and `accounts`. A ch
 - no account refines itself, directly or through others.
 
 An account inherits the attributes of the accounts it refines; its own values take precedence.
+
+Attributes of version 0.16:
+
+| Attribute | Values | Meaning |
+|---|---|---|
+| `iban` | an IBAN | the bank account an account is kept for (below, part 0005) |
+| `term` | `up-to-1-year`, `over-1-year`, `1-to-5-years`, `over-5-years` | the remaining term of the receivables or liabilities on the account – from the balance sheet date to when they are due –, for the notes of part 0009 |
 
 ## Translations of national charts
 

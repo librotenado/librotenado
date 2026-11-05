@@ -1,6 +1,6 @@
 # 0008 Parties
 
-Version 0.13, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, `BankAccount`,
+Version 0.16, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, `BankAccount`,
 `Relation`, event kinds `organisation_described`, `person_described`, `relation_described`, `owner_added`,
 `owner_removed`, `owner_configured`, `invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`,
 `Series`; `EventSet::relations`, `EventSet::match_parties`).
@@ -145,7 +145,8 @@ configuration (type `configuration`):
 | `owner` | the organisation or person (an owner of the books) |
 | `from` | the first day it applies |
 | `currency` | the functional currency the owner's statements are in (part 0001) |
-| `year_start` | the month, 1 to 12, on whose first day the owner's financial year begins |
+| `year_start` | the month, 1 to 12, in which the owner's financial year begins |
+| `year_start_day` | the day of that month, 2 to 28, on which it begins; absent on the first |
 | `chart` | the national chart of accounts the owner works with, as a code (`de-skr03`); its translation valid on a date (part 0004) applies; absent when none |
 | `accounting` | how profit is determined, as a code (below); absent when the owner determines none – a private household |
 | `vat` | how the owner is treated for VAT (type `vat_scheme`, below); absent when it is not liable – not an entrepreneur |
@@ -161,13 +162,15 @@ later in the agreed order of events (part 0002) applies. Codes are the country i
 characters of `a-z`, `0-9` and `-`, like tax codes (part 0001); an implementation keeps a code it does not know but
 does not interpret it.
 
-**The financial year** that holds a day is twelve months from the latest first day of the month `year_start`, on or
-before it, of the configuration that applies on that day – the calendar year without one. Where a configuration
-changes `year_start`, the financial year is shorter: the year before ends the day before that configuration's
-`from`, the year after begins on it, and full years of the new `year_start` follow; so a change moves the
-financial year for good, with one short year between. A configuration that keeps
-`year_start` changes no financial year; nor does the first configuration of an owner, whose books may begin within a
-year. A financial year that begins on another day than the first of a month is OPEN.
+**The financial year** that holds a day is twelve months from the latest day `year_start_day` of the month
+`year_start`, on or before it, of the configuration that applies on that day – the calendar year without one.
+`year_start_day` is 2 to 28 and absent when the year begins on the first of the month; a reader MUST reject 1 and
+any other value, so that a start has one form. Where a configuration changes the start – month or day –, the
+financial year is shorter: the year before ends the day before that configuration's `from`, the year after begins
+on it, and full years of the new start follow; so a change moves the financial year for good, with one short year
+between. A configuration that keeps the start changes no financial year; nor does the first configuration of an
+owner, whose books may begin within a year. A financial year that begins on the 29th, 30th or 31st of a month is
+OPEN – not every month has the day.
 
 ### Germany
 
@@ -175,6 +178,7 @@ year. A financial year that begins on another day than the first of a month is O
 |---|---|---|
 | `currency` | `EUR` | the euro ([§ 244 HGB](https://www.gesetze-im-internet.de/hgb/__244.html)) |
 | `year_start` | `1` to `12` | the calendar year, or a financial year of its own ([§ 4a EStG](https://www.gesetze-im-internet.de/estg/__4a.html)); a change makes a short financial year, which the law allows when an owner moves its regular closing to another day – away from the calendar year only in agreement with the tax office ([§ 8b EStDV](https://www.gesetze-im-internet.de/estdv_1955/__8b.html), § 4a Abs. 1 Nr. 2 EStG) |
+| `year_start_day` | `2` to `28` | a financial year from the middle of a month: § 4a EStG and § 8b EStDV ask for twelve months and the period of regular closings, not for the first of a month; rare – a business founded mid-month that closes after twelve months (OPEN: whether a tax office or the E-Bilanz has objections) |
 | `chart` | `de-skr03`, `de-skr04` | DATEV's standard charts SKR 03 and SKR 04 (part 0004) – common, not prescribed |
 | `accounting` | `de-cash-basis` | income over expenses ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html)), reported in the Anlage EÜR |
 | `accounting` | `de-double-entry` | double-entry bookkeeping ([§§ 238 ff. HGB](https://www.gesetze-im-internet.de/hgb/__238.html), [§ 141 AO](https://www.gesetze-im-internet.de/ao_1977/__141.html)), profit by comparing net assets (§ 4 Abs. 1, § 5 EStG) |
@@ -191,8 +195,9 @@ An implementation MUST report, and MUST NOT silently resolve:
 - **Not configured** – a posting in the books of an owner, dated before the owner's first configuration.
 - **Configuration of a non-owner** – a configuration, invoicing settings or a series for an organisation or person
   that is not an owner of the books.
-- **Year changed within** – a configuration that changes `year_start` from a day that is not the first day of the
-  month `year_start`: it makes two short financial years where the change needs one.
+- **Year changed within** – a configuration that changes the start of the financial year from a day that is not
+  the new start, `year_start_day` (or the first) of the month `year_start`: it makes two short financial years
+  where the change needs one.
 
 ## Invoicing
 
@@ -225,7 +230,7 @@ is a matter of encryption (part 0006).
 
 - The registries of codes: legal forms, registers, tax schemes – per country, with sources.
 - Further data the books depend on beyond the configuration: accounting standards beyond Germany (IFRS, national
-  GAAP), a financial year that does not begin on the first of a month, codes of further countries.
+  GAAP), a financial year that begins on the 29th, 30th or 31st of a month, codes of further countries.
 - Relations between organisations: groups, holdings, branches.
 - Capital that is not divided into shares: the contributions of partners in a partnership, the assets of a
   foundation.

@@ -12,7 +12,7 @@ use crate::{
     AllowanceCharge, Classification, ContentHash, Country, CreditTransfer, Currency, CurrencyTable, Date, Decimal,
     Delivery, DirectDebit, DocumentKind, Endpoint, Identifier, InvoiceContact, InvoiceData, InvoiceLine, InvoiceNote,
     InvoiceParty, InvoiceReferences, InvoiceTotals, ItemAttribute, Money, Original, Payment, PaymentCard, Period,
-    PostalAddress, PrecedingInvoice, SupportingDocument, VatBreakdown, VatCategory,
+    PostalAddress, PrecedingInvoice, SupportingDocument, ThirdPartyPayment, VatBreakdown, VatCategory,
 };
 
 const UBL_INVOICE: &str = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
@@ -314,6 +314,13 @@ fn ubl_party(party: Node, terms: [&'static str; 2]) -> Result<InvoiceParty> {
     })
 }
 
+/// A line of UBL and its sub-lines (BG-DEX-01 of the extension of XRechnung), at any depth.
+fn nested_line(line: Node, flat: &dyn Fn(Node) -> Result<InvoiceLine>, sub_name: &'static str) -> Result<InvoiceLine> {
+    let mut read = flat(line)?;
+    read.sub_lines = all(line, sub_name).map(|sub| nested_line(sub, flat, sub_name)).collect::<Result<Vec<_>>>()?;
+    Ok(read)
+}
+
 fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
     let (currency, decimals) = currency(&required(root, &["DocumentCurrencyCode"], "BT-5")?, currencies)?;
     let amount = |node: Node, path: &[&str], term| -> Result<Money> {
@@ -392,62 +399,69 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
         })
         .collect::<Result<Vec<_>>>()?;
     let line_name = if credit_note { "CreditNoteLine" } else { "InvoiceLine" };
-    let lines = all(root, line_name)
-        .map(|line| {
-            let item = at(line, &["Item"]).ok_or(TranslationError::Missing("BG-31"))?;
-            let category = category(&required(item, &["ClassifiedTaxCategory", "ID"], "BT-151")?, "BT-151")?;
-            let quantity = at(line, &[if credit_note { "CreditedQuantity" } else { "InvoicedQuantity" }]);
-            let price = at(line, &["Price"]);
-            let price_allowance = price.and_then(|p| at(p, &["AllowanceCharge"]));
-            let (allowances, charges) =
-                split(all(line, "AllowanceCharge").map(|a| allowance_charge(a, false)).collect::<Result<Vec<_>>>()?);
-            Ok(InvoiceLine {
-                id: text(line, &["ID"]),
-                note: text(line, &["Note"]),
-                object: all(line, "DocumentReference")
-                    .find(|d| text(*d, &["DocumentTypeCode"]).as_deref() == Some("130"))
-                    .and_then(|d| identifier(at(d, &["ID"]), "schemeID")),
-                order_line: text(line, &["OrderLineReference", "LineID"]),
-                accounting: text(line, &["AccountingCost"]),
-                period: at(line, &["InvoicePeriod"])
-                    .map(|p| -> Result<_> {
-                        Ok(period(
-                            optional_date(p, &["StartDate"], "BT-134")?,
-                            optional_date(p, &["EndDate"], "BT-135")?,
-                        ))
+    let flat_line = |line: Node| -> Result<InvoiceLine> {
+        let item = at(line, &["Item"]).ok_or(TranslationError::Missing("BG-31"))?;
+        let category = category(&required(item, &["ClassifiedTaxCategory", "ID"], "BT-151")?, "BT-151")?;
+        let quantity = at(line, &[if credit_note { "CreditedQuantity" } else { "InvoicedQuantity" }]);
+        let price = at(line, &["Price"]);
+        let price_allowance = price.and_then(|p| at(p, &["AllowanceCharge"]));
+        let (allowances, charges) =
+            split(all(line, "AllowanceCharge").map(|a| allowance_charge(a, false)).collect::<Result<Vec<_>>>()?);
+        Ok(InvoiceLine {
+            id: text(line, &["ID"]),
+            note: text(line, &["Note"]),
+            object: all(line, "DocumentReference")
+                .find(|d| text(*d, &["DocumentTypeCode"]).as_deref() == Some("130"))
+                .and_then(|d| identifier(at(d, &["ID"]), "schemeID")),
+            order_line: text(line, &["OrderLineReference", "LineID"]),
+            accounting: text(line, &["AccountingCost"]),
+            period: at(line, &["InvoicePeriod"])
+                .map(|p| -> Result<_> {
+                    Ok(period(optional_date(p, &["StartDate"], "BT-134")?, optional_date(p, &["EndDate"], "BT-135")?))
+                })
+                .transpose()?
+                .flatten(),
+            name: required(item, &["Name"], "BT-153")?,
+            description: text(item, &["Description"]),
+            seller_item: text(item, &["SellersItemIdentification", "ID"]),
+            buyer_item: text(item, &["BuyersItemIdentification", "ID"]),
+            standard_item: identifier(at(item, &["StandardItemIdentification", "ID"]), "schemeID"),
+            classifications: all(item, "CommodityClassification")
+                .filter_map(|c| at(c, &["ItemClassificationCode"]))
+                .filter_map(|c| {
+                    Some(Classification {
+                        code: c.text()?.trim().to_owned(),
+                        list: c.attribute("listID")?.to_owned(),
+                        version: c.attribute("listVersionID").map(str::to_owned),
                     })
-                    .transpose()?
-                    .flatten(),
-                name: required(item, &["Name"], "BT-153")?,
-                description: text(item, &["Description"]),
-                seller_item: text(item, &["SellersItemIdentification", "ID"]),
-                buyer_item: text(item, &["BuyersItemIdentification", "ID"]),
-                standard_item: identifier(at(item, &["StandardItemIdentification", "ID"]), "schemeID"),
-                classifications: all(item, "CommodityClassification")
-                    .filter_map(|c| at(c, &["ItemClassificationCode"]))
-                    .filter_map(|c| {
-                        Some(Classification {
-                            code: c.text()?.trim().to_owned(),
-                            list: c.attribute("listID")?.to_owned(),
-                            version: c.attribute("listVersionID").map(str::to_owned),
-                        })
-                    })
-                    .collect(),
-                origin: country(text(item, &["OriginCountry", "IdentificationCode"])),
-                attributes: all(item, "AdditionalItemProperty")
-                    .filter_map(|p| Some(ItemAttribute { name: text(p, &["Name"])?, value: text(p, &["Value"])? }))
-                    .collect(),
-                quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
-                unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
-                price: price.map(|p| decimal_at(p, &["PriceAmount"], "BT-146")).transpose()?.flatten(),
-                price_quantity: price.map(|p| decimal_at(p, &["BaseQuantity"], "BT-149")).transpose()?.flatten(),
-                gross_price: price_allowance.map(|a| decimal_at(a, &["BaseAmount"], "BT-148")).transpose()?.flatten(),
-                price_discount: price_allowance.map(|a| decimal_at(a, &["Amount"], "BT-147")).transpose()?.flatten(),
-                allowances,
-                charges,
-                net: amount(line, &["LineExtensionAmount"], "BT-131")?,
-                category,
-                rate: rate(text(item, &["ClassifiedTaxCategory", "Percent"]), category, "BT-152")?,
+                })
+                .collect(),
+            origin: country(text(item, &["OriginCountry", "IdentificationCode"])),
+            attributes: all(item, "AdditionalItemProperty")
+                .filter_map(|p| Some(ItemAttribute { name: text(p, &["Name"])?, value: text(p, &["Value"])? }))
+                .collect(),
+            quantity: quantity.and_then(|q| q.text()).map(|q| decimal(q.trim(), "BT-129")).transpose()?,
+            unit: quantity.and_then(|q| q.attribute("unitCode")).map(str::to_owned),
+            price: price.map(|p| decimal_at(p, &["PriceAmount"], "BT-146")).transpose()?.flatten(),
+            price_quantity: price.map(|p| decimal_at(p, &["BaseQuantity"], "BT-149")).transpose()?.flatten(),
+            gross_price: price_allowance.map(|a| decimal_at(a, &["BaseAmount"], "BT-148")).transpose()?.flatten(),
+            price_discount: price_allowance.map(|a| decimal_at(a, &["Amount"], "BT-147")).transpose()?.flatten(),
+            allowances,
+            charges,
+            net: amount(line, &["LineExtensionAmount"], "BT-131")?,
+            category,
+            rate: rate(text(item, &["ClassifiedTaxCategory", "Percent"]), category, "BT-152")?,
+            sub_lines: vec![],
+        })
+    };
+    let sub_name = if credit_note { "SubCreditNoteLine" } else { "SubInvoiceLine" };
+    let lines = all(root, line_name).map(|line| nested_line(line, &flat_line, sub_name)).collect::<Result<Vec<_>>>()?;
+    let third_party_payments = all(root, "PrepaidPayment")
+        .map(|p| -> Result<ThirdPartyPayment> {
+            Ok(ThirdPartyPayment {
+                kind: required(p, &["ID"], "BT-DEX-001")?,
+                amount: amount(p, &["PaidAmount"], "BT-DEX-002")?,
+                description: required(p, &["InstructionID"], "BT-DEX-003")?,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -581,6 +595,7 @@ fn ubl(root: Node, credit_note: bool, currencies: &CurrencyTable) -> Result<Tran
             taxes,
             attachments,
             lines,
+            third_party_payments,
             totals: InvoiceTotals {
                 net: amount(totals, &["TaxExclusiveAmount"], "BT-109")?,
                 tax: match tax_total {
@@ -733,6 +748,7 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
             let gross_price = line_agreement.and_then(|a| at(a, &["GrossPriceProductTradePrice"]));
             let (allowances, charges) = allowances_charges(line_settlement, false)?;
             Ok(InvoiceLine {
+                sub_lines: vec![],
                 id: text(line, &["AssociatedDocumentLineDocument", "LineID"]),
                 note: text(line, &["AssociatedDocumentLineDocument", "IncludedNote", "Content"]),
                 object: all(line_settlement, "AdditionalReferencedDocument")
@@ -889,6 +905,7 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
         number: required(document, &["ID"], "BT-1")?,
         date: date(&required(document, &["IssueDateTime", "DateTimeString"], "BT-2")?, "BT-2")?,
         invoice: InvoiceData {
+            third_party_payments: vec![],
             type_code,
             currency: currency.clone(),
             notes: all(document, "IncludedNote")
@@ -950,6 +967,107 @@ fn cii(root: Node, currencies: &CurrencyTable) -> Result<TranslatedInvoice> {
 
 /// The specification identifier (BT-24) of XRechnung 3.0.
 pub const XRECHNUNG: &str = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
+/// The specification identifier (BT-24) of the extension of XRechnung 3.0: sub-lines (BG-DEX-01) and payments for
+/// third parties (BG-DEX-09).
+pub const XRECHNUNG_EXTENSION: &str = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0";
+
+/// The code lists of EN 16931 – of the validation artefacts of CEN/TC 434 (`spec/data/codelists/en16931.json`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CodeLists {
+    /// The version of the validation artefacts.
+    pub version: String,
+    /// Each list by its name (`rec-20-21`, `untdid-4461`, `eas`, …): its codes.
+    pub lists: BTreeMap<String, std::collections::BTreeSet<String>>,
+}
+
+impl crate::Object for CodeLists {
+    const TYPE: &'static str = "code_lists";
+}
+
+impl CodeLists {
+    /// The lists of version 1.3.16 of the validation artefacts, which XRechnung 3.0.2 uses.
+    pub fn v1_3_16() -> &'static CodeLists {
+        static LISTS: std::sync::OnceLock<CodeLists> = std::sync::OnceLock::new();
+        LISTS.get_or_init(|| {
+            crate::from_root(include_bytes!("../data/codelists/en16931.json"))
+                .expect("the published code lists are valid")
+        })
+    }
+
+    /// Whether `code` is in the list `list`; a list the data does not have holds every code.
+    pub fn contains(&self, list: &str, code: &str) -> bool {
+        self.lists.get(list).is_none_or(|codes| codes.contains(code))
+    }
+}
+
+/// Checks the codes of an invoice against the code lists of EN 16931 before it is written (BR-CL-06 to BR-CL-26).
+pub fn check_codes<'a>(data: &'a InvoiceData) -> std::result::Result<(), WriteError> {
+    let lists = CodeLists::v1_3_16();
+    let mut checks: Vec<(&'static str, &'static str, &str)> = Vec::new();
+    let mut check = |list, term, code: Option<&'a str>| {
+        if let Some(code) = code {
+            checks.push((list, term, code));
+        }
+    };
+    check("untdid-2005", "BT-8", data.tax_point_code.as_deref());
+    for note in &data.notes {
+        check("untdid-4451", "BT-21", note.subject.as_deref());
+    }
+    let references = data.references.as_ref();
+    check("untdid-1153", "BT-18-1", references.and_then(|r| r.object.as_ref()).and_then(|o| o.scheme.as_deref()));
+    let parties = [Some(&data.seller), Some(&data.buyer), data.payee.as_ref(), data.tax_representative.as_ref()];
+    for party in parties.into_iter().flatten() {
+        for identifier in &party.identifiers {
+            check("iso-6523", "BT-29-1", identifier.scheme.as_deref());
+        }
+        check("iso-6523", "BT-30-1", party.registration.as_ref().and_then(|r| r.scheme.as_deref()));
+        check("eas", "BT-34-1", party.endpoint.as_ref().map(|e| e.scheme.as_str()));
+        check("iso-3166", "BT-40", party.address.as_ref().map(|a| a.country.as_str()));
+    }
+    if let Some(delivery) = &data.delivery {
+        check("iso-6523", "BT-71-1", delivery.location.as_ref().and_then(|l| l.scheme.as_deref()));
+        check("iso-3166", "BT-80", delivery.address.as_ref().map(|a| a.country.as_str()));
+    }
+    check("untdid-4461", "BT-81", data.payment.as_ref().map(|p| p.means.as_str()));
+    for allowance in &data.allowances {
+        check("untdid-5189", "BT-98", allowance.reason_code.as_deref());
+    }
+    for charge in &data.charges {
+        check("untdid-7161", "BT-105", charge.reason_code.as_deref());
+    }
+    for tax in &data.taxes {
+        check("vatex", "BT-121", tax.exemption_code.as_deref());
+    }
+    for attachment in &data.attachments {
+        check("mime", "BT-125-1", attachment.file.as_ref().map(|f| f.media_type.as_str()));
+    }
+    let mut stack: Vec<&InvoiceLine> = data.lines.iter().collect();
+    while let Some(line) = stack.pop() {
+        stack.extend(&line.sub_lines);
+        check("untdid-1153", "BT-128-1", line.object.as_ref().and_then(|o| o.scheme.as_deref()));
+        check("rec-20-21", "BT-130", line.unit.as_deref());
+        for allowance in &line.allowances {
+            check("untdid-5189", "BT-140", allowance.reason_code.as_deref());
+        }
+        for charge in &line.charges {
+            check("untdid-7161", "BT-145", charge.reason_code.as_deref());
+        }
+        check("iso-6523", "BT-157-1", line.standard_item.as_ref().and_then(|i| i.scheme.as_deref()));
+        for classification in &line.classifications {
+            check("untdid-7143", "BT-158-1", Some(classification.list.as_str()));
+        }
+        check("iso-3166", "BT-159", line.origin.as_ref().map(|c| c.as_str()));
+    }
+    match checks.into_iter().find(|(list, _, code)| !lists.contains(list, code)) {
+        Some((_, term, code)) => Err(WriteError::Code(term, code.to_owned())),
+        None => Ok(()),
+    }
+}
+
+/// Whether an invoice needs the extension of XRechnung.
+pub fn needs_extension(invoice: &InvoiceData) -> bool {
+    !invoice.third_party_payments.is_empty() || invoice.lines.iter().any(|line| !line.sub_lines.is_empty())
+}
 /// The business process (BT-23) of Peppol BIS Billing 3.0, which XRechnung uses.
 const PROCESS: &str = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
 /// The types of invoice XRechnung 3.0 allows (BR-DE-17).
@@ -964,9 +1082,16 @@ pub enum WriteError {
     /// The net total is not the sum of the lines less the allowances plus the charges on the invoice.
     #[error("the net total is not the lines less allowances plus charges")]
     Lines,
-    /// The amount due is not the gross amount less prepaid amounts plus rounding.
-    #[error("the amount due is not gross less prepaid plus rounding")]
+    /// The amount due is not the gross amount less prepaid amounts plus rounding plus payments for third parties.
+    #[error("the amount due is not gross less prepaid plus rounding plus payments for third parties")]
     Totals,
+    /// Sub-lines or payments for third parties, which the extension of XRechnung carries in UBL only here (OPEN for
+    /// CII).
+    #[error("the syntax does not carry the extension of XRechnung here")]
+    Extension,
+    /// A code not in the code list of EN 16931 for its term (rules BR-CL-*): the term, then the code.
+    #[error("{0}: {1:?} is not in its code list")]
+    Code(&'static str, String),
     /// A type of invoice XRechnung does not allow.
     #[error("XRechnung does not allow the type of invoice {0}")]
     Type(String),
@@ -1069,6 +1194,7 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
     }
     missing.sort_unstable();
     missing.dedup();
+    check_codes(data)?;
     if !missing.is_empty() {
         return Err(WriteError::Missing(missing));
     }
@@ -1084,7 +1210,10 @@ pub fn check_xrechnung(invoice: &TranslatedInvoice) -> std::result::Result<(), W
     }
     let totals = &data.totals;
     let units = |m: &Option<Money>| m.as_ref().map_or(0, Money::base_units);
-    if totals.gross.base_units() - units(&totals.prepaid) + units(&totals.rounding) != totals.due.base_units() {
+    let third_parties: i128 = data.third_party_payments.iter().map(|p| p.amount.base_units()).sum();
+    if totals.gross.base_units() - units(&totals.prepaid) + units(&totals.rounding) + third_parties
+        != totals.due.base_units()
+    {
         return Err(WriteError::Totals);
     }
     Ok(())
@@ -1309,6 +1438,106 @@ fn write_ubl_allowance_charge(x: &mut Writer, item: &AllowanceCharge, charge: bo
     x.close("cac:AllowanceCharge");
 }
 
+/// Writes a line of UBL with its sub-lines (BG-DEX-01), at any depth: `tags` are the line's, its quantity's and its
+/// sub-lines' elements.
+fn write_ubl_line(
+    x: &mut Writer,
+    line: &InvoiceLine,
+    tags: (&str, &str, &str),
+    currency: &str,
+    amount: &dyn Fn(&Money) -> String,
+) {
+    let (line_tag, quantity_tag, sub_tag) = tags;
+    x.open(line_tag, "");
+    x.some("cbc:ID", line.id.as_deref());
+    x.some("cbc:Note", line.note.as_deref());
+    // A sub-line may go without a quantity (BG-DEX-01); a line has one (BT-129, BT-130).
+    let unit = line.unit.as_deref().map(|unit| attribute("unitCode", unit)).unwrap_or_default();
+    if line.quantity.is_some() || line.unit.is_some() || !line_tag.contains(":Sub") {
+        x.leaf(quantity_tag, &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
+    }
+    x.leaf("cbc:LineExtensionAmount", currency, &amount(&line.net));
+    x.some("cbc:AccountingCost", line.accounting.as_deref());
+    if let Some(period) = &line.period {
+        x.open("cac:InvoicePeriod", "");
+        x.some("cbc:StartDate", period.start.map(iso).as_deref());
+        x.some("cbc:EndDate", period.end.map(iso).as_deref());
+        x.close("cac:InvoicePeriod");
+    }
+    if let Some(order_line) = &line.order_line {
+        x.wrapped("cac:OrderLineReference", "cbc:LineID", "", order_line);
+    }
+    if let Some(object) = &line.object {
+        x.open("cac:DocumentReference", "");
+        x.identifier("cbc:ID", "schemeID", object);
+        x.leaf("cbc:DocumentTypeCode", "", "130");
+        x.close("cac:DocumentReference");
+    }
+    for (items, charge) in [(&line.allowances, false), (&line.charges, true)] {
+        for item in items {
+            write_ubl_allowance_charge(x, item, charge, amount);
+        }
+    }
+    x.open("cac:Item", "");
+    x.some("cbc:Description", line.description.as_deref());
+    x.leaf("cbc:Name", "", &line.name);
+    if let Some(id) = &line.buyer_item {
+        x.wrapped("cac:BuyersItemIdentification", "cbc:ID", "", id);
+    }
+    if let Some(id) = &line.seller_item {
+        x.wrapped("cac:SellersItemIdentification", "cbc:ID", "", id);
+    }
+    if let Some(id) = &line.standard_item {
+        x.open("cac:StandardItemIdentification", "");
+        x.identifier("cbc:ID", "schemeID", id);
+        x.close("cac:StandardItemIdentification");
+    }
+    if let Some(origin) = &line.origin {
+        x.wrapped("cac:OriginCountry", "cbc:IdentificationCode", "", origin.as_str());
+    }
+    for class in &line.classifications {
+        let mut attributes = attribute("listID", &class.list);
+        if let Some(version) = &class.version {
+            attributes.push_str(&attribute("listVersionID", version));
+        }
+        x.wrapped("cac:CommodityClassification", "cbc:ItemClassificationCode", &attributes, &class.code);
+    }
+    x.open("cac:ClassifiedTaxCategory", "");
+    x.leaf("cbc:ID", "", category_code(line.category));
+    x.some("cbc:Percent", written_rate(line.category, line.rate).as_deref());
+    x.wrapped("cac:TaxScheme", "cbc:ID", "", "VAT");
+    x.close("cac:ClassifiedTaxCategory");
+    for property in &line.attributes {
+        x.open("cac:AdditionalItemProperty", "");
+        x.leaf("cbc:Name", "", &property.name);
+        x.leaf("cbc:Value", "", &property.value);
+        x.close("cac:AdditionalItemProperty");
+    }
+    x.close("cac:Item");
+    // A sub-line may go without a price (BG-DEX-01); a line has one (BT-146).
+    if line.price.is_some() || !line_tag.contains(":Sub") {
+        x.open("cac:Price", "");
+        x.leaf("cbc:PriceAmount", currency, &line.price.map(|p| p.to_string()).unwrap_or_default());
+        if let Some(quantity) = line.price_quantity {
+            x.leaf("cbc:BaseQuantity", &unit, &quantity.to_string());
+        }
+        if line.gross_price.is_some() || line.price_discount.is_some() {
+            x.open("cac:AllowanceCharge", "");
+            x.leaf("cbc:ChargeIndicator", "", "false");
+            x.leaf("cbc:Amount", currency, &line.price_discount.map_or_else(|| "0".to_owned(), |d| d.to_string()));
+            if let Some(gross) = line.gross_price {
+                x.leaf("cbc:BaseAmount", currency, &gross.to_string());
+            }
+            x.close("cac:AllowanceCharge");
+        }
+        x.close("cac:Price");
+    }
+    for sub in &line.sub_lines {
+        write_ubl_line(x, sub, (sub_tag, quantity_tag, sub_tag), currency, amount);
+    }
+    x.close(line_tag);
+}
+
 /// Writes an invoice or credit note as XRechnung 3.0 in the UBL syntax.
 pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
     check_xrechnung(invoice)?;
@@ -1331,7 +1560,7 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
             attribute("xmlns:cbc", "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"),
         ),
     );
-    x.leaf("cbc:CustomizationID", "", XRECHNUNG);
+    x.leaf("cbc:CustomizationID", "", if needs_extension(data) { XRECHNUNG_EXTENSION } else { XRECHNUNG });
     x.leaf("cbc:ProfileID", "", PROCESS);
     x.leaf("cbc:ID", "", &invoice.number);
     x.leaf("cbc:IssueDate", "", &iso(invoice.date));
@@ -1521,6 +1750,13 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     if let Some(terms) = &data.payment_terms {
         x.wrapped("cac:PaymentTerms", "cbc:Note", "", &written_terms(terms));
     }
+    for payment in &data.third_party_payments {
+        x.open("cac:PrepaidPayment", "");
+        x.leaf("cbc:ID", "", &payment.kind);
+        x.leaf("cbc:PaidAmount", &currency, &amount(&payment.amount));
+        x.leaf("cbc:InstructionID", "", &payment.description);
+        x.close("cac:PrepaidPayment");
+    }
     for (items, charge) in [(&data.allowances, false), (&data.charges, true)] {
         for item in items {
             write_ubl_allowance_charge(&mut x, item, charge, &amount);
@@ -1577,86 +1813,9 @@ pub fn write_ubl(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std
     } else {
         ("cac:InvoiceLine", "cbc:InvoicedQuantity")
     };
+    let sub_tag = if credit_note { "cac:SubCreditNoteLine" } else { "cac:SubInvoiceLine" };
     for line in &data.lines {
-        x.open(line_tag, "");
-        x.some("cbc:ID", line.id.as_deref());
-        x.some("cbc:Note", line.note.as_deref());
-        let unit = attribute("unitCode", line.unit.as_deref().unwrap_or_default());
-        x.leaf(quantity_tag, &unit, &line.quantity.map(|q| q.to_string()).unwrap_or_default());
-        x.leaf("cbc:LineExtensionAmount", &currency, &amount(&line.net));
-        x.some("cbc:AccountingCost", line.accounting.as_deref());
-        if let Some(period) = &line.period {
-            x.open("cac:InvoicePeriod", "");
-            x.some("cbc:StartDate", period.start.map(iso).as_deref());
-            x.some("cbc:EndDate", period.end.map(iso).as_deref());
-            x.close("cac:InvoicePeriod");
-        }
-        if let Some(order_line) = &line.order_line {
-            x.wrapped("cac:OrderLineReference", "cbc:LineID", "", order_line);
-        }
-        if let Some(object) = &line.object {
-            x.open("cac:DocumentReference", "");
-            x.identifier("cbc:ID", "schemeID", object);
-            x.leaf("cbc:DocumentTypeCode", "", "130");
-            x.close("cac:DocumentReference");
-        }
-        for (items, charge) in [(&line.allowances, false), (&line.charges, true)] {
-            for item in items {
-                write_ubl_allowance_charge(&mut x, item, charge, &amount);
-            }
-        }
-        x.open("cac:Item", "");
-        x.some("cbc:Description", line.description.as_deref());
-        x.leaf("cbc:Name", "", &line.name);
-        if let Some(id) = &line.buyer_item {
-            x.wrapped("cac:BuyersItemIdentification", "cbc:ID", "", id);
-        }
-        if let Some(id) = &line.seller_item {
-            x.wrapped("cac:SellersItemIdentification", "cbc:ID", "", id);
-        }
-        if let Some(id) = &line.standard_item {
-            x.open("cac:StandardItemIdentification", "");
-            x.identifier("cbc:ID", "schemeID", id);
-            x.close("cac:StandardItemIdentification");
-        }
-        if let Some(origin) = &line.origin {
-            x.wrapped("cac:OriginCountry", "cbc:IdentificationCode", "", origin.as_str());
-        }
-        for class in &line.classifications {
-            let mut attributes = attribute("listID", &class.list);
-            if let Some(version) = &class.version {
-                attributes.push_str(&attribute("listVersionID", version));
-            }
-            x.wrapped("cac:CommodityClassification", "cbc:ItemClassificationCode", &attributes, &class.code);
-        }
-        x.open("cac:ClassifiedTaxCategory", "");
-        x.leaf("cbc:ID", "", category_code(line.category));
-        x.some("cbc:Percent", written_rate(line.category, line.rate).as_deref());
-        x.wrapped("cac:TaxScheme", "cbc:ID", "", "VAT");
-        x.close("cac:ClassifiedTaxCategory");
-        for property in &line.attributes {
-            x.open("cac:AdditionalItemProperty", "");
-            x.leaf("cbc:Name", "", &property.name);
-            x.leaf("cbc:Value", "", &property.value);
-            x.close("cac:AdditionalItemProperty");
-        }
-        x.close("cac:Item");
-        x.open("cac:Price", "");
-        x.leaf("cbc:PriceAmount", &currency, &line.price.map(|p| p.to_string()).unwrap_or_default());
-        if let Some(quantity) = line.price_quantity {
-            x.leaf("cbc:BaseQuantity", &unit, &quantity.to_string());
-        }
-        if line.gross_price.is_some() || line.price_discount.is_some() {
-            x.open("cac:AllowanceCharge", "");
-            x.leaf("cbc:ChargeIndicator", "", "false");
-            x.leaf("cbc:Amount", &currency, &line.price_discount.map_or_else(|| "0".to_owned(), |d| d.to_string()));
-            if let Some(gross) = line.gross_price {
-                x.leaf("cbc:BaseAmount", &currency, &gross.to_string());
-            }
-            x.close("cac:AllowanceCharge");
-        }
-        x.close("cac:Price");
-        x.close(line_tag);
+        write_ubl_line(&mut x, line, (line_tag, quantity_tag, sub_tag), &currency, &amount);
     }
     x.close(root);
     Ok(x.out)
@@ -1759,6 +1918,9 @@ fn write_cii_period(x: &mut Writer, period: &Period) {
 pub fn write_cii(invoice: &TranslatedInvoice, currencies: &CurrencyTable) -> std::result::Result<String, WriteError> {
     check_xrechnung(invoice)?;
     let data = &invoice.invoice;
+    if needs_extension(data) {
+        return Err(WriteError::Extension);
+    }
     if data.preceding.len() > 1 {
         return Err(WriteError::Syntax("BG-3"));
     }

@@ -1,6 +1,6 @@
 # 0006 Encryption
 
-Version 0.5, draft. Implemented in the reference library (`MemberKeys`, `BooksKey`, `MemberRecord`, `MemberList`,
+Version 0.16, draft. Implemented in the reference library (`MemberKeys`, `BooksKey`, `MemberRecord`, `MemberList`,
 `Envelope`, `RecoveryCode`, `Invitation`, `request_signature`).
 
 Books are end-to-end encrypted between the people and devices that share them. Whoever relays events – a relay run
@@ -60,8 +60,25 @@ receiving key is written `x25519:` and 64 such digits. A member (type `member`) 
 | `receiving` | its public receiving key |
 | `role` | `device` – writes events under its device name –, `backend` – the same, run for others –, or `recovery` – a recovery code (below), which writes no events |
 | `device` | the device name it writes events under (part 0002), for `device` and `backend`; absent for `recovery` |
-| `name` | what people call it, e.g. `Laptop`; absent if not given |
+| `name` | what people call it, e.g. `Laptop`; absent if not given or sealed |
+| `sealed_name` | the name encrypted, so that a relay does not read it (below); instead of `name` |
 | `rights` | `manage` – read, write, add and remove members –, `write` – read and write events – or `read` |
+| `until` | the last day, in UTC, it may read and write – an auditor for the time of an audit; absent when unlimited |
+
+A **sealed name** (type `sealed_name`) is `key`, the index of a books key, and `sealed`: XChaCha20-Poly1305 of the
+name in UTF-8 under that key, with the additional data `librotenado/0006 name {books} {member}`, written as the nonce
+followed by the ciphertext. Whoever adds a member SHOULD seal its name with the current key – in record 0 with key
+0, which the record makes. Names written in plain text by earlier versions stay readable.
+
+**Access for a time.** A member with `until` is served by a relay up to that day; afterwards every member with the
+right `manage` SHOULD remove it, which changes the key. Removing protects what is written later, not what the member
+read (below). Access narrower than the whole history – one financial year – is not a membership: the key chain opens
+every earlier key. It is a copy of the period – the data transfer of part 0010 – handed over outside the books.
+
+**Seeds** are the keys of the books. An implementation SHOULD keep a member's seed in the key store of the operating
+system – the Keychain of macOS and iOS, the Credential Manager of Windows, the Secret Service of Linux desktops, the
+Keystore of Android – rather than in a file beside the books, and MUST NOT write it to the events, the member list or
+a relay.
 
 Device names are unique among the current members, as part 0002 requires within a set of books.
 
@@ -119,11 +136,16 @@ An event (part 0002) or an original (part 0005) travels in an **envelope** (type
 | `author` | the identity of the member who sent it |
 | `content` | `event` or `original` |
 | `nonce` | 24 bytes |
-| `ciphertext` | XChaCha20-Poly1305 of the content – the canonical encoding of the event as a root object, or the bytes of the original – with the additional data below |
+| `ciphertext` | XChaCha20-Poly1305 of the content – the canonical encoding of the event as a root object, or the bytes of the original – padded where `padded` is `true`, with the additional data below |
+| `padded` | `true` when the content was padded before it was encrypted; absent otherwise |
 | `id` | `sha256:` over the nonce followed by the ciphertext: what a relay routes and deduplicates by |
 | `signature` | Ed25519 of the author over the canonical encoding of the envelope without `signature` |
 
-The additional data is the canonical encoding of the object of `books`, `key`, `author` and `content`. A relay
+The additional data is the canonical encoding of the object of `books`, `key`, `author`, `content` and – where it is
+`true` – `padded`. **Padding** hides sizes from a relay: the content is followed by the byte 0x80 and zeros
+([ISO/IEC 9797-1](https://www.iso.org/standard/50375.html), padding method 2) up to the next power of two from 256
+bytes, above 65,536 bytes up to the next multiple of 65,536; whoever opens it removes the zeros and the 0x80. An
+implementation MUST pad what it seals and MUST read envelopes without padding, which earlier versions wrote. A relay
 accepts an envelope only from a current member with the right `write` or `manage` and with a key index no later than
 the current one. A member who opens an envelope checks the signature, and that an event comes from the device name of
 its author; the hash of an event (part 0002) is computed over the plain text and is visible only to members.
@@ -133,7 +155,8 @@ its author; the hash of an event (part 0002) is computed over the plain text and
 A relay offers the books it holds over HTTP; it is reached over TLS. Every request but those marked open carries
 `Authorization: librotenado {member} {time} {signature}` – the member's identity, the time in seconds since
 1970-01-01 UTC and Ed25519 over `{method} {path} {time}` (the path with its query), written as base64url. A relay
-accepts a time within 300 seconds of its own and requests of current members only.
+accepts a time within 300 seconds of its own and requests of current members only – of a member with `until`, up to
+that day.
 
 | Request | |
 |---|---|
@@ -174,19 +197,20 @@ These limits are part of the design and implementations SHOULD state them:
   ([RFC 9420](https://www.rfc-editor.org/rfc/rfc9420)), the design does not heal itself after a compromise; it
   trades this for an order only on members and for a history that stays readable.
 - **Losing every key of the books loses the books.** There is no master key but the recovery code.
-- **A relay sees** which books it holds, which member sends when and how much, and the member list – identities,
-  device names and names of the members –, not the events.
+- **A relay sees** which books it holds, which member sends when and roughly how much – sizes padded –, and the
+  member list – identities, device names and, where they are not sealed, names of the members –, not the events.
 
 ## Why not MLS
 
-MLS was the first candidate. It fits chats with many members, keeps no history for new members, and its changes of
-membership have to be applied in one agreed order (OPEN: to be verified in RFC 9420 and the MLS architecture
-document). Books have few members, need their whole history for a decade, and synchronise without an order. Whether
-MLS could serve as the transport of the member list later is OPEN.
+MLS was the first candidate. It fits chats with many members, keeps no history for new members – "messages sent
+before they were added to the group will not be accessible" (RFC 9420, section 3.2) –, and its changes of membership
+have to be applied in one agreed order: each Commit is premised on the state of an epoch, and applications "MUST have
+an established way to resolve conflicting Commit messages for the same epoch" (section 14). Books have few members,
+need their whole history for a decade, and synchronise without an order; the order this design needs is the member
+list's alone, which a relay keeps like MLS's delivery service. Whether MLS could serve as the transport of the member
+list later is OPEN.
 
 ## Open points
 
-- Whether names in the member list should be encrypted, and sizes padded, to show a relay less.
-- Access for a limited time – an auditor for one period – and whether it can be narrower than the whole history.
-- Keeping seeds in the key store of the operating system rather than beside the books.
+- Sealing device names as well: a relay checks that they are unique (rule 4), so it reads them.
 - Archives for retention periods of ten years and more.

@@ -1,6 +1,6 @@
 # 0005 Documents
 
-Version 0.15, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+Version 0.16, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
 `propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kinds `document_recorded` and
 `document_corrected`; `EventSet::documents`).
 
@@ -86,7 +86,14 @@ and `buyer_item` (BT-155, BT-156), `standard_item` an `identifier`, e.g. a GTIN 
 as a decimal number (BT-146), `price_quantity` the quantity the price is for (BT-149, in the line's unit, BT-150),
 `gross_price` and `price_discount` (BT-148, BT-147), `allowances` and `charges` (BG-27, BG-28, type
 `allowance_charge` without category and rate), `net` as money after them (BT-131), `category`, `rate` (BT-151,
-BT-152).
+BT-152), and `sub_lines`, the lines it consists of (below).
+
+**The extension of XRechnung** adds two groups ([XRechnung specification, extension](https://xeinkauf.de/xrechnung/versionen-und-bundles/)):
+sub-lines (BG-DEX-01) – a line's `sub_lines`, lines of the same form at any depth, which detail it but are not
+invoiced on their own: its own `net` is what the totals count –, and payments for third parties (BG-DEX-09) – the
+invoice's `third_party_payments` (type `third_party_payment`): `kind` (BT-DEX-001), `amount` (BT-DEX-002) and
+`description` (BT-DEX-003), amounts the seller collects for others with the invoice, outside its supply and its VAT
+but part of the amount due. A sub-line may go without quantity, unit and price.
 
 The VAT categories are the codes EN 16931 uses (UNCL 5305): `S` standard or reduced rate, `Z` zero rate, `E` exempt,
 `AE` reverse charge, `K` intra-Community supply, `G` export, `O` not subject to VAT, `L` and `M` the indirect taxes of
@@ -130,7 +137,20 @@ rules of EN 16931 a writer cannot repair, and names what is missing instead of w
   invoice and a reason for those on lines; a reason or reason code for every amount exempt or not taxed (BT-120,
   BT-121); a file name and the bytes of every attached file;
 - totals that agree: the net total is the lines less allowances plus charges (BR-CO-13), the amount due is gross less
-  prepaid plus rounding (BR-CO-16).
+  prepaid plus rounding (BR-CO-16), plus the payments for third parties of the extension;
+- codes from their code lists (rules BR-CL-06 to BR-CL-26 of EN 16931): the code of the tax point date (UNTDID 2005),
+  subjects of notes (UNTDID 4451), schemes of object identifiers (UNTDID 1153), of party, registration, delivery
+  location and item identifiers (ISO/IEC 6523), of electronic addresses (CEF EAS), classification lists (UNTDID 7143),
+  countries (ISO 3166-1), payment means (UNTDID 4461), reasons of allowances (UNTDID 5189) and charges (UNTDID 7161),
+  exemption reasons (CEF VATEX), units (UN/ECE Rec. 20 and 21) and media types of attached files. The lists are
+  [`spec/data/codelists/en16931.json`](data/codelists/en16931.json), taken from the validation artefacts of CEN/TC 434
+  in version 1.3.16, which the XRechnung configuration 3.0.2 uses
+  ([eInvoicing-EN16931](https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/tag/validation-1.3.16)).
+
+An invoice with sub-lines or payments for third parties is written in UBL with the specification identifier of the
+extension (`…#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0`, BT-24): sub-lines as `cac:SubInvoiceLine`
+(`cac:SubCreditNoteLine` in a credit note), payments for third parties as `cac:PrepaidPayment`. How CII carries them is
+OPEN; such an invoice is not written in CII.
 
 Writing follows what XRechnung asks of the syntax: the VAT rate of a breakdown is written also where the category has
 none, as 0 (BR-DE-14); structured lines of the payment terms end with a line break (BR-DE-18). CII D16B carries one
@@ -144,7 +164,7 @@ colours, output intent of PDF/A-3 – is the implementation's. spezado's ZUGFeRD
 veraPDF 1.30 (PDF/A-3b) and the Mustang validator 2.26 (PDF/A-3b, EN 16931 and XRechnung rules).
 
 The reference library reads every test invoice of the standard business cases and the CIUS technical cases of the
-KoSIT test suite, writes it in both syntaxes and reads it back to the same data. The written files are accepted by the
+KoSIT test suite, writes it in both syntaxes and reads it back to the same data – those of the extension in UBL. The written files are accepted by the
 KoSIT validator 1.6.3 with the XRechnung configuration 3.0.2 – schemas and business rules of EN 16931, XRechnung and
 Peppol ([validator](https://github.com/itplr-kosit/validator),
 [configuration](https://github.com/itplr-kosit/validator-configuration-xrechnung)) –, which the continuous
@@ -157,6 +177,9 @@ posting. Per VAT category and rate, the proposal books the net amount on a count
 purchase, income for a sale – and the VAT on the VAT account, each with the tax code of the country (part 0001), and
 the gross amount on the account of the supplier or customer. A credit note books the other way round. Under reverse
 charge and on an intra-Community acquisition the buyer computes the VAT it owes and deducts it in the same booking.
+Payments for third parties (the extension of XRechnung) are part of what the other party owes or is owed: in a sale
+on transit items (durchlaufende Posten, [§ 10 Abs. 1 Satz 5 UStG](https://www.gesetze-im-internet.de/ustg_1980/__10.html)),
+in a purchase on the counter account, without a tax code either way.
 
 The German tax codes follow from category, rate and side:
 
@@ -333,8 +356,9 @@ header is MT940, anything else is read as CSV.
 
 ## Open points
 
-- The extension of XRechnung (sub-invoice lines, third-party payments), which the model does not carry yet.
-- Code lists (ISO/IEC 6523, UNTDID 7143, VATEX …) are not checked before writing; the KoSIT validator checks them.
+- The extension of XRechnung in CII, for which the test suite has no case.
+- Whether the code lists may be published under CC BY 4.0: they are lists of the codes of other standards, extracted
+  from artefacts of CEN/TC 434 published under the EUPL 1.2.
 - Rates other than 19 % and 7 % get no tax code.
 - Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED). The file name `xrechnung.xml`, `fx:Version` 1.0 and
   `fx:ConformanceLevel` XRECHNUNG follow a vendor's documentation of the ZUGFeRD / Factur-X specification

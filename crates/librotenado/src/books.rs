@@ -429,6 +429,7 @@ mod tests {
             exchange: None,
         };
         Booking {
+            basis: None,
             attributed: None,
             date: date.parse().unwrap(),
             text: "internet".into(),

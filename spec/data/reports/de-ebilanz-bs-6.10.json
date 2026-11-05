@@ -259,4 +259,72 @@
   "bs.eqLiab.liab.trade",
   "bs.eqLiab.otherSpecRes",
   "bs.eqLiab.otherSpecRes.other"
-]}
+], "legal_forms": {
+  "sole-proprietor": ["de-ek"],
+  "partnership": ["de-gbr", "de-ohg", "de-kg", "de-gmbh-co-kg", "de-partg"],
+  "corporation": ["de-gmbh", "de-ug", "de-ag", "de-kgaa", "de-se", "de-eg", "de-ev", "de-stiftung"]
+}, "mandatory_by_form": {
+  "sole-proprietor": [
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP",
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP.beginYear",
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP.capAdjust",
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP.incomeUseDeposits",
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP.incomeUseWithdrawals",
+    "bs.ass.deficitNotCoveredByCapital.privateAccountSP.netIncome",
+    "bs.eqLiab.equity.subscribed.privateAccountSP",
+    "bs.eqLiab.equity.subscribed.privateAccountSP.beginYear",
+    "bs.eqLiab.equity.subscribed.privateAccountSP.capAdjust",
+    "bs.eqLiab.equity.subscribed.privateAccountSP.incomeUseDeposits",
+    "bs.eqLiab.equity.subscribed.privateAccountSP.incomeUseWithdrawals",
+    "bs.eqLiab.equity.subscribed.privateAccountSP.netIncome"
+  ],
+  "partnership": [
+    "bs.ass.currAss.receiv.other.shareholders",
+    "bs.ass.currAss.receiv.other.unpaidCapitalLimitedLiablePartner",
+    "bs.ass.currAss.receiv.other.unpaidCapitalUnlimitedLiablePartner",
+    "bs.ass.currAss.receiv.shareholders.limitedLiable",
+    "bs.ass.currAss.receiv.shareholders.unlimitedLiable",
+    "bs.ass.currAss.receiv.trade.shareholders",
+    "bs.ass.currAss.receiv.unpaidCapitalPartners.limitedLiable",
+    "bs.ass.currAss.receiv.unpaidCapitalPartners.unlimitedLiable",
+    "bs.ass.deficitNotCoveredByCapital.lossLimitedLiablePartnerS",
+    "bs.ass.deficitNotCoveredByCapital.lossUnlimitedLiablePartnerS",
+    "bs.ass.deficitNotCoveredByCapital.withdrawalLimitedLiablePartner",
+    "bs.ass.deficitNotCoveredByCapital.withdrawalsUnlimitedLiablePartner",
+    "bs.ass.fixAss.fin.loansToSharehold.limitedLiable",
+    "bs.ass.fixAss.fin.loansToSharehold.unlimitedLiable",
+    "bs.eqLiab.equity.reservesPartnership",
+    "bs.eqLiab.equity.revenueRes",
+    "bs.eqLiab.equity.revenueRes.other",
+    "bs.eqLiab.equity.revenueRes.special",
+    "bs.eqLiab.equity.revenueRes.statutory",
+    "bs.eqLiab.equity.subscribed.limitedLiablePartners",
+    "bs.eqLiab.equity.subscribed.unlimitedLiablePartners",
+    "bs.eqLiab.liab.other.shareholders",
+    "bs.eqLiab.liab.shareholders.limitedPartner",
+    "bs.eqLiab.liab.shareholders.silentPart",
+    "bs.eqLiab.liab.shareholders.unlimitedPartner",
+    "bs.eqLiab.liab.trade.shareholders"
+  ],
+  "corporation": [
+    "bs.ass.currAss.receiv.other.shareholders",
+    "bs.ass.currAss.receiv.other.unpaidCapital",
+    "bs.ass.currAss.receiv.shareholders.gmbh",
+    "bs.ass.currAss.receiv.trade.shareholders",
+    "bs.ass.fixAss.fin.loansToSharehold.gmbh",
+    "bs.eqLiab.equity.capRes",
+    "bs.eqLiab.equity.netIncome",
+    "bs.eqLiab.equity.profitLoss",
+    "bs.eqLiab.equity.retainedEarnings",
+    "bs.eqLiab.equity.revenueRes",
+    "bs.eqLiab.equity.revenueRes.legal",
+    "bs.eqLiab.equity.revenueRes.other",
+    "bs.eqLiab.equity.revenueRes.special",
+    "bs.eqLiab.equity.revenueRes.statutory",
+    "bs.eqLiab.equity.subscribed.corp",
+    "bs.eqLiab.liab.other.shareholders",
+    "bs.eqLiab.liab.shareholders.gmbh",
+    "bs.eqLiab.liab.shareholders.silentPart",
+    "bs.eqLiab.liab.trade.shareholders"
+  ]
+}}

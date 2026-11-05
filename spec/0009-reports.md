@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.15, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.16, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`, `EventSet::customer_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
@@ -161,6 +161,14 @@ resolve:
 - The form of 2026 has the Kennzahlen of 2025; it adds one line without a Kennzahl of its own – a reserve
   for the valuation of animals, carried over from the Anlage LuF – and the lines after it move down by one, so the
   mapping of 2026 is that of 2025.
+- **Remaining terms** (§ 268 Abs. 4 and 5 HGB,
+  [gesetze-im-internet.de](https://www.gesetze-im-internet.de/hgb/__268.html)): the balance sheet notes for each
+  position of receivables the amount with a remaining term of more than one year, for each position of liabilities
+  the amounts of up to and of more than one year. They follow from the attribute `term` of the accounts (part 0004),
+  own or inherited: per position, the amounts of `up-to-1-year`, of more than one year (`over-1-year`,
+  `1-to-5-years`, `over-5-years`), of those of more than five years – which the notes to the accounts want, § 285
+  Nr. 1 Buchstabe a HGB –, and the amount on accounts without a term, which whoever draws up the balance sheet has
+  to divide. The accounts of the SKR that name a remaining term carry it in the chart of version 0.1.
 - Every account of the harmonised chart 0.1 that is an asset, a liability or equity has a position of § 266; every
   account of income or expense one of § 275 Abs. 2; every account of expense a line of the Anlage EÜR, or is left
   out of it.
@@ -188,7 +196,24 @@ where the books cannot tell, an amount goes to a **catch-all position** ("nicht 
   bought fall by their input tax: deductible, under § 13b, not deductible. A tax rule applies here only `within` the
   position named (below).
 - **`mandatory`** lists the Mussfelder and Summenmussfelder that apply to every legal form; a report states each of
-  them, empty (NIL) where the books have no amount – never 0.
+  them, empty (NIL) where the books have no amount – never 0. **`mandatory_by_form`** adds those the taxonomy
+  requires of one group of legal forms only – sole proprietors, partnerships, corporations (its properties
+  `legalFormEU`, `legalFormPG`, `legalFormKSt`) –, and **`legal_forms`** names the codes of `legal_form` (part 0008)
+  of each group. An owner that is a person, not an organisation, is a sole proprietor. Both lists leave out what the
+  taxonomy does not permit in a commercial balance sheet (`notPermittedFor` *handelsrechtlich* – positions of the
+  tax balance sheet alone) and, for the profit and loss account, the branch by function of expense.
+- **Reconciliation** (Überleitungsrechnung, § 5b Abs. 1 Satz 2 EStG, § 60 Abs. 2 EStDV): a business that transmits
+  its commercial balance sheet transmits with it, per position, how the tax balance sheet differs. It follows from
+  the bookings with `basis` (part 0001): the positions of the tax balance sheet less those of the commercial one.
+  The reason of each difference is the text of its bookings; which elements of the taxonomy carry it is OPEN.
+- **Master data** (module GCD, [`de-gcd`](https://www.esteuer.de)): its Mussfelder are written by the implementation
+  that writes the XBRL instance. What the books hold gives: the name, legal form and address of the owner
+  (`genInfo.company.id.name`, `legalStatus`, `location.*`, part 0008); its tax number (`idNo.type.companyId.ST13`,
+  scheme `de-steuernummer`) and its business identification number (`STWID`, OPEN: no scheme yet); the financial year
+  and the previous one (`genInfo.report.period.*`, from the configuration); for a partnership its partners
+  (`genInfo.company.id.shareholder.*`: name, tax number, the share – from the roles `partner` and their shares). What
+  the books do not hold – the industry (`business`), the classification of income, the status and kind of the report,
+  its elements – whoever files states.
 
 Two members of a report mapping serve the E-Bilanz:
 
@@ -196,6 +221,8 @@ Two members of a report mapping serve the E-Bilanz:
 |---|---|
 | `taxes[].within` | the rule applies only to postings on accounts whose position is this one or one below it (written with it and a dot); without it, to every posting with the code |
 | `mandatory` | positions a report states even without an amount, as empty |
+| `legal_forms` | group → the codes of legal forms in it |
+| `mandatory_by_form` | group → positions its reports state as well, as empty without an amount |
 
 ### The recapitulative statement
 
@@ -229,13 +256,13 @@ number its other member state gave it and the sum of the assessment bases (Abs. 
 
 - Review of the German mappings by tax advisers; until then they are drafts.
 - The profit and loss account by function of expense (§ 275 Abs. 3), which needs costs by function, not by account.
-- The notes the HGB requires on positions (§ 268 Abs. 4 and 5: remaining terms; "davon" items).
+- Further notes the HGB requires on positions ("davon" items such as § 268 Abs. 5 Satz 2 and § 266 Abs. 3 C. 8 HGB:
+  tax and social security liabilities), and remaining terms of balances on accounts without a term.
 - The Anlage EÜR: business entertainment is split into its deductible and non-deductible part on two accounts by
   whoever books (§ 4 Abs. 5 Satz 1 Nr. 2 EStG); filing the Anlage AVEÜR (part 0011) together with it.
-- The E-Bilanz: the positions that depend on the legal form (partnerships' capital accounts, the Mussfelder of
-  sole proprietors, corporations and partnerships alone), the reconciliation to the tax balance sheet
-  (Überleitungsrechnung), the split of reductions of sales by VAT, the other modules of the taxonomy (GCD master data,
-  notes, appropriation of profits), and writing the XBRL instance – which ERiC transmits (part 0007). Names of the
+- The E-Bilanz: partnerships' capital accounts per partner (the module of the capital accounts), the elements of the
+  reconciliation, the split of reductions of sales by VAT, the other modules of the taxonomy (notes,
+  appropriation of profits), and writing the XBRL instance – which ERiC transmits (part 0007). Names of the
   positions stay with the taxonomy until the conditions for reusing it (© XBRL Deutschland e.V.) are clarified.
 - The recapitulative statement: whether `L`, `S` and `D` are the codes of the official data set (OPEN – the
   adapter translates them); whether amounts are stated in whole euros; transfers of own goods (§ 6a Abs. 2 UStG) and

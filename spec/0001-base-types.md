@@ -1,6 +1,6 @@
 # 0001 Base types
 
-Version 0.14, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.16, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Money
 
@@ -77,22 +77,55 @@ name. The keys are unambiguous by their form:
 
 Version 0.1 publishes names in German, English and French ([`spec/data/names/`](data/names/de.json)).
 
+### Withdrawn currencies
+
+A currency withdrawn from ISO 4217 is still the currency of old books. Its definition has two more members:
+`withdrawn`, the month ISO 4217 withdrew the code, written `YYYY-MM` as in its list three
+([SIX, ISO 4217 list three](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-three.xml)),
+and, where the law fixed a rate to the currency that replaced it, `fixed_rate`: `currency`, the replacing currency,
+and `rate`, a decimal number above zero, the units of the withdrawn currency that make one unit of the replacing
+one (`{"currency": "EUR", "rate": "1.95583"}` for the Deutsche Mark).
+
+Amounts in a withdrawn currency are read, checked and summed like any other. An implementation SHOULD tell whoever
+books an amount in a currency dated after the month it was withdrawn. Converting at a fixed rate follows
+[Council Regulation (EC) No 1103/97](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:31997R1103),
+Articles 4 and 5: the rate is used as published, never inverted or rounded; the result is rounded half away from
+zero to the base unit of the target – the regulation says half up, and away from zero is how this protocol reads it
+for negative amounts –; between two withdrawn currencies of the same replacement, through an amount of the
+replacing currency rounded to three decimal places.
+
 ### The table of version 0.1
 
 The definitions of version 0.1 are published as [`spec/data/currencies.json`](data/currencies.json), a root object of
 type `currency_table` with `version`, `iso_4217` – the date of the ISO 4217 list it follows – and `currencies`, each
-code once. It holds every currency of ISO 4217 list one with a minor unit, as published by its maintenance agency on
-2026-09-17 ([SIX, ISO 4217 list one](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml)),
-and `x-btc` and `x-eth`. ISO 4217 gives the Malagasy ariary (MGA) and the Mauritanian ouguiya (MRU) two decimal
-places, and so does the table – although each divides in theory into five subunits
-([Wikipedia, ISO 4217](https://en.wikipedia.org/wiki/ISO_4217)).
+code once. It holds:
+
+- every currency of ISO 4217 list one with a minor unit, as published by its maintenance agency on 2026-09-17
+  ([SIX, ISO 4217 list one](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml)).
+  ISO 4217 gives the Malagasy ariary (MGA) and the Mauritanian ouguiya (MRU) two decimal places, and so does the
+  table – although each divides in theory into five subunits
+  ([Wikipedia, ISO 4217](https://en.wikipedia.org/wiki/ISO_4217));
+- the 21 currencies the euro replaced, with the month of list three (published 2026-01-01) and the rates fixed by
+  the Council ([ECB, fixed euro conversion rates](https://www.ecb.europa.eu/euro/intro/html/index.en.html);
+  Regulations (EC) No 2866/98 for the first eleven, 1478/2000 GRD, 1086/2006 SIT, 1134/2007 MTL, 1135/2007 CYP,
+  694/2008 SKK, (EU) No 671/2010 EEK, 870/2013 LVL, 851/2014 LTL, 2022/1208 HRK and
+  [2025/1409](https://eur-lex.europa.eu/eli/reg/2025/1409/oj/eng) BGN). List three does not give a minor unit; the table takes it from
+  [Wikipedia, ISO 4217, historical codes](https://en.wikipedia.org/wiki/ISO_4217#Historical_codes): none for ESP,
+  ITL and PTE, two places for the others. For the Greek drachma Wikipedia gives "0, 2"; the table divides it not at
+  all (OPEN);
+- `x-btc`, divided as Bitcoin Core does, 100,000,000 satoshi to the bitcoin (`COIN` in
+  [`src/consensus/amount.h`](https://github.com/bitcoin/bitcoin/blob/master/src/consensus/amount.h)), and `x-eth`,
+  10^9 gwei and 10^18 wei to the ether ([ethereum.org, intro to ether](https://ethereum.org/en/developers/docs/intro-to-ether/)).
+
+**Units without a minor unit are not currencies of the books.** ISO 4217 gives no minor unit ("N.A.") for precious
+metals such as gold (XAU), for units of account such as the special drawing right (XDR), and for the codes for
+testing and for no currency (XTS, XXX). Gold is held in quantities – troy ounces, grams, decimal numbers – and booked
+at a value in a currency; the table has none of them, and money in them cannot be defined.
 
 OPEN:
 
-- The divisions of bitcoin and ether are common usage, not yet sourced; further currencies outside ISO 4217.
-- Units without a minor unit in ISO 4217 – precious metals such as gold (XAU), units of account such as the special
-  drawing right (XDR), the codes for testing and for no currency (XTS, XXX) – are not in the table; and a validity
-  period per definition (DEM, replaced by the euro).
+- Further currencies outside ISO 4217; other currencies withdrawn from ISO 4217, and replacements without a fixed
+  rate.
 - The form of translation data, and whether the names of ISO 4217 currencies and their subunits can be taken from
   [Unicode CLDR](https://cldr.unicode.org), including plural forms.
 
@@ -123,7 +156,7 @@ A booking (type `booking`) is an object with `date`, `text`, `postings` and, if 
 `entries`: the entries of the statement it books (part 0005) – and, if the same business transaction is recorded in
 other sets of books as well, `transaction`: its identity and those other sets (part 0002) – and, if it counts in
 another year than its date where profit is determined by receipts and payments, `attributed`: the day it counts on
-(below).
+(below) – and, if it counts in one balance sheet only, `basis` (below).
 A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
 remark, `note` – for example why there is no document for it; absent if none, never empty – and, if it is treated for
 VAT, `tax`, a tax code (below), and, if its currency is not the functional currency of its owner, `exchange`
@@ -140,6 +173,15 @@ Such a booking carries `attributed`, a day of the year it belongs to; whether th
 due within the ten days is for whoever books to decide. A report that counts receipts and payments (part 0009) takes
 `attributed` where it is given; every other report takes `date`. A reversal carries the `attributed` of the booking it
 cancels.
+
+**Commercial and tax balance sheet.** Where the tax balance sheet departs from the commercial one – a provision the
+tax law does not allow ([§ 5 Abs. 4a EStG](https://www.gesetze-im-internet.de/estg/__5.html)), a special
+depreciation of tax law alone –, the departure is booked as a booking with `basis`: `commercial` when it counts in the
+commercial balance sheet only, `tax` when in the tax balance sheet only; a booking without `basis` counts in both.
+Balances and every report from accounts are those of the commercial balance sheet unless a report asks for the tax
+one; the reconciliation between both (§ 60 Abs. 2 EStDV) follows from the bookings with `basis` (part 0009). Reports
+of receipts and payments and those from tax codes count every booking: `basis` belongs to the books of double
+entry. A reversal carries the `basis` of the booking it cancels.
 
 A booking MUST have at least two postings, MUST NOT contain a posting of zero, and MUST balance **for every owner in
 every currency**: the `base_units` of the postings of one owner in one currency sum to zero. Each owner's books thus

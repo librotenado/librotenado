@@ -119,6 +119,7 @@ fn entries_are_booked_once_and_statements_close_at_the_books() {
     desk.write(Payload::DocumentRecorded { document: mid.clone() });
     let entry = |document: &Document, entry: u32| EntryReference { document: document.id.clone(), entry };
     let booking = |date: &str, number: &str, units: i128, entries: Vec<EntryReference>| Booking {
+        basis: None,
         attributed: None,
         date: date.parse().unwrap(),
         text: "test".into(),

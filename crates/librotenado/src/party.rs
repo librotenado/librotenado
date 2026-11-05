@@ -449,6 +449,9 @@ pub struct Configuration {
     /// The month, 1 to 12, on whose first day the owner's financial year begins.
     #[serde(deserialize_with = "month")]
     pub year_start: u8,
+    /// The day, 2 to 28, of the month `year_start` on which the financial year begins; left out when it is the first.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "start_day")]
+    pub year_start_day: Option<u8>,
     /// The national chart of accounts the owner works with (`de-skr03`), whose translation valid on a date applies;
     /// left out when none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
@@ -463,6 +466,22 @@ pub struct Configuration {
     /// sits (`DE-BY`); left out when not known.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub region: Option<Region>,
+}
+
+fn start_day<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u8>, D::Error> {
+    let day = u8::deserialize(deserializer)?;
+    if (2..=28).contains(&day) {
+        Ok(Some(day))
+    } else {
+        Err(de::Error::custom("a start day is 2 to 28, absent on the first"))
+    }
+}
+
+impl Configuration {
+    /// The month and day on which the owner's financial year begins.
+    pub fn year_start_date(&self) -> (u8, u8) {
+        (self.year_start, self.year_start_day.unwrap_or(1))
+    }
 }
 
 fn month<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {

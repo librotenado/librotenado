@@ -21,7 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use serde_json::Value;
 use sha2::Sha256;
 
-use crate::{BooksId, ContentHash, DeviceId, Event, Object, ObjectError, from_root, to_canonical_vec, to_root};
+use crate::{BooksId, ContentHash, Date, DeviceId, Event, Object, ObjectError, from_root, to_canonical_vec, to_root};
 
 /// Why something of part 0006 failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -275,6 +275,11 @@ impl BooksKey {
     }
 }
 
+/// The additional data of a sealed name.
+fn name_aad(books: &BooksId, member: &MemberId) -> Vec<u8> {
+    format!("librotenado/0006 name {books} {member}").into_bytes()
+}
+
 /// What a member is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -314,8 +319,24 @@ pub struct Member {
     /// What people call it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// What people call it, encrypted with a books key, so that a relay does not read it; instead of `name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sealed_name: Option<SealedName>,
     /// What it may do.
     pub rights: Rights,
+    /// The last day, in UTC, it may read and write – an auditor for the time of an audit; absent when unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<Date>,
+}
+
+/// A member's name encrypted with the books key at `key`: XChaCha20-Poly1305 with the additional data
+/// `librotenado/0006 name {books} {member}`, written as the nonce followed by the ciphertext.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SealedName {
+    /// The position of the key.
+    pub key: u32,
+    /// The nonce and the ciphertext.
+    pub sealed: Bytes,
 }
 
 impl Object for Member {
@@ -331,8 +352,35 @@ impl Member {
             role: MemberRole::Device,
             device: Some(device),
             name,
+            sealed_name: None,
             rights,
+            until: None,
         }
+    }
+
+    /// The member with its name encrypted with the books key at `index`, so that a relay does not read it.
+    pub fn with_sealed_name(mut self, books: &BooksId, index: u32, key: &BooksKey) -> Self {
+        if let Some(name) = self.name.take() {
+            let (nonce, ciphertext) = key.seal(name.as_bytes(), &name_aad(books, &self.id));
+            self.sealed_name = Some(SealedName { key: index, sealed: Bytes([nonce.as_slice(), &ciphertext].concat()) });
+        }
+        self
+    }
+
+    /// What people call it: its name, or its sealed name opened with the keys of the books.
+    pub fn display_name(&self, books: &BooksId, keys: &BTreeMap<u32, BooksKey>) -> Option<String> {
+        if let Some(name) = &self.name {
+            return Some(name.clone());
+        }
+        let sealed = self.sealed_name.as_ref()?;
+        let key = keys.get(&sealed.key)?;
+        let (nonce, ciphertext) = sealed.sealed.0.split_at_checked(24)?;
+        String::from_utf8(key.open(nonce, ciphertext, &name_aad(books, &self.id)).ok()?).ok()
+    }
+
+    /// Whether it may read and write on `day`.
+    pub fn is_active_on(&self, day: Date) -> bool {
+        self.until.is_none_or(|until| day <= until)
     }
 
     /// The member a recovery code is.
@@ -343,7 +391,9 @@ impl Member {
             role: MemberRole::Recovery,
             device: None,
             name: Some("Recovery code".into()),
+            sealed_name: None,
             rights: Rights::Manage,
+            until: None,
         }
     }
 }
@@ -433,10 +483,11 @@ impl MemberRecord {
         self
     }
 
-    /// The first record of new books: the founder, and further members such as a recovery code, with key 0 – which
-    /// is returned.
+    /// The first record of new books: the founder, and further members such as a recovery code, their names sealed
+    /// with key 0 – which is returned.
     pub fn found(books: &BooksId, founder: &MemberKeys, members: Vec<Member>) -> (Self, BooksKey) {
         let key = BooksKey::generate();
+        let members: Vec<Member> = members.into_iter().map(|m| m.with_sealed_name(books, 0, &key)).collect();
         let grants = members.iter().map(|m| key.grant(books, 0, m)).collect();
         let record = MemberRecord {
             books: books.clone(),
@@ -541,6 +592,17 @@ impl MemberList {
         self.members.get(id)
     }
 
+    /// A current member that may read and write on `day` (its `until`): whom a relay serves.
+    pub fn active_member(&self, id: &MemberId, day: Date) -> Option<&Member> {
+        self.members.get(id).filter(|member| member.is_active_on(day))
+    }
+
+    /// The current members whose time has run out on `day`: a member with the right `manage` removes them, which
+    /// changes the key.
+    pub fn expired(&self, day: Date) -> Vec<MemberId> {
+        self.members.values().filter(|member| !member.is_active_on(day)).map(|member| member.id).collect()
+    }
+
     /// The position of the current key; none before the first record.
     pub fn key_index(&self) -> Option<u32> {
         self.key
@@ -637,9 +699,12 @@ impl MemberList {
         Ok(keys)
     }
 
-    /// The next record: members added, with grants of the current key; signed by `author`, who holds `current`.
+    /// The next record: members added, their names sealed, with grants of the current key; signed by `author`, who
+    /// holds `current`.
     pub fn add(&self, author: &MemberKeys, current: &BooksKey, members: Vec<Member>) -> MemberRecord {
         let index = self.key.unwrap_or(0);
+        let members: Vec<Member> =
+            members.into_iter().map(|m| m.with_sealed_name(&self.books, index, current)).collect();
         let grants = members.iter().map(|m| current.grant(&self.books, index, m)).collect();
         self.next(MemberRecord { add: members, grants, ..self.blank() }).signed(author)
     }
@@ -705,6 +770,9 @@ pub struct Envelope {
     pub nonce: Bytes,
     /// The encrypted content.
     pub ciphertext: Bytes,
+    /// Whether the content was padded before it was encrypted (below), so that its size shows a relay less.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub padded: bool,
     /// SHA-256 over the nonce and the ciphertext.
     pub id: ContentHash,
     /// The author's signature.
@@ -715,10 +783,40 @@ impl Object for Envelope {
     const TYPE: &'static str = "envelope";
 }
 
-/// The additional data of an envelope: its books, key, author and content.
-fn envelope_aad(books: &BooksId, key: u32, author: &MemberId, content: EnvelopeContent) -> Vec<u8> {
-    let header = serde_json::json!({"books": books, "key": key, "author": author, "content": content});
+/// The additional data of an envelope: its books, key, author and content, and `padded` where it is.
+fn envelope_aad(books: &BooksId, key: u32, author: &MemberId, content: EnvelopeContent, padded: bool) -> Vec<u8> {
+    let mut header = serde_json::json!({"books": books, "key": key, "author": author, "content": content});
+    if padded {
+        header["padded"] = Value::Bool(true);
+    }
     to_canonical_vec(&header).expect("the header of an envelope has a canonical encoding")
+}
+
+/// The size content is padded to: the next power of two from 256 bytes, above 65,536 bytes the next multiple of
+/// 65,536 – always at least one byte more than the content.
+fn padded_size(length: usize) -> usize {
+    const STEP: usize = 65_536;
+    let at_least = length + 1;
+    if at_least <= STEP { at_least.next_power_of_two().max(256) } else { at_least.div_ceil(STEP) * STEP }
+}
+
+/// Content padded after ISO/IEC 9797-1, method 2: the byte 0x80, then zeros up to the padded size.
+fn pad(content: &[u8]) -> Vec<u8> {
+    let mut padded = Vec::with_capacity(padded_size(content.len()));
+    padded.extend_from_slice(content);
+    padded.push(0x80);
+    padded.resize(padded_size(content.len()), 0);
+    padded
+}
+
+/// The content without its padding.
+fn unpad(mut padded: Vec<u8>) -> Result<Vec<u8>, EncryptionError> {
+    let end = padded.iter().rposition(|&b| b != 0).ok_or(EncryptionError::Format("padding"))?;
+    if padded[end] != 0x80 {
+        return Err(EncryptionError::Format("padding"));
+    }
+    padded.truncate(end);
+    Ok(padded)
 }
 
 impl Envelope {
@@ -731,8 +829,8 @@ impl Envelope {
         content: EnvelopeContent,
         plaintext: &[u8],
     ) -> Self {
-        let aad = envelope_aad(books, index, &author.id(), content);
-        let (nonce, ciphertext) = key.seal(plaintext, &aad);
+        let aad = envelope_aad(books, index, &author.id(), content, true);
+        let (nonce, ciphertext) = key.seal(&pad(plaintext), &aad);
         let id = ContentHash::of(&[nonce.as_slice(), &ciphertext].concat());
         let mut envelope = Envelope {
             books: books.clone(),
@@ -741,6 +839,7 @@ impl Envelope {
             content,
             nonce: Bytes(nonce.to_vec()),
             ciphertext: Bytes(ciphertext),
+            padded: true,
             id,
             signature: Bytes(vec![]),
         };
@@ -766,7 +865,9 @@ impl Envelope {
             return Err(EncryptionError::Signature);
         }
         let key = keys.get(&self.key).ok_or(EncryptionError::NoKey(self.key))?;
-        key.open(&self.nonce.0, &self.ciphertext.0, &envelope_aad(&self.books, self.key, &self.author, self.content))
+        let aad = envelope_aad(&self.books, self.key, &self.author, self.content, self.padded);
+        let content = key.open(&self.nonce.0, &self.ciphertext.0, &aad)?;
+        if self.padded { unpad(content) } else { Ok(content) }
     }
 
     /// The event in the envelope; its device must be the device name of the author in the member list.
@@ -1050,5 +1151,38 @@ mod tests {
         let value = CROCKFORD.iter().position(|d| *d == wrong[i]).unwrap();
         wrong[i] = CROCKFORD[value ^ 1];
         assert!(String::from_utf8(wrong).unwrap().parse::<RecoveryCode>().is_err());
+    }
+
+    #[test]
+    fn names_can_be_sealed_and_envelopes_are_padded() {
+        let books: BooksId = "0192f1e4-0000-7000-8000-00000000b001".parse().unwrap();
+        let founder = MemberKeys::generate();
+        let member = Member::device(&founder, "laptop".parse().unwrap(), Some("Laptop".into()), Rights::Manage);
+        let (record, key) = MemberRecord::found(&books, &founder, vec![member.clone()]);
+        let list = MemberList::from_records(books.clone(), &[record]).unwrap();
+        let keys = list.keys(&founder).unwrap();
+        let sealed = member.clone().with_sealed_name(&books, 0, &key);
+        assert!(sealed.name.is_none() && sealed.sealed_name.is_some());
+        assert_eq!(sealed.display_name(&books, &keys).as_deref(), Some("Laptop"));
+        assert_eq!(sealed.display_name(&books, &BTreeMap::new()), None, "a relay holds no key");
+        let json = serde_json::to_string(&sealed).unwrap();
+        assert!(!json.contains("Laptop"));
+        // Padding: powers of two from 256 bytes, then steps of 64 KiB; a padded envelope opens to its content.
+        assert_eq!([padded_size(0), padded_size(255), padded_size(256), padded_size(1000)], [256, 256, 512, 1024]);
+        assert_eq!([padded_size(65_535), padded_size(65_536), padded_size(200_000)], [65_536, 131_072, 262_144]);
+        for content in [&b""[..], b"x", &[0u8; 300], &[0x80; 10]] {
+            let envelope = Envelope::seal(&books, 0, &key, &founder, EnvelopeContent::Original, content);
+            assert!(envelope.padded && envelope.ciphertext.0.len() == padded_size(content.len()) + 16);
+            assert_eq!(envelope.open(&keys).unwrap(), content);
+            let mut unpadded = envelope.clone();
+            unpadded.padded = false;
+            assert!(unpadded.open(&keys).is_err(), "the flag is signed and authenticated");
+        }
+        // Access for a limited time.
+        let day = |d: &str| -> Date { d.parse().unwrap() };
+        let auditor = Member { until: Some(day("2027-03-31")), rights: Rights::Read, ..member };
+        assert!(auditor.is_active_on(day("2027-03-31")) && !auditor.is_active_on(day("2027-04-01")));
+        assert!(list.active_member(&founder.id(), day("2099-01-01")).is_some());
+        assert!(list.expired(day("2099-01-01")).is_empty());
     }
 }

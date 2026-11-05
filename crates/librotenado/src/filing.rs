@@ -412,6 +412,7 @@ mod tests {
         let mut set = EventSet::new();
         let mut clock = Clock::new("a".parse().unwrap());
         let booking = Booking {
+            basis: None,
             attributed: None,
             date: "2026-03-15".parse().unwrap(),
             text: "sale".into(),

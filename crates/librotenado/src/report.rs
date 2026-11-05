@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AccountId, AccountKind, BalanceError, Chart, Country, Date, EventHash, EventSet, Object, PartyId, Payload, TaxCode,
-    TaxDirection, TaxTable,
+    AccountId, AccountKind, BalanceError, Basis, Chart, Country, Date, EventHash, EventSet, Object, PartyId, Payload,
+    TaxCode, TaxDirection, TaxTable,
 };
 
 /// How far a German balance sheet is shortened (§ 266 Abs. 1 Satz 3 and 4 HGB).
@@ -44,6 +44,19 @@ pub fn hgb_shortened(fields: &BTreeMap<String, i128>, size: HgbSize) -> BTreeMap
     }
     shortened.retain(|_, units| *units != 0);
     shortened
+}
+
+/// The remaining terms of the amounts on a position (§ 268 Abs. 4 and 5 HGB), in base units, debit positive.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Terms {
+    /// On accounts with a remaining term of up to one year.
+    pub up_to_one_year: i128,
+    /// On accounts with a remaining term of more than one year – those of more than five years included.
+    pub over_one_year: i128,
+    /// Of those, on accounts with a remaining term of more than five years (§ 285 Nr. 1 Buchstabe a HGB).
+    pub over_five_years: i128,
+    /// On accounts without a remaining term.
+    pub unknown: i128,
 }
 
 /// A booking a report per customer cannot place (spec part 0009): never resolved silently.
@@ -165,6 +178,13 @@ pub struct ReportMapping {
     /// Mussfelder of the E-Bilanz.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub mandatory: Vec<String>,
+    /// Groups of legal forms, by the codes of `legal_form` (spec part 0008), whose further positions are in
+    /// `mandatory_by_form`: the E-Bilanz's sole proprietors, partnerships and corporations.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub legal_forms: BTreeMap<String, Vec<String>>,
+    /// Per group of legal forms, the positions its reports state as well as `mandatory`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mandatory_by_form: BTreeMap<String, Vec<String>>,
     /// The report counts receipts and payments in the year they count in (§ 11 EStG): on the day a booking is
     /// `attributed` to, where it has one, else on its date.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -191,6 +211,19 @@ impl Object for ReportMapping {
 }
 
 impl ReportMapping {
+    /// The positions a report of an owner of the legal form `legal_form` states even without an amount: `mandatory`,
+    /// and those of the group of legal forms that holds it.
+    pub fn mandatory_for(&self, legal_form: Option<&str>) -> Vec<&str> {
+        let group = legal_form.and_then(|form| {
+            self.legal_forms.iter().find(|(_, forms)| forms.iter().any(|f| f == form)).map(|(group, _)| group)
+        });
+        let by_form = group.and_then(|group| self.mandatory_by_form.get(group)).into_iter().flatten();
+        let mut positions: Vec<&str> = self.mandatory.iter().chain(by_form).map(String::as_str).collect();
+        positions.sort_unstable();
+        positions.dedup();
+        positions
+    }
+
     /// The German VAT return of 2026 (Umsatzsteuer-Voranmeldung), from tax codes (`spec/data/reports/`).
     pub fn de_ustva_2026() -> Self {
         crate::from_root(include_bytes!("../data/reports/de-ustva-2026.json")).expect("the published mapping is valid")
@@ -550,6 +583,37 @@ impl EventSet {
         owner: &PartyId,
         until: Option<Date>,
     ) -> Result<BTreeMap<String, i128>, BalanceError> {
+        self.account_report_in(Basis::Commercial, mapping, chart, owner, until)
+    }
+
+    /// The reconciliation of the commercial to the tax balance sheet (spec part 0009, Überleitungsrechnung): per
+    /// position, what the bookings that count in only one of them change – the positions of the tax balance sheet
+    /// less those of the commercial one; positions without a difference are left out.
+    pub fn reconciliation(
+        &self,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        until: Option<Date>,
+    ) -> Result<BTreeMap<String, i128>, BalanceError> {
+        let mut differences = self.account_report_in(Basis::Tax, mapping, chart, owner, until)?;
+        for (position, units) in self.account_report_in(Basis::Commercial, mapping, chart, owner, until)? {
+            let difference = differences.entry(position).or_default();
+            *difference = difference.checked_sub(units).ok_or(BalanceError::Overflow)?;
+        }
+        differences.retain(|_, units| *units != 0);
+        Ok(differences)
+    }
+
+    /// The report from the accounts of the balance sheet of `basis` (see [`EventSet::account_report`]).
+    pub fn account_report_in(
+        &self,
+        basis: Basis,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        until: Option<Date>,
+    ) -> Result<BTreeMap<String, i128>, BalanceError> {
         let parents = self.account_parents(chart);
         let kinds = self.account_kinds(chart);
         let is_result =
@@ -562,7 +626,7 @@ impl EventSet {
             Ok(true)
         };
         let mut result: i128 = 0;
-        for (party, account, _, units) in self.functional_balances(until)?.iter() {
+        for (party, account, _, units) in self.functional_balances_in(basis, until)?.iter() {
             if party != owner {
                 continue;
             }
@@ -574,7 +638,7 @@ impl EventSet {
         if let (Some((current, earlier)), Some(date), true) = (chart.result_accounts(), date, result != 0) {
             let start = self.financial_year_start(owner, date);
             let mut before: i128 = 0;
-            for (party, account, _, units) in self.functional_balances_before(start)?.iter() {
+            for (party, account, _, units) in self.functional_balances_before(basis, start)?.iter() {
                 if party == owner && is_result(account) && mapping.position(account, &parents, units < 0).is_none() {
                     before = before.checked_add(units).ok_or(BalanceError::Overflow)?;
                 }
@@ -590,40 +654,101 @@ impl EventSet {
         Ok(positions)
     }
 
+    /// The remaining terms of the amounts on each position of `mapping` on `until` (spec part 0009; § 268 Abs. 4
+    /// and 5 HGB): by the attribute `term` of the account, own or inherited – `up-to-1-year`, `over-1-year`,
+    /// `1-to-5-years`, `over-5-years` –, unknown without one. Amounts in the owner's functional currency, debit
+    /// positive; positions without an amount are left out.
+    pub fn term_report(
+        &self,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        until: Option<Date>,
+    ) -> Result<BTreeMap<String, Terms>, BalanceError> {
+        let parents = self.account_parents(chart);
+        let mut own: BTreeMap<&AccountId, &str> = chart
+            .accounts
+            .iter()
+            .filter_map(|account| Some((&account.id, account.attributes.get("term")?.as_str())))
+            .collect();
+        let ordered = self.ordered();
+        for (_, event) in &ordered {
+            if let Payload::AccountOpened { account } = &event.payload
+                && let Some(term) = account.attributes.get("term")
+            {
+                own.entry(&account.id).or_insert(term.as_str());
+            }
+        }
+        let term = |account: &AccountId| {
+            let mut next = Some(account);
+            for _ in 0..=parents.len() {
+                let id = next?;
+                if let Some(term) = own.get(id) {
+                    return Some(*term);
+                }
+                next = parents.get(id);
+            }
+            None
+        };
+        let mut positions: BTreeMap<String, Terms> = BTreeMap::new();
+        for (party, account, _, units) in self.functional_balances(until)?.iter() {
+            if party != owner || units == 0 {
+                continue;
+            }
+            let Some(position) = mapping.position(account, &parents, units < 0) else { continue };
+            let terms = positions.entry(position.to_owned()).or_default();
+            let add = |sum: &mut i128| -> Result<(), BalanceError> {
+                *sum = sum.checked_add(units).ok_or(BalanceError::Overflow)?;
+                Ok(())
+            };
+            match term(account) {
+                Some("up-to-1-year") => add(&mut terms.up_to_one_year)?,
+                Some("over-5-years") => {
+                    add(&mut terms.over_one_year)?;
+                    add(&mut terms.over_five_years)?;
+                }
+                Some("over-1-year" | "1-to-5-years") => add(&mut terms.over_one_year)?,
+                _ => add(&mut terms.unknown)?,
+            }
+        }
+        positions.retain(|_, terms| *terms != Terms::default());
+        Ok(positions)
+    }
+
     /// The first day of the financial year of `owner` that holds `date` (see [`EventSet::financial_year`]).
     pub fn financial_year_start(&self, owner: &PartyId, date: Date) -> Date {
         self.financial_year(owner, date).0
     }
 
     /// The financial year of `owner` that holds `date`, first and last day (spec part 0008): twelve months from the
-    /// first day of the month `year_start` of the configuration that applies on `date` – January without one –,
-    /// shorter where `year_start` changes: the year before a change ends the day before the configuration that
-    /// changes it, the year after it begins on that configuration's `from`.
+    /// latest day `year_start`/`year_start_day` of the configuration that applies on `date` – the first of January
+    /// without one –, shorter where the start changes: the year before a change ends the day before the configuration
+    /// that changes it, the year after it begins on that configuration's `from`.
     pub fn financial_year(&self, owner: &PartyId, date: Date) -> (Date, Date) {
         // The configurations of the owner by `from`; of two with the same `from`, the later in the agreed order.
-        let mut by_from: BTreeMap<Date, u8> = BTreeMap::new();
+        let mut by_from: BTreeMap<Date, (u8, u8)> = BTreeMap::new();
         for (_, event) in self.ordered() {
             if let Payload::OwnerConfigured { configuration } = &event.payload
                 && configuration.owner == *owner
             {
-                by_from.insert(configuration.from, configuration.year_start);
+                by_from.insert(configuration.from, configuration.year_start_date());
             }
         }
-        let month = by_from.range(..=date).next_back().map_or(1, |(_, month)| *month);
-        let year = if date.month() >= month { date.year() } else { date.year() - 1 };
-        let mut start = Date::new(year, month, 1).expect("the first day of a month");
-        let next = Date::new(year + 1, month, 1).expect("the first day of a month");
+        let (month, day) = by_from.range(..=date).next_back().map_or((1, 1), |(_, start)| *start);
+        let year = if (date.month(), date.day()) >= (month, day) { date.year() } else { date.year() - 1 };
+        let mut start = Date::new(year, month, day).expect("a day of every month");
+        let next = Date::new(year + 1, month, day).expect("a day of every month");
         let mut end = next.previous().expect("after the first day of the calendar");
-        // A change of `year_start` on or before `date`, after the start: the year begins with it.
-        let mut previous: Option<u8> = None;
+        // A change of the start on or before `date`, after the start: the year begins with it.
+        let mut previous: Option<(u8, u8)> = None;
         for (from, year_start) in by_from.range(..=date) {
             if previous.is_some_and(|p| p != *year_start) && *from > start {
                 start = *from;
             }
             previous = Some(*year_start);
         }
-        // The next change of `year_start` after `date`, before the year ends: the year ends the day before it.
-        let mut current = month;
+        // The next change of the start after `date`, before the year ends: the year ends the day before it.
+        let mut current = (month, day);
         for (from, year_start) in by_from.range(date..).filter(|(from, _)| **from > date) {
             if *year_start != current {
                 if *from <= end {
@@ -672,6 +797,7 @@ mod tests {
         let mut clock = Clock::new("a".parse().unwrap());
         for (ms, postings) in bookings.into_iter().enumerate() {
             let booking = Booking {
+                basis: None,
                 attributed: None,
                 date: "2026-03-15".parse().unwrap(),
                 text: "test".into(),
@@ -695,6 +821,7 @@ mod tests {
         let mut clock = Clock::new("a".parse().unwrap());
         let mut add = |set: &mut EventSet, date: &str, attributed: Option<&str>| {
             let booking = Booking {
+                basis: None,
                 attributed: attributed.map(|d| d.parse().unwrap()),
                 date: date.parse().unwrap(),
                 text: "VAT for the fourth quarter".into(),
@@ -1150,6 +1277,8 @@ mod tests {
             vat_settlement: None,
             taxes: vec![],
             mandatory: vec![],
+            legal_forms: BTreeMap::new(),
+            mandatory_by_form: BTreeMap::new(),
             cash_basis: false,
             accounts_first: vec![],
             asset_groups: BTreeMap::new(),
@@ -1174,6 +1303,7 @@ mod tests {
     #[test]
     fn a_balance_sheet_shows_the_result_on_equity() {
         let dated = |date: &str, postings: Vec<Posting>| Booking {
+            basis: None,
             attributed: None,
             date: date.parse().unwrap(),
             text: "test".into(),
@@ -1258,6 +1388,7 @@ mod tests {
             document
         };
         let sale = |documents: Vec<crate::DocumentId>, tax: &str, units: i128| Booking {
+            basis: None,
             attributed: None,
             date: "2026-03-15".parse().unwrap(),
             text: "sale".into(),
@@ -1373,5 +1504,151 @@ mod tests {
         assert_eq!(set.financial_year(&party(2), date("2026-02-28")), (date("2026-01-01"), date("2026-12-31")));
         assert_eq!(date("2024-03-01").previous(), Some(date("2024-02-29")));
         assert_eq!(date("0001-01-01").previous(), None);
+    }
+
+    /// A financial year that begins in the middle of a month.
+    #[test]
+    fn a_financial_year_from_the_middle_of_a_month() {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let date = |d: &str| -> Date { d.parse().unwrap() };
+        for (ms, (from, month, day)) in [("2025-01-01", 1, None), ("2026-07-16", 7, Some(16))].into_iter().enumerate() {
+            let mut json = serde_json::json!({
+                "owner": party(1).to_string(), "from": from, "currency": "EUR", "year_start": month,
+            });
+            if let Some(day) = day {
+                json["year_start_day"] = serde_json::json!(day);
+            }
+            let configuration = serde_json::from_value(json).unwrap();
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            set.insert(Event {
+                time: clock.now(ms as u64),
+                seq,
+                prev,
+                payload: Payload::OwnerConfigured { configuration },
+            });
+        }
+        let year = |d: &str| set.financial_year(&party(1), date(d));
+        assert_eq!(year("2026-07-15"), (date("2026-01-01"), date("2026-07-15")), "short");
+        assert_eq!(year("2026-07-16"), (date("2026-07-16"), date("2027-07-15")));
+        assert_eq!(year("2027-07-15"), (date("2026-07-16"), date("2027-07-15")));
+        assert_eq!(year("2028-01-01"), (date("2027-07-16"), date("2028-07-15")));
+        assert!(set.review_parties().iter().all(|p| !matches!(p, crate::PartyProblem::YearChangedWithin { .. })));
+        for day in [0, 1, 29, 31] {
+            let json = serde_json::json!({
+                "owner": party(1).to_string(), "from": "2026-01-01", "currency": "EUR", "year_start": 7,
+                "year_start_day": day,
+            });
+            assert!(serde_json::from_value::<crate::Configuration>(json).is_err(), "{day}");
+        }
+    }
+
+    /// The remaining terms of receivables and liabilities (§ 268 Abs. 4 and 5 HGB), from the attribute `term`.
+    #[test]
+    fn remaining_terms_per_position() {
+        let skr03 = ChartTranslation::de_skr03();
+        let on = |number: &str, units: i128| Posting {
+            account: skr03.accounts[number].clone(),
+            ..posting("512", units, None)
+        };
+        // Receivables up to and over a year, without a term; advance payments received over one and five years.
+        let set = books(vec![vec![
+            on("1451", 10_000),
+            on("1455", 20_000),
+            on("1400", 5_000),
+            on("1720", -30_000),
+            on("1721", -40_000),
+            on("1200", 35_000),
+        ]]);
+        let chart = Chart::v0_1();
+        let bs = ReportMapping::de_hgb_266_2026();
+        let positions = set.account_report(&bs, &chart, &party(1), None).unwrap();
+        let terms = set.term_report(&bs, &chart, &party(1), None).unwrap();
+        let receivables = bs.position(&skr03.accounts["1455"], &set.account_parents(&chart), false).unwrap();
+        assert_eq!(
+            terms[receivables],
+            Terms { up_to_one_year: 10_000, over_one_year: 20_000, over_five_years: 0, unknown: 5_000 }
+        );
+        let advances = bs.position(&skr03.accounts["1720"], &set.account_parents(&chart), true).unwrap();
+        assert_eq!(
+            terms[advances],
+            Terms { up_to_one_year: 0, over_one_year: -70_000, over_five_years: -40_000, unknown: 0 }
+        );
+        // The terms add up to the positions.
+        for (position, t) in &terms {
+            assert_eq!(t.up_to_one_year + t.over_one_year + t.unknown, positions[position], "{position}");
+        }
+        assert_eq!(chart.attributes(&skr03.accounts["1455"]).get("term").map(String::as_str), Some("over-1-year"));
+    }
+
+    /// The Mussfelder of the E-Bilanz per legal form (taxonomy 6.10, `legalFormEU`, `legalFormPG`, `legalFormKSt`).
+    #[test]
+    fn mandatory_positions_by_legal_form() {
+        let bs = ReportMapping::de_ebilanz_bs_6_10();
+        let all = bs.mandatory_for(None);
+        assert_eq!(all.len(), bs.mandatory.len());
+        let (gmbh, kg, ek) =
+            (bs.mandatory_for(Some("de-gmbh")), bs.mandatory_for(Some("de-kg")), bs.mandatory_for(Some("de-ek")));
+        assert!(
+            gmbh.contains(&"bs.ass.currAss.receiv.shareholders.gmbh")
+                && !kg.contains(&"bs.ass.currAss.receiv.shareholders.gmbh")
+        );
+        assert!(kg.contains(&"bs.ass.currAss.receiv.shareholders.limitedLiable"));
+        assert!(ek.len() > all.len() && all.iter().all(|p| ek.contains(p)));
+        assert_eq!(bs.mandatory_for(Some("fr-sas")), all, "a legal form outside the groups");
+        for mapping in [bs, ReportMapping::de_ebilanz_is_gkv_6_10()] {
+            for positions in mapping.mandatory_by_form.values() {
+                assert!(positions.iter().all(|p| !mapping.mandatory.contains(p)));
+            }
+        }
+    }
+
+    /// Bookings in one balance sheet only make the reconciliation to the tax balance sheet.
+    #[test]
+    fn the_reconciliation_to_the_tax_balance_sheet() {
+        let mut set = books(vec![vec![posting("512", 100_000, None), posting("101", -100_000, None)]]);
+        let mut clock = Clock::new("b".parse().unwrap());
+        // A provision for impending losses, in the commercial balance sheet only (§ 5 Abs. 4a EStG); a tax-only
+        // write-down of a receivable.
+        for (ms, (basis, postings)) in [
+            (Basis::Commercial, vec![posting("6815", 30_000, None), posting("1518", -30_000, None)]),
+            (Basis::Tax, vec![posting("6817", 5_000, None), posting("491", -5_000, None)]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let booking = Booking {
+                basis: Some(basis),
+                attributed: None,
+                date: "2026-12-31".parse().unwrap(),
+                text: "test".into(),
+                postings,
+                documents: vec![],
+                entries: vec![],
+                transaction: None,
+            };
+            let (seq, prev) = set.chain_head(&"b".parse().unwrap());
+            set.insert(Event { time: clock.now(ms as u64), seq, prev, payload: Payload::BookingRecorded { booking } });
+        }
+        let chart = Chart::v0_1();
+        let bs = ReportMapping::de_hgb_266_2026();
+        let commercial = set.account_report(&bs, &chart, &party(1), None).unwrap();
+        let tax = set.account_report_in(Basis::Tax, &bs, &chart, &party(1), None).unwrap();
+        let reconciliation = set.reconciliation(&bs, &chart, &party(1), None).unwrap();
+        assert_eq!(commercial.values().sum::<i128>(), 0);
+        assert_eq!(tax.values().sum::<i128>(), 0);
+        for (position, units) in &reconciliation {
+            assert_eq!(commercial.get(position).copied().unwrap_or(0) + units, tax.get(position).copied().unwrap_or(0));
+        }
+        // The provision is gone, the receivables are lower, and the result differs by both.
+        assert!(reconciliation.values().any(|units| *units == 30_000), "{reconciliation:?}");
+        assert!(reconciliation.values().any(|units| *units == -5_000), "{reconciliation:?}");
+        assert!(!reconciliation.is_empty() && reconciliation.values().sum::<i128>() == 0);
+        assert!(
+            set.functional_balances(None)
+                .unwrap()
+                .iter()
+                .all(|(_, account, _, _)| { *account != ChartTranslation::fr_pcg().accounts["6817"] })
+        );
     }
 }

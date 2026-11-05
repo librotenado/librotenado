@@ -5,7 +5,7 @@ use std::{fmt, ops::Neg, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::{Date, Object, ParseError};
+use crate::{Date, Decimal, Object, ParseError};
 
 /// A currency by its code: three upper-case letters for an ISO 4217 currency (`EUR`, `CHF`), `x-` and 1–62 characters
 /// of `a-z`, `0-9` and `-` for a currency defined outside ISO 4217 (`x-btc`, `x-galleon`).
@@ -149,6 +149,79 @@ mod base_units {
 pub struct CurrencyDefinition {
     code: Currency,
     subdivisions: Vec<u64>,
+    withdrawn: Option<Withdrawn>,
+    fixed_rate: Option<FixedRate>,
+}
+
+/// The month a currency was withdrawn from ISO 4217 (list three), written `YYYY-MM`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Withdrawn {
+    year: u16,
+    month: u8,
+}
+
+impl Withdrawn {
+    /// The month, if `month` is 1 to 12 and `year` 1 to 9999.
+    pub fn new(year: u16, month: u8) -> Option<Self> {
+        ((1..=9999).contains(&year) && (1..=12).contains(&month)).then_some(Withdrawn { year, month })
+    }
+
+    /// The year.
+    pub fn year(self) -> u16 {
+        self.year
+    }
+
+    /// The month, 1 to 12.
+    pub fn month(self) -> u8 {
+        self.month
+    }
+
+    /// Whether `day` lies after the month of withdrawal.
+    pub fn is_before(self, day: Date) -> bool {
+        (day.year(), day.month()) > (self.year, self.month)
+    }
+}
+
+impl fmt::Display for Withdrawn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04}-{:02}", self.year, self.month)
+    }
+}
+
+impl FromStr for Withdrawn {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let error = || ParseError::Month(s.to_owned());
+        let b = s.as_bytes();
+        if b.len() != 7 || b[4] != b'-' || !s[..4].bytes().chain(s[5..].bytes()).all(|c| c.is_ascii_digit()) {
+            return Err(error());
+        }
+        Withdrawn::new(s[..4].parse().map_err(|_| error())?, s[5..].parse().map_err(|_| error())?).ok_or_else(error)
+    }
+}
+
+impl Serialize for Withdrawn {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Withdrawn {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?.parse().map_err(de::Error::custom)
+    }
+}
+
+/// A rate fixed by law between a currency and the one that replaced it: `rate` units of the currency are one unit of
+/// `currency` – 1.95583 Deutsche Mark per euro.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FixedRate {
+    /// The currency that replaced it.
+    pub currency: Currency,
+    /// Units of the replaced currency per unit of `currency`, above zero.
+    pub rate: Decimal,
 }
 
 impl Object for CurrencyDefinition {
@@ -167,13 +240,16 @@ pub enum DefinitionError {
     /// An ISO 4217 currency not divided as ISO 4217 does: once by a power of ten, or not at all.
     #[error("an ISO 4217 currency is divided once by a power of ten, or not at all")]
     Iso,
+    /// A fixed rate that is not above zero, or to the currency itself.
+    #[error("a fixed rate is above zero and to another currency")]
+    FixedRate,
 }
 
 impl CurrencyDefinition {
     /// A definition, checked: every subdivision between 2 and 2^53 − 1, at most 10^38 base units per unit, and an
     /// ISO 4217 currency divided at most once, by a power of ten.
     pub fn new(code: Currency, subdivisions: Vec<u64>) -> Result<Self, DefinitionError> {
-        let definition = CurrencyDefinition { code, subdivisions };
+        let definition = CurrencyDefinition { code, subdivisions, withdrawn: None, fixed_rate: None };
         if definition.subdivisions.iter().any(|&s| !(2..=crate::MAX_SAFE_INTEGER).contains(&s)) {
             return Err(DefinitionError::Stage);
         }
@@ -182,6 +258,26 @@ impl CurrencyDefinition {
             return Err(DefinitionError::Iso);
         }
         Ok(definition)
+    }
+
+    /// The definition of a currency withdrawn in the month `withdrawn` and, if given, replaced at a rate fixed by law.
+    pub fn withdrawn(mut self, withdrawn: Withdrawn, fixed_rate: Option<FixedRate>) -> Result<Self, DefinitionError> {
+        if fixed_rate.as_ref().is_some_and(|f| f.rate.units() <= 0 || f.currency == self.code) {
+            return Err(DefinitionError::FixedRate);
+        }
+        self.withdrawn = Some(withdrawn);
+        self.fixed_rate = fixed_rate;
+        Ok(self)
+    }
+
+    /// The month the currency was withdrawn, if it was.
+    pub fn withdrawal(&self) -> Option<Withdrawn> {
+        self.withdrawn
+    }
+
+    /// The rate fixed by law to the currency that replaced it, if there is one.
+    pub fn fixed_rate(&self) -> Option<&FixedRate> {
+        self.fixed_rate.as_ref()
     }
 
     /// The code.
@@ -242,6 +338,30 @@ impl CurrencyTable {
         self.currencies.iter().find(|definition| definition.code() == code)
     }
 
+    /// `money` converted at a rate fixed by law, between a replaced currency and the one that replaced it or between
+    /// two currencies replaced by the same one (Regulation (EC) No 1103/97, Articles 4 and 5): rounded half away from
+    /// zero to the base unit of the target, between two replaced currencies through an amount in the replacing
+    /// currency rounded to three decimal places. `None` without such a rate, for a currency that is not decimal, or
+    /// out of range.
+    pub fn convert_fixed(&self, money: &Money, to: &Currency) -> Option<Money> {
+        let from = self.get(money.currency())?;
+        let target = self.get(to)?;
+        let (from_decimals, to_decimals) = (from.decimals()?, target.decimals()?);
+        let (units, rate_from) = (money.base_units(), from.fixed_rate.as_ref());
+        // An amount in the replacing currency, `units · 10^-scale`.
+        let (common, scale, decimals) = match (rate_from, target.fixed_rate.as_ref()) {
+            (Some(rate), _) if &rate.currency == to => {
+                return Money::new(divide(units, from_decimals, rate, to_decimals)?, to.clone());
+            }
+            (_, Some(rate)) if &rate.currency == money.currency() => {
+                return Money::new(multiply(units, from_decimals, rate, to_decimals)?, to.clone());
+            }
+            (Some(a), Some(b)) if a.currency == b.currency => (divide(units, from_decimals, a, 3)?, 3, b),
+            _ => return None,
+        };
+        Money::new(multiply(common, scale, decimals, to_decimals)?, to.clone())
+    }
+
     /// Whether every code occurs once.
     pub fn is_valid(&self) -> bool {
         let mut codes: Vec<&Currency> = self.currencies.iter().map(CurrencyDefinition::code).collect();
@@ -250,25 +370,65 @@ impl CurrencyTable {
     }
 }
 
-/// The written form of a definition: `{"code": …, "subdivisions": […]}`.
+/// `n · 10^-scale`, rounded half away from zero to `decimals` places, as an integer of them; `n · 10^(decimals -
+/// scale) · numerator / denominator` in general.
+fn scaled(n: i128, scale: u32, decimals: u32, numerator: i128, denominator: i128) -> Option<i128> {
+    let (mut top, mut bottom) = (n.checked_mul(numerator)?, denominator);
+    if decimals >= scale {
+        top = top.checked_mul(10i128.checked_pow(decimals - scale)?)?;
+    } else {
+        bottom = bottom.checked_mul(10i128.checked_pow(scale - decimals)?)?;
+    }
+    let half = bottom / 2;
+    Some(if top >= 0 { (top + half) / bottom } else { (top - half) / bottom })
+}
+
+/// Base units of the replaced currency, divided by the rate, in units of `decimals` places of the replacing one.
+fn divide(units: i128, scale: u32, rate: &FixedRate, decimals: u32) -> Option<i128> {
+    let factor = 10i128.checked_pow(u32::from(rate.rate.scale()))?;
+    scaled(units, scale, decimals, factor, rate.rate.units())
+}
+
+/// An amount of the replacing currency, multiplied by the rate, in units of `decimals` places of the replaced one.
+fn multiply(units: i128, scale: u32, rate: &FixedRate, decimals: u32) -> Option<i128> {
+    let factor = 10i128.checked_pow(u32::from(rate.rate.scale()))?;
+    scaled(units, scale, decimals, rate.rate.units(), factor)
+}
+
+/// The written form of a definition: `{"code": …, "subdivisions": […]}`, and for a withdrawn currency `withdrawn` and
+/// `fixed_rate`.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawDefinition {
     code: Currency,
     subdivisions: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    withdrawn: Option<Withdrawn>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed_rate: Option<FixedRate>,
 }
 
 impl TryFrom<RawDefinition> for CurrencyDefinition {
     type Error = DefinitionError;
 
     fn try_from(raw: RawDefinition) -> Result<Self, Self::Error> {
-        CurrencyDefinition::new(raw.code, raw.subdivisions)
+        let definition = CurrencyDefinition::new(raw.code, raw.subdivisions)?;
+        match raw.withdrawn {
+            Some(withdrawn) => definition.withdrawn(withdrawn, raw.fixed_rate),
+            None if raw.fixed_rate.is_some() => Err(DefinitionError::FixedRate),
+            None => Ok(definition),
+        }
     }
 }
 
 impl From<CurrencyDefinition> for RawDefinition {
     fn from(definition: CurrencyDefinition) -> Self {
-        RawDefinition { code: definition.code, subdivisions: definition.subdivisions }
+        RawDefinition {
+            code: definition.code,
+            subdivisions: definition.subdivisions,
+            withdrawn: definition.withdrawn,
+            fixed_rate: definition.fixed_rate,
+        }
     }
 }
 
@@ -346,7 +506,7 @@ mod tests {
     fn the_table_of_version_0_1() {
         let table = CurrencyTable::v0_1();
         assert!(table.is_valid());
-        assert_eq!(table.currencies.len(), 167);
+        assert_eq!(table.currencies.len(), 167 + 21, "list one, bitcoin, ether, and the currencies the euro replaced");
         let decimals = |code: &str| table.get(&code.parse().unwrap()).and_then(CurrencyDefinition::decimals);
         assert_eq!(
             [decimals("EUR"), decimals("JPY"), decimals("KWD"), decimals("CLF"), decimals("MGA")],
@@ -375,5 +535,43 @@ mod tests {
         ] {
             assert!(definition(json).is_err(), "{json}");
         }
+    }
+
+    #[test]
+    fn replaced_currencies_convert_at_the_fixed_rate() {
+        let table = CurrencyTable::v0_1();
+        assert!(table.is_valid());
+        let (dem, eur, frf, itl): (Currency, Currency, Currency, Currency) =
+            ("DEM".parse().unwrap(), eur(), "FRF".parse().unwrap(), "ITL".parse().unwrap());
+        let dm = table.get(&dem).unwrap();
+        assert_eq!(dm.withdrawal().unwrap().to_string(), "2002-03");
+        assert_eq!(dm.fixed_rate().unwrap().rate.to_string(), "1.95583");
+        assert!(dm.withdrawal().unwrap().is_before(Date::new(2002, 4, 1).unwrap()));
+        assert!(!dm.withdrawal().unwrap().is_before(Date::new(2002, 3, 31).unwrap()));
+        assert!(table.get(&eur).unwrap().withdrawal().is_none());
+        // 100 DM = 51.129188… euros; 1,000 euros = 1,955.83 DM; −0.01 DM = −0.005… euros, half away from zero.
+        let convert = |base_units, from: &Currency, to: &Currency| {
+            table.convert_fixed(&Money::new(base_units, from.clone()).unwrap(), to).map(|m| m.base_units())
+        };
+        assert_eq!(convert(10000, &dem, &eur), Some(5113));
+        assert_eq!(convert(100000, &eur, &dem), Some(195583));
+        assert_eq!(convert(-1, &dem, &eur), Some(-1));
+        // 1,000 lire = 0.516457 euros → 0.516 (three places) → 3.38 francs (Article 4(4)).
+        assert_eq!(convert(1000, &itl, &eur), Some(52));
+        assert_eq!(convert(1000, &itl, &frf), Some(338));
+        // No rate between currencies that are not replaced.
+        assert_eq!(convert(100, &eur, &"USD".parse().unwrap()), None);
+        assert_eq!(convert(100, &eur, &eur), None);
+        for json in [
+            r#"{"code":"DEM","subdivisions":[100],"fixed_rate":{"currency":"EUR","rate":"1.95583"}}"#,
+            r#"{"code":"DEM","subdivisions":[100],"withdrawn":"2002-3"}"#,
+            r#"{"code":"DEM","subdivisions":[100],"withdrawn":"2002-13"}"#,
+            r#"{"code":"DEM","subdivisions":[100],"withdrawn":"2002-03","fixed_rate":{"currency":"EUR","rate":"0"}}"#,
+            r#"{"code":"DEM","subdivisions":[100],"withdrawn":"2002-03","fixed_rate":{"currency":"DEM","rate":"1"}}"#,
+        ] {
+            assert!(definition(json).is_err(), "{json}");
+        }
+        let json = r#"{"code":"DEM","subdivisions":[100],"withdrawn":"2002-03","fixed_rate":{"currency":"EUR","rate":"1.95583"}}"#;
+        assert_eq!(serde_json::to_string(&definition(json).unwrap()).unwrap(), json);
     }
 }

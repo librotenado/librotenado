@@ -446,6 +446,22 @@ pub struct InvoiceLine {
     /// Its VAT rate in percent; absent where the category has none (BT-152).
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub rate: Option<Decimal>,
+    /// The lines it consists of (BG-DEX-01, the extension of XRechnung): a detail, not invoiced on its own – the line's
+    /// own amount is what counts; absent when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub sub_lines: Vec<InvoiceLine>,
+}
+
+/// An amount the seller collects for a third party with the invoice (BG-DEX-09, the extension of XRechnung): not part
+/// of the seller's supply or its VAT, but of the amount due.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ThirdPartyPayment {
+    /// What kind of payment it is (BT-DEX-001).
+    pub kind: String,
+    /// The amount (BT-DEX-002).
+    pub amount: Money,
+    /// A description (BT-DEX-003).
+    pub description: String,
 }
 
 /// The totals of an invoice (BG-22). The sum of the lines and of the allowances and charges (BT-106 to BT-108) are
@@ -468,7 +484,7 @@ pub struct InvoiceTotals {
     /// The rounding of the amount due (BT-114); absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub rounding: Option<Money>,
-    /// The amount due for payment: gross, less prepaid, plus rounding (BT-115).
+    /// The amount due for payment: gross, less prepaid, plus rounding, plus the payments for third parties (BT-115).
     pub due: Money,
 }
 
@@ -543,6 +559,9 @@ pub struct InvoiceData {
     /// The lines (BG-25); absent when not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub lines: Vec<InvoiceLine>,
+    /// Amounts collected for third parties (BG-DEX-09, the extension of XRechnung); absent when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub third_party_payments: Vec<ThirdPartyPayment>,
     /// The totals (BG-22).
     pub totals: InvoiceTotals,
 }
@@ -657,12 +676,15 @@ pub struct ProposalAccounts {
     pub vat_input: AccountId,
     /// VAT the buyer owes under reverse charge or on an intra-Community acquisition.
     pub vat_reverse_charge: AccountId,
+    /// Amounts a seller collects in the name and for the account of others – transit items (durchlaufende Posten,
+    /// § 10 Abs. 1 Satz 5 UStG): the payments for third parties of a sale.
+    pub transit: AccountId,
 }
 
 impl ProposalAccounts {
     /// Accounts of the harmonised chart 0.1: other purchases (PCG 6068) or services sold (706), suppliers (4011) or
     /// customers (4111), VAT collected (44571), deductible VAT (44566), VAT due on intra-Community transactions
-    /// (4452).
+    /// (4452), transit items (SKR 03 1590).
     pub fn v0_1(side: InvoiceSide) -> Self {
         let pcg = crate::ChartTranslation::fr_pcg();
         let account = |number: &str| pcg.accounts[number].clone();
@@ -676,6 +698,7 @@ impl ProposalAccounts {
             vat_output: account("44571"),
             vat_input: account("44566"),
             vat_reverse_charge: account("4452"),
+            transit: crate::ChartTranslation::de_skr03().accounts["1590"].clone(),
         }
     }
 }
@@ -785,6 +808,16 @@ pub fn propose_booking(
             post(&accounts.vat_reverse_charge, -sign * owed, code.as_ref())?;
         }
     }
+    // Payments for third parties (BG-DEX-09): the seller passes them on, the buyer pays them as part of the amount due.
+    for payment in &invoice.third_party_payments {
+        let units = payment.amount.base_units();
+        let account = match side {
+            InvoiceSide::Purchase => &accounts.counter,
+            InvoiceSide::Sale => &accounts.transit,
+        };
+        post(account, sign * units, None)?;
+        total = total.checked_add(units).ok_or(ProposalError::Overflow)?;
+    }
     post(&accounts.party, -sign * total, None)?;
     let name = match side {
         InvoiceSide::Purchase => &invoice.seller.name,
@@ -795,6 +828,7 @@ pub fn propose_booking(
         None => name.clone(),
     };
     Ok(Booking {
+        basis: None,
         attributed: None,
         date: document.date,
         text,

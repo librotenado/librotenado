@@ -258,4 +258,40 @@
   "is.netIncome.regular.operatingTC.staff.social.welfare",
   "is.netIncome.tax",
   "is.netIncome.tax.gewst"
-]}
+], "legal_forms": {
+  "sole-proprietor": ["de-ek"],
+  "partnership": ["de-gbr", "de-ohg", "de-kg", "de-gmbh-co-kg", "de-partg"],
+  "corporation": ["de-gmbh", "de-ug", "de-ag", "de-kgaa", "de-se", "de-eg", "de-ev", "de-stiftung"]
+}, "mandatory_by_form": {
+  "sole-proprietor": [
+    "is.netIncome.regular.fin.netInterest.expenses.regularInterest.EStG4_4aFixedAssets",
+    "is.netIncome.regular.operatingTC.otherCost.businessTravelOwner",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.ownConsumption.merchandiseWithdrawals",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.ownConsumption.privateUseVehicles",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.releasePreTaxRes.EStG6b_10"
+  ],
+  "partnership": [
+    "is.netIncome.regular.fin.netInterest.expenses.regularInterest.EStG4_4aFixedAssets",
+    "is.netIncome.regular.fin.netInterest.expenses.regularInterest.partners",
+    "is.netIncome.regular.operatingTC.otherCost.businessTravelOwner",
+    "is.netIncome.regular.operatingTC.otherCost.leaseFix.partners",
+    "is.netIncome.regular.operatingTC.otherCost.leaseMoveable.partners",
+    "is.netIncome.regular.operatingTC.otherCost.liabilityRemunerationPartners",
+    "is.netIncome.regular.operatingTC.otherCost.otherRemunerationPartners",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.ownConsumption.merchandiseWithdrawals",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.ownConsumption.privateUseVehicles",
+    "is.netIncome.regular.operatingTC.otherOpRevenue.releasePreTaxRes.EStG6b_10",
+    "is.netIncome.regular.operatingTC.staff.salaries.salariedPartnersEStG15",
+    "is.netIncome.regular.operatingTC.staff.social.pensions.partner",
+    "is.netIncome.regular.operatingTC.staff.social.socExp.partnersEStG15"
+  ],
+  "corporation": [
+    "is.netIncome.regular.fin.netInterest.expenses.regularInterest.PartnersLoans",
+    "is.netIncome.regular.fin.netInterest.expenses.regularInterest.PartnersLoans.participationOver25pt",
+    "is.netIncome.regular.operatingTC.cooperative.Refunds",
+    "is.netIncome.regular.operatingTC.otherCost.leaseFix.shareholders",
+    "is.netIncome.regular.operatingTC.otherCost.leaseMoveable.shareholders",
+    "is.netIncome.regular.operatingTC.staff.salaries.managerPartner",
+    "is.netIncome.regular.operatingTC.staff.social.pensions.shareholderManager"
+  ]
+}}

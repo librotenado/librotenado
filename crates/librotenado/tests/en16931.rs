@@ -129,6 +129,28 @@ mod proposals {
         set.period_report(&ReportMapping::de_ustva_2026(), &TaxTable::de(), &Chart::v0_1(), &owner, date, date).unwrap()
     }
 
+    /// Payments for third parties are part of the amount due: on transit items in a sale, an expense in a purchase,
+    /// outside the VAT return either way.
+    #[test]
+    fn payments_for_third_parties_in_a_proposal() {
+        let doc = document("extension/05.01a-INVOICE_ubl.xml");
+        let owner: PartyId = OWNER.parse().unwrap();
+        for side in [InvoiceSide::Sale, InvoiceSide::Purchase] {
+            let accounts = ProposalAccounts::v0_1(side);
+            let booking = propose_booking(&doc, side, &owner, &accounts).unwrap();
+            booking.validate().unwrap();
+            let on = |account| {
+                booking.postings.iter().filter(|p| &p.account == account).map(|p| p.amount.base_units()).sum::<i128>()
+            };
+            assert_eq!(on(&accounts.party).abs(), 36686, "the amount due");
+            match side {
+                InvoiceSide::Sale => assert_eq!(on(&accounts.transit), -2996),
+                InvoiceSide::Purchase => assert_eq!(on(&accounts.counter), 31486 + 2996),
+            }
+        }
+        assert_eq!(vat_return(&doc, InvoiceSide::Sale).get("86"), Some(&31486), "only the supply, at 7 %");
+    }
+
     #[test]
     fn a_purchase_at_two_rates() {
         let doc = document("03.01a-INVOICE_ubl.xml");
@@ -392,4 +414,75 @@ fn an_xrechnung_attached_to_a_pdf_reads_back() {
     let metadata = hybrid.get_object(catalog.get(b"Metadata").unwrap().as_reference().unwrap()).unwrap();
     let xmp = String::from_utf8(metadata.as_stream().unwrap().content.clone()).unwrap();
     assert!(xmp.contains("<fx:ConformanceLevel>XRECHNUNG</fx:ConformanceLevel>"));
+}
+
+/// The extension of XRechnung 3.0: sub-lines (BG-DEX-01) and payments for third parties (BG-DEX-09), in UBL.
+mod extension {
+    use super::*;
+
+    fn read_extension(name: &str) -> TranslatedInvoice {
+        read(&format!("extension/{name}"))
+    }
+
+    fn count(lines: &[librotenado::InvoiceLine]) -> usize {
+        lines.iter().map(|line| 1 + count(&line.sub_lines)).sum()
+    }
+
+    #[test]
+    fn sub_lines_and_payments_for_third_parties_are_read() {
+        let invoice = read_extension("04.02a-INVOICE_ubl.xml").invoice;
+        assert_eq!(invoice.lines.len(), 1);
+        let subs = &invoice.lines[0].sub_lines;
+        assert_eq!(subs.len(), 2);
+        assert_eq!((subs[0].id.as_deref(), subs[0].net.base_units()), (Some("1 1"), 1232));
+        assert_eq!(count(&read_extension("04.03a-INVOICE_ubl.xml").invoice.lines), 1 + 56);
+        let invoice = read_extension("05.01a-INVOICE_ubl.xml").invoice;
+        let payments: Vec<(&str, i128)> =
+            invoice.third_party_payments.iter().map(|p| (p.kind.as_str(), p.amount.base_units())).collect();
+        assert_eq!(payments, [("MobilesBezahlen", 1996), ("MobilesBezahlen", 1000)]);
+        assert_eq!(invoice.totals.gross.base_units() + 1996 + 1000, invoice.totals.due.base_units());
+    }
+
+    /// Written again in UBL, every test invoice of the extension reads back the same and names the extension.
+    #[test]
+    fn written_extensions_read_back_the_same() {
+        let currencies = CurrencyTable::v0_1();
+        for name in [
+            "04.01a-INVOICE_ubl.xml",
+            "04.02a-INVOICE_ubl.xml",
+            "04.03a-INVOICE_ubl.xml",
+            "04.04a-INVOICE_ubl.xml",
+            "05.01a-INVOICE_ubl.xml",
+        ] {
+            let original = read_extension(name);
+            let ubl = en16931::write_ubl(&original, &currencies).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(ubl.contains(en16931::XRECHNUNG_EXTENSION), "{name}");
+            if let Ok(dir) = std::env::var("LIBROTENADO_EXPORT") {
+                std::fs::write(format!("{dir}/extension-{name}"), &ubl).unwrap();
+            }
+            let back = en16931::read(ubl.as_bytes(), &currencies).unwrap();
+            assert_eq!(back.invoice, original.invoice, "{name}");
+            assert_eq!(en16931::write_cii(&original, &currencies), Err(en16931::WriteError::Extension), "{name}");
+        }
+        // The DiGA example in CII needs no term of the extension beyond the identifiers it uses.
+        let diga = read_extension("04.05a-INVOICE_uncefact.xml");
+        assert!(!en16931::needs_extension(&diga.invoice));
+    }
+}
+
+/// Codes are checked against the code lists of EN 16931 before an invoice is written.
+#[test]
+fn codes_outside_their_lists_are_not_written() {
+    let currencies = CurrencyTable::v0_1();
+    let mut invoice = read("01.01a-INVOICE_ubl.xml");
+    assert!(en16931::write_ubl(&invoice, &currencies).is_ok());
+    invoice.invoice.lines[0].unit = Some("Q99".into());
+    assert_eq!(en16931::write_ubl(&invoice, &currencies), Err(en16931::WriteError::Code("BT-130", "Q99".into())));
+    invoice.invoice.lines[0].unit = Some("HUR".into());
+    invoice.invoice.payment.as_mut().unwrap().means = "999".into();
+    assert_eq!(en16931::write_cii(&invoice, &currencies), Err(en16931::WriteError::Code("BT-81", "999".into())));
+    let lists = en16931::CodeLists::v1_3_16();
+    assert!(
+        lists.contains("eas", "EM") && lists.contains("vatex", "VATEX-EU-AE") && lists.contains("untdid-4461", "58")
+    );
 }

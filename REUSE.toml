@@ -36,7 +36,7 @@ SPDX-License-Identifier = "OFL-1.1"
 
 # Test invoices of the XRechnung test suite (KoSIT, github.com/itplr-kosit/xrechnung-testsuite).
 [[annotations]]
-path = "crates/librotenado/tests/data/en16931/0*.xml"
+path = ["crates/librotenado/tests/data/en16931/0*.xml", "crates/librotenado/tests/data/en16931/extension/*.xml"]
 precedence = "override"
 SPDX-FileCopyrightText = "Koordinierungsstelle für IT-Standards (KoSIT)"
 SPDX-License-Identifier = "Apache-2.0"

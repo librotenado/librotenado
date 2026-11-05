@@ -110,6 +110,28 @@ pub struct Booking {
     /// (§ 11 Abs. 1 Satz 2, Abs. 2 Satz 2 EStG; spec part 0001). Left out otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub attributed: Option<Date>,
+    /// The balance sheet it counts in where the commercial and the tax balance sheet differ (spec part 0001): only
+    /// the one named; left out when it counts in both, as nearly every booking does.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub basis: Option<Basis>,
+}
+
+/// A balance sheet a booking may count in alone: the commercial one (§ 242 HGB) or the tax one (§ 5 EStG, § 60
+/// Abs. 2 EStDV).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Basis {
+    /// The commercial balance sheet, and every report drawn from it.
+    Commercial,
+    /// The tax balance sheet.
+    Tax,
+}
+
+impl Booking {
+    /// Whether the booking counts in the balance sheet of `basis`.
+    pub fn counts_in(&self, basis: Basis) -> bool {
+        self.basis.is_none_or(|own| own == basis)
+    }
 }
 
 impl Object for Exchange {
@@ -208,9 +230,11 @@ impl Booking {
     }
 
     /// Whether this booking cancels `original`: its postings are the original's in the same order, with the same
-    /// owners, accounts, tax codes and exchange rates and the opposite amounts. Notes, date and text do not count.
+    /// owners, accounts, tax codes and exchange rates and the opposite amounts, in the same balance sheet (`basis`).
+    /// Notes, date and text do not count.
     pub fn cancels(&self, original: &Booking) -> bool {
-        self.postings.len() == original.postings.len()
+        self.basis == original.basis
+            && self.postings.len() == original.postings.len()
             && self.postings.iter().zip(&original.postings).all(|(reversal, posting)| {
                 let exchange = match (&reversal.exchange, &posting.exchange) {
                     (None, None) => true,
@@ -241,6 +265,7 @@ impl Booking {
             })
             .collect();
         Booking {
+            basis: self.basis,
             date,
             text,
             postings,
@@ -288,6 +313,7 @@ pub(crate) mod tests {
     #[test]
     fn foreign_currency_balances_converted_too() {
         let booking = |postings| Booking {
+            basis: None,
             attributed: None,
             date: "2026-10-28".parse().unwrap(),
             text: "".into(),
@@ -356,6 +382,7 @@ pub(crate) mod tests {
 
     fn booking(postings: Vec<Posting>) -> Booking {
         Booking {
+            basis: None,
             attributed: None,
             date: "2026-10-24".parse().unwrap(),
             text: "test".into(),

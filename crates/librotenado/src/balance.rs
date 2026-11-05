@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{AccountId, Chart, Currency, Date, EventSet, Money, PartyId, Payload, Posting};
+use crate::{AccountId, Basis, Chart, Currency, Date, EventSet, Money, PartyId, Payload, Posting};
 
 /// Balances: per owner, account and currency, the sum of the base units of the postings. Positive is a debit
 /// balance, negative a credit balance.
@@ -51,24 +51,31 @@ impl Balances {
 }
 
 impl EventSet {
-    /// The balances of all bookings – recorded and reversing – dated on or before `until`, or of all bookings.
+    /// The balances of all bookings – recorded and reversing – dated on or before `until`, or of all bookings; of
+    /// those counting in the commercial balance sheet (spec part 0001, `basis`).
     pub fn balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
-        self.sum_postings(|date| until.is_none_or(|until| date <= until), |posting| &posting.amount)
+        self.sum_postings(Basis::Commercial, |date| until.is_none_or(|until| date <= until), |posting| &posting.amount)
     }
 
     /// The balances in the functional currency of each owner: amounts converted where a posting has an exchange
-    /// (spec part 0001) – what statements in one currency are drawn from.
+    /// (spec part 0001) – what statements in one currency are drawn from. Of the commercial balance sheet.
     pub fn functional_balances(&self, until: Option<Date>) -> Result<Balances, BalanceError> {
-        self.sum_postings(|date| until.is_none_or(|until| date <= until), Posting::functional)
+        self.functional_balances_in(Basis::Commercial, until)
+    }
+
+    /// The functional balances of the bookings counting in the balance sheet of `basis`.
+    pub fn functional_balances_in(&self, basis: Basis, until: Option<Date>) -> Result<Balances, BalanceError> {
+        self.sum_postings(basis, |date| until.is_none_or(|until| date <= until), Posting::functional)
     }
 
     /// The functional balances of the bookings dated before `date`.
-    pub(crate) fn functional_balances_before(&self, date: Date) -> Result<Balances, BalanceError> {
-        self.sum_postings(|booked| booked < date, Posting::functional)
+    pub(crate) fn functional_balances_before(&self, basis: Basis, date: Date) -> Result<Balances, BalanceError> {
+        self.sum_postings(basis, |booked| booked < date, Posting::functional)
     }
 
     fn sum_postings(
         &self,
+        basis: Basis,
         keep: impl Fn(Date) -> bool,
         amount: fn(&Posting) -> &Money,
     ) -> Result<Balances, BalanceError> {
@@ -78,7 +85,7 @@ impl EventSet {
                 Payload::BookingRecorded { booking } | Payload::BookingReversed { booking, .. } => booking,
                 _ => continue,
             };
-            if !keep(booking.date) {
+            if !keep(booking.date) || !booking.counts_in(basis) {
                 continue;
             }
             for posting in &booking.postings {
@@ -134,6 +141,7 @@ mod tests {
             exchange: None,
         };
         Booking {
+            basis: None,
             attributed: None,
             date: date.parse().unwrap(),
             text: "test".into(),

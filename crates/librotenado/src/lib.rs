@@ -108,7 +108,7 @@ mod tax;
 
 pub use asset::{Asset, AssetFields, AssetId, AssetProblem, AssetState, Depreciation, Disposal};
 pub use balance::{BalanceError, Balances};
-pub use booking::{AccountId, Booking, BookingError, Exchange, Posting};
+pub use booking::{AccountId, Basis, Booking, BookingError, Exchange, Posting};
 pub use books::{
     BooksId, BooksProblem, Closing, ClosingProblem, Transaction, TransactionId, TransactionProblem, review_transactions,
 };
@@ -121,7 +121,7 @@ pub use document::{ContentHash, Document, DocumentId, DocumentKind, Original};
 pub use encryption::{
     BooksKey, Bytes, EncryptionError, Envelope, EnvelopeContent, Grant, Invitation, JoinRequest, KeyChange, Member,
     MemberId, MemberKeys, MemberList, MemberRecord, MemberRole, ReceivingKey, RecordProblem, RecoveryCode, Rights,
-    request_signature, verify, verify_request,
+    SealedName, request_signature, verify, verify_request,
 };
 pub use event::{
     AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, MatchBy, PartyMatch,
@@ -135,9 +135,9 @@ pub use invoice::{
     AllowanceCharge, Classification, CreditTransfer, Delivery, DirectDebit, Endpoint, Identifier, InvoiceContact,
     InvoiceData, InvoiceLine, InvoiceNote, InvoiceParty, InvoiceReferences, InvoiceSide, InvoiceTotals, ItemAttribute,
     Payment, PaymentCard, Period, PostalAddress, PrecedingInvoice, ProposalAccounts, ProposalError, SupportingDocument,
-    VatBreakdown, VatCategory, de_tax_code, propose_booking,
+    ThirdPartyPayment, VatBreakdown, VatCategory, de_tax_code, propose_booking,
 };
-pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Money};
+pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, FixedRate, Money, Withdrawn};
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{
@@ -145,7 +145,7 @@ pub use party::{
     Registration, Relation, RelationKind, ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
 pub use report::{
-    CustomerProblem, HgbSize, MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement, hgb_shortened,
+    CustomerProblem, HgbSize, MappingStatus, ReportMapping, TaxRule, Terms, VatAccounts, VatSettlement, hgb_shortened,
 };
 pub use statement::{
     Counterparty, EntryDetail, EntryReference, ReadError, ReadStatement, StatementAccount, StatementData,
@@ -165,6 +165,9 @@ pub enum ParseError {
     /// A date that is not a valid `YYYY-MM-DD`.
     #[error("not a date: {0:?}")]
     Date(String),
+    /// A month that is not a valid `YYYY-MM`.
+    #[error("not a month: {0:?}")]
+    Month(String),
     /// A device name that is not 1–64 characters of `a-z`, `0-9` and `-`.
     #[error("not a device id: {0:?}")]
     Device(String),
