@@ -2,6 +2,19 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.13.0 – 2026-11-05
+
+Customers and suppliers.
+
+- [0008 Parties](spec/0008-parties.md): `relation_described` – what an organisation or a person is to an owner,
+  customer or supplier or both, with the owner's number for them; bank accounts of organisations and persons; the role
+  `contact`, whom to contact at a customer or supplier. Reported: a relation to a party not described, one number
+  given to several parties. How an implementation offers the parties a document's seller or buyer may be: by VAT
+  identification number, other tax number, bank account, name.
+- Library: `Relation`, `RelationKind`, `BankAccount`, `RoleKind::Contact`, `Payload::RelationDescribed`,
+  `EventSet::relations`, `EventSet::match_parties` with `PartyMatch` and `MatchBy`; `PartyProblem::UnknownParty` and
+  `PartyProblem::NumberTaken`. `Organisation` and `Person` have the new member `bank_accounts`.
+
 ## 0.12.0 – 2026-11-05
 
 Filings per customer.

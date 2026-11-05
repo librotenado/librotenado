@@ -203,6 +203,9 @@ pub struct Organisation {
     /// How to reach it; left out when not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contact: Option<Contact>,
+    /// Its bank accounts – what it pays from and is paid to; left out when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub bank_accounts: Vec<BankAccount>,
 }
 
 impl Organisation {
@@ -238,6 +241,8 @@ pub enum RoleKind {
     Member,
     /// May sign for it, e.g. holds a commercial power of attorney.
     AuthorisedSignatory,
+    /// Is whom to contact there – a contact person of a customer or a supplier.
+    Contact,
     /// A role of a later version; kept as received, not interpreted, and not written by this version.
     #[serde(other, skip_serializing)]
     Unknown,
@@ -276,6 +281,49 @@ pub struct Person {
     /// How to reach them; left out when not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contact: Option<Contact>,
+    /// Their bank accounts; left out when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
+    pub bank_accounts: Vec<BankAccount>,
+}
+
+/// A bank account of an organisation or a person (spec part 0008).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BankAccount {
+    /// The IBAN, as the bank writes it; compared without spaces and in capitals.
+    #[serde(deserialize_with = "crate::text")]
+    pub iban: String,
+    /// The BIC; left out when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub bic: Option<String>,
+}
+
+/// What an organisation or a person is to an owner of the books (spec part 0008).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationKind {
+    /// The owner supplies them; they receive the owner's invoices.
+    Customer,
+    /// They supply the owner; the owner receives their invoices.
+    Supplier,
+    /// A kind of a later version; kept as received, not interpreted, and not written by this version.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+/// An organisation's or a person's relation to an owner of the books – a customer, a supplier, or both – with the
+/// number the owner gives them (spec part 0008). The latest per owner and party applies.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Relation {
+    /// The owner.
+    pub owner: PartyId,
+    /// The organisation or person.
+    pub party: PartyId,
+    /// What they are to the owner, at least one.
+    #[serde(deserialize_with = "crate::non_empty")]
+    pub kinds: Vec<RelationKind>,
+    /// The owner's number for them – a customer or supplier number; left out when none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present_text")]
+    pub number: Option<String>,
 }
 
 /// How to reach an organisation or a person – for invoices to and from them, and filings.
@@ -496,6 +544,14 @@ impl Object for Role {
     const TYPE: &'static str = "role";
 }
 
+impl Object for BankAccount {
+    const TYPE: &'static str = "bank_account";
+}
+
+impl Object for Relation {
+    const TYPE: &'static str = "relation";
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -519,6 +575,7 @@ pub(crate) mod tests {
             tax_ids: vec![TaxId { scheme: "vat".into(), number: "DE000000000".into() }],
             shares: vec![two_euro_shares(512)],
             contact: None,
+            bank_accounts: vec![],
         }
     }
 

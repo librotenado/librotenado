@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     Account, AccountId, Booking, BooksId, Chart, Closing, Configuration, ContentHash, Currency, Date, DeviceId,
     Document, DocumentId, Filing, FilingId, Hlc, Invoicing, Money, Object, ObjectError, Organisation, ParseError,
-    PartyId, Person, Series, canonical, from_root, to_root,
+    PartyId, Person, Relation, Series, canonical, from_root, to_root,
 };
 
 /// The SHA-256 hash of an event's canonical encoding – its identity. Written as `sha256:` and 64 lower-case
@@ -66,6 +66,12 @@ pub enum Payload {
     PersonDescribed {
         /// The person; a later description with the same identity replaces an earlier one.
         person: Person,
+    },
+    /// What an organisation or a person is to an owner – customer, supplier – and the owner's number for them (spec
+    /// part 0008).
+    RelationDescribed {
+        /// The relation; a later one of the same owner and party replaces an earlier one.
+        relation: Relation,
     },
     /// The books belong to this organisation or person, too.
     OwnerAdded {
@@ -319,6 +325,24 @@ pub enum PartyProblem {
         /// The devices.
         devices: Vec<DeviceId>,
     },
+    /// A relation to an organisation or a person that is not described – perhaps not arrived yet.
+    #[error("event {event} relates {party} to an owner, who is not described")]
+    UnknownParty {
+        /// The event with the relation.
+        event: EventHash,
+        /// The organisation or person.
+        party: PartyId,
+    },
+    /// One number of an owner given to several parties – perhaps by two devices offline at once.
+    #[error("the number {number:?} of {owner} is given to several parties: {parties:?}")]
+    NumberTaken {
+        /// The owner.
+        owner: PartyId,
+        /// The number.
+        number: String,
+        /// The parties.
+        parties: Vec<PartyId>,
+    },
     /// A posting in the books of someone who is not an owner of the books.
     #[error("event {event} posts in the books of {owner}, who is not an owner")]
     NotAnOwner {
@@ -327,6 +351,28 @@ pub enum PartyProblem {
         /// The owner named in the posting.
         owner: PartyId,
     },
+}
+
+/// An organisation or a person of the books a party of a document may be, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartyMatch {
+    /// The organisation or person.
+    pub party: PartyId,
+    /// What matched.
+    pub by: MatchBy,
+}
+
+/// What a party of a document matched by, the most certain first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MatchBy {
+    /// The VAT identification number.
+    VatId,
+    /// Another tax number.
+    TaxNumber,
+    /// A bank account.
+    BankAccount,
+    /// The name, or the name it trades under – ignoring case and spaces between words.
+    Name,
 }
 
 /// Something about the documents of a set of books that needs review: never resolved silently.
@@ -594,6 +640,61 @@ impl EventSet {
         owners
     }
 
+    /// What organisations and persons are to `owner`: the latest relation per party in the agreed order.
+    pub fn relations(&self, owner: &PartyId) -> BTreeMap<&PartyId, &Relation> {
+        let mut relations = BTreeMap::new();
+        for (_, event) in self.ordered() {
+            if let Payload::RelationDescribed { relation } = &event.payload
+                && relation.owner == *owner
+            {
+                relations.insert(&relation.party, relation);
+            }
+        }
+        relations
+    }
+
+    /// The organisations and persons of the books a party of a document may be (spec part 0008), the most certain
+    /// first: by VAT identification number, by another tax number, by a bank account – `accounts`, the IBANs the
+    /// document names for it –, and by name. Each party once, by its most certain match. A person decides; nothing
+    /// is linked by this alone.
+    pub fn match_parties(&self, party: &crate::InvoiceParty, accounts: &[&str]) -> Vec<PartyMatch> {
+        let compact =
+            |text: &str| -> String { text.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_uppercase() };
+        let name = |text: &str| -> String { text.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase() };
+        let vat_id = party.vat_id.as_deref().map(compact);
+        let tax_number = party.tax_number.as_deref().map(compact);
+        let accounts: Vec<String> = accounts.iter().map(|a| compact(a)).collect();
+        let names: Vec<String> =
+            [Some(&party.name), party.trading_name.as_ref()].into_iter().flatten().map(|n| name(n)).collect();
+        let (organisations, persons) = self.parties();
+        let described = organisations
+            .values()
+            .map(|o| (&o.id, &o.name, &o.tax_ids, &o.bank_accounts))
+            .chain(persons.values().map(|p| (&p.id, &p.name, &p.tax_ids, &p.bank_accounts)));
+        let mut matches: Vec<PartyMatch> = described
+            .filter_map(|(id, own_name, tax_ids, banks)| {
+                let by_vat = tax_ids.iter().any(|t| t.scheme == "vat" && Some(compact(&t.number)) == vat_id);
+                let by_tax = tax_ids.iter().any(|t| t.scheme != "vat" && Some(compact(&t.number)) == tax_number);
+                let by_bank = banks.iter().any(|b| accounts.contains(&compact(&b.iban)));
+                let by_name = names.contains(&name(own_name));
+                let by = if by_vat {
+                    MatchBy::VatId
+                } else if by_tax {
+                    MatchBy::TaxNumber
+                } else if by_bank {
+                    MatchBy::BankAccount
+                } else if by_name {
+                    MatchBy::Name
+                } else {
+                    return None;
+                };
+                Some(PartyMatch { party: id.clone(), by })
+            })
+            .collect();
+        matches.sort_by(|a, b| a.by.cmp(&b.by).then_with(|| a.party.cmp(&b.party)));
+        matches
+    }
+
     /// How `owner` writes invoices: the latest settings in the agreed order.
     pub fn invoicing(&self, owner: &PartyId) -> Option<&Invoicing> {
         self.ordered().into_iter().rev().find_map(|(_, event)| match &event.payload {
@@ -709,6 +810,32 @@ impl EventSet {
                 problems.push(PartyProblem::YearChangedWithin { event: *hash, owner: (*owner).clone() });
             }
             previous = Some((owner, *year_start));
+        }
+        // Relations: to described parties, of owners, and one number per party.
+        for (hash, event) in self.ordered() {
+            if let Payload::RelationDescribed { relation } = &event.payload {
+                if !owners.contains(&&relation.owner) {
+                    problems.push(PartyProblem::ConfigurationOfNonOwner { event: hash, owner: relation.owner.clone() });
+                }
+                if !organisations.contains_key(&relation.party) && !persons.contains_key(&relation.party) {
+                    problems.push(PartyProblem::UnknownParty { event: hash, party: relation.party.clone() });
+                }
+            }
+        }
+        for owner in &owners {
+            let mut numbers: BTreeMap<&str, Vec<PartyId>> = BTreeMap::new();
+            for (party, relation) in self.relations(owner) {
+                if let Some(number) = &relation.number {
+                    numbers.entry(number.as_str()).or_default().push(party.clone());
+                }
+            }
+            for (number, parties) in numbers.into_iter().filter(|(_, parties)| parties.len() > 1) {
+                problems.push(PartyProblem::NumberTaken {
+                    owner: (*owner).clone(),
+                    number: number.to_owned(),
+                    parties,
+                });
+            }
         }
         // Per owner: a series written by more than one device.
         for owner in &owners {
@@ -1122,6 +1249,84 @@ mod tests {
         set.insert(Event { time: clock.now(ms), seq, prev, payload }).0
     }
 
+    /// Customers and suppliers with their numbers and contact persons; the party of a document recognised by what it
+    /// names, the most certain first (spec part 0008).
+    #[test]
+    fn customers_and_suppliers_are_recognised_in_documents() {
+        use crate::party::tests::organisation;
+        use crate::{BankAccount, InvoiceParty, Person, Relation, RelationKind, Role, RoleKind, TaxId};
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        append(&mut set, &mut clock, 1, Payload::OrganisationDescribed { organisation: organisation(1) });
+        append(&mut set, &mut clock, 2, Payload::OwnerAdded { owner: party(1) });
+        // A supplier with a VAT identification number and a bank account; a customer known by name only.
+        let supplier = Organisation {
+            id: party(2),
+            name: "Papier  Müller KG".into(),
+            legal_form: String::new(),
+            tax_ids: vec![TaxId { scheme: "vat".into(), number: "DE 123 456 789".into() }],
+            shares: vec![],
+            registrations: vec![],
+            bank_accounts: vec![BankAccount { iban: "DE02 1203 0000 0000 2020 51".into(), bic: None }],
+            ..organisation(2)
+        };
+        let customer = Organisation { id: party(3), name: "Kunde A GmbH".into(), tax_ids: vec![], ..organisation(3) };
+        append(&mut set, &mut clock, 3, Payload::OrganisationDescribed { organisation: supplier });
+        append(&mut set, &mut clock, 4, Payload::OrganisationDescribed { organisation: customer });
+        // Whom to contact at the supplier.
+        let contact = Person {
+            id: party(4),
+            name: "Eva Müller".into(),
+            tax_ids: vec![],
+            roles: vec![Role { organisation: party(2), kind: RoleKind::Contact, shares: None }],
+            contact: None,
+            bank_accounts: vec![],
+        };
+        append(&mut set, &mut clock, 5, Payload::PersonDescribed { person: contact });
+        let relation = |party_n: u8, kinds: Vec<RelationKind>, number: &str| Payload::RelationDescribed {
+            relation: Relation { owner: party(1), party: party(party_n), kinds, number: Some(number.into()) },
+        };
+        append(&mut set, &mut clock, 6, relation(2, vec![RelationKind::Supplier], "L-1001"));
+        append(&mut set, &mut clock, 7, relation(3, vec![RelationKind::Customer], "K-1001"));
+        assert!(set.review_parties().is_empty(), "{:?}", set.review_parties());
+        // The latest relation applies: the customer supplies, too.
+        append(&mut set, &mut clock, 8, relation(3, vec![RelationKind::Customer, RelationKind::Supplier], "K-1001"));
+        let relations = set.relations(&party(1));
+        assert_eq!(relations[&party(3)].kinds, [RelationKind::Customer, RelationKind::Supplier]);
+        assert_eq!(relations[&party(2)].number.as_deref(), Some("L-1001"));
+
+        // An invoice from the supplier: by its VAT identification number, written with other spaces; by its bank
+        // account; by its name, ignoring case and spaces.
+        let mut seller = InvoiceParty::named("PAPIER MÜLLER  KG");
+        let found = |seller: &InvoiceParty, accounts: &[&str]| {
+            set.match_parties(seller, accounts).into_iter().map(|m| (m.party, m.by)).collect::<Vec<_>>()
+        };
+        assert_eq!(found(&seller, &[]), [(party(2), MatchBy::Name)]);
+        assert_eq!(found(&seller, &["DE02120300000000202051"]), [(party(2), MatchBy::BankAccount)]);
+        seller.vat_id = Some("DE123456789".into());
+        assert_eq!(found(&seller, &[]), [(party(2), MatchBy::VatId)]);
+        assert!(found(&InvoiceParty::named("Unbekannt AG"), &[]).is_empty());
+
+        // A relation to a party not described, and a number given twice, are reported.
+        let unknown = append(&mut set, &mut clock, 9, relation(9, vec![RelationKind::Customer], "K-1002"));
+        append(&mut set, &mut clock, 10, relation(2, vec![RelationKind::Supplier], "K-1001"));
+        assert_eq!(
+            set.review_parties(),
+            [
+                PartyProblem::UnknownParty { event: unknown, party: party(9) },
+                PartyProblem::NumberTaken {
+                    owner: party(1),
+                    number: "K-1001".into(),
+                    parties: vec![party(2), party(3)]
+                },
+            ]
+        );
+        // Every event reads back as written.
+        for (_, event) in set.ordered() {
+            assert_eq!(&from_root::<Event>(&to_root(event).unwrap()).unwrap(), event);
+        }
+    }
+
     #[test]
     fn owners_write_invoices_in_series_of_their_own() {
         use crate::party::tests::organisation;
@@ -1177,6 +1382,7 @@ mod tests {
             tax_ids: vec![],
             roles: vec![role(1)],
             contact: None,
+            bank_accounts: vec![],
         };
         append(&mut set, &mut clock, 3, Payload::PersonDescribed { person: person.clone() });
         assert_eq!(set.review_parties(), []);
@@ -1193,8 +1399,14 @@ mod tests {
             [PartyProblem::UnknownOrganisation { person: party(2), organisation: party(9) }]
         );
         let more = Role { shares: Some(two_euro_shares(513)), ..role(1) };
-        let second =
-            Person { id: party(3), name: "Max Beispiel".into(), tax_ids: vec![], roles: vec![more], contact: None };
+        let second = Person {
+            id: party(3),
+            name: "Max Beispiel".into(),
+            tax_ids: vec![],
+            roles: vec![more],
+            contact: None,
+            bank_accounts: vec![],
+        };
         append(&mut set, &mut clock, 6, Payload::PersonDescribed { person: second });
         let too_many = set.review_parties();
         assert!(too_many.iter().any(|p| matches!(p, PartyProblem::Shares { .. })), "513 of 512: {too_many:?}");

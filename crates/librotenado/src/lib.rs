@@ -122,7 +122,8 @@ pub use encryption::{
     request_signature, verify, verify_request,
 };
 pub use event::{
-    AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, PartyProblem, Payload,
+    AccountProblem, BookingProblem, ChainProblem, DocumentProblem, Event, EventHash, EventSet, MatchBy, PartyMatch,
+    PartyProblem, Payload,
 };
 pub use filing::{
     AdapterError, Derivation, Filer, Filing, FilingId, FilingKind, FilingProblem, FilingState, Receipt, ReportContent,
@@ -138,8 +139,8 @@ pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, Mo
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};
 pub use party::{
-    Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region, Registration,
-    ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
+    BankAccount, Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region,
+    Registration, Relation, RelationKind, ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
 pub use report::{CustomerProblem, MappingStatus, ReportMapping, TaxRule, VatAccounts, VatSettlement};
 pub use statement::{

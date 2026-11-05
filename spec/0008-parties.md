@@ -1,8 +1,9 @@
 # 0008 Parties
 
-Version 0.11, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, event kinds
-`organisation_described`, `person_described`, `owner_added`, `owner_removed`, `owner_configured`,
-`invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`, `Series`).
+Version 0.13, draft. Implemented in the reference library (`Organisation`, `Person`, `Contact`, `BankAccount`,
+`Relation`, event kinds `organisation_described`, `person_described`, `relation_described`, `owner_added`,
+`owner_removed`, `owner_configured`, `invoicing_configured`, `series_assigned`; `Configuration`, `Invoicing`,
+`Series`; `EventSet::relations`, `EventSet::match_parties`).
 
 **A set of books always belongs to at least one organisation or natural person** – its owners – and every posting
 names the owner whose books it is in (part 0001). Who they are decides which law applies, which national chart and
@@ -25,6 +26,7 @@ An organisation – a company, an association, a foundation, a partnership – i
 | `tax_ids` | its tax numbers (below); absent when none, never empty |
 | `shares` | how its capital is divided into shares (below); absent when it has none |
 | `contact` | how to reach it (below); absent when not given |
+| `bank_accounts` | its bank accounts (below); absent when none, never empty |
 
 A registration (type `registration`) is `register` – the register as a code, e.g. `de-hrb` –, `number`, and,
 where a register is kept by several authorities, `authority` (e.g. the local court).
@@ -49,6 +51,7 @@ A natural person is an object of type `person`:
 | `tax_ids` | their tax numbers, e.g. a personal tax identification number; absent when none |
 | `roles` | their roles in organisations (below); absent when none |
 | `contact` | how to reach them (below); absent when not given |
+| `bank_accounts` | their bank accounts (below); absent when none |
 
 A role (type `role`) is `organisation` – the identity of an organisation –, `kind`, and, where the role holds
 shares, `shares`: how many of one nominal amount the organisation has (`{"count": 257, "nominal": …}`). A person
@@ -63,6 +66,7 @@ holding shares of several nominal amounts has one role for each.
 | `board_member` | is a member of its board |
 | `member` | is a member of an association or a cooperative |
 | `authorised_signatory` | may sign for it, e.g. under a commercial power of attorney |
+| `contact` | is whom to contact there – a contact person of a customer or a supplier, reached by their own `contact` |
 
 Later versions add kinds; an implementation keeps a role of a kind it does not know but does not interpret it.
 
@@ -81,6 +85,43 @@ contact (type `contact`); every member is absent when not given:
 | `buyer_reference` | what the party asks to be named on invoices to it (BT-10) – the Leitweg-ID of a German authority |
 
 An invoice an owner writes takes the seller's details from the owner and the buyer's from the customer.
+
+A bank account (type `bank_account`) is `iban`, as the bank writes it, and `bic`, absent when not given. IBANs are
+compared without spaces and in capitals.
+
+## Customers and suppliers
+
+`relation_described` records what an organisation or a person is to an owner (type `relation`); the latest of the same
+owner and party replaces an earlier one in the agreed order:
+
+| Member | Content |
+|---|---|
+| `owner` | the owner |
+| `party` | the organisation or person |
+| `kinds` | at least one of `customer` – the owner supplies them – and `supplier` – they supply the owner |
+| `number` | the owner's number for them, a customer or supplier number; absent when none |
+
+Later versions add kinds; an implementation keeps a kind it does not know but does not interpret it. An
+implementation MUST report, and MUST NOT silently resolve:
+
+- **Unknown party** – a relation to an organisation or a person that is not described (it may not have arrived yet).
+- **Number taken** – one number of an owner given to several parties, perhaps by two devices offline at once.
+
+A relation of someone who is not an owner is reported as a configuration of a non-owner (above).
+
+### The parties of documents
+
+The seller and the buyer of an invoice (part 0005) name the organisation or person of the books they are in `party`,
+once known. An implementation SHOULD offer the parties a document's seller or buyer may be, and leave the decision to
+a person; it matches, the most certain first:
+
+1. the VAT identification number (BT-31, BT-48, BT-63) – a tax number of scheme `vat`;
+2. another tax number (BT-32) – a tax number of another scheme;
+3. a bank account the document names for the party – for the seller, the account to pay to (BT-84) – among the
+   party's `bank_accounts`;
+4. the name or the name it trades under (BT-27, BT-28, BT-44, BT-45), ignoring case and the spaces between words.
+
+Numbers are compared without spaces and in capitals. Each party is offered once, by its most certain match.
 
 ## Owners
 
@@ -185,7 +226,6 @@ is a matter of encryption (part 0006).
 - The registries of codes: legal forms, registers, tax schemes – per country, with sources.
 - Further data the books depend on beyond the configuration: accounting standards beyond Germany (IFRS, national
   GAAP), a financial year that does not begin on the first of a month, codes of further countries.
-- The parties of documents (sellers, buyers, part 0005) as parties of the books.
 - Relations between organisations: groups, holdings, branches.
 - Capital that is not divided into shares: the contributions of partners in a partnership, the assets of a
   foundation.
