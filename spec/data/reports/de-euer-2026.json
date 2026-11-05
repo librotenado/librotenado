@@ -327,6 +327,7 @@
   {"tax": "de-out-7", "base": "1.112", "output": "1.140"},
   {"tax": "de-out-0", "base": "1.103"},
   {"tax": "de-out-ig-supply", "base": "1.103"},
+  {"tax": "de-out-ig-new-vehicle", "base": "1.103"},
   {"tax": "de-out-export", "base": "1.103"},
   {"tax": "de-out-exempt", "base": "1.103"},
   {"tax": "de-out-13b", "base": "1.103"},

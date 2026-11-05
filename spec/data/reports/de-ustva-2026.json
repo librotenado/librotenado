@@ -4,6 +4,7 @@
   {"tax": "de-out-7", "base": "86"},
   {"tax": "de-out-0", "base": "87"},
   {"tax": "de-out-ig-supply", "base": "41"},
+  {"tax": "de-out-ig-new-vehicle", "base": "44"},
   {"tax": "de-out-export", "base": "43"},
   {"tax": "de-out-exempt", "base": "48"},
   {"tax": "de-out-small-business", "base": "48"},

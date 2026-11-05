@@ -166,7 +166,8 @@ code means is reference data of its country, a root object of type `tax_table` w
 percent as a decimal number if it taxes at one, and `law`, the provisions it rests on.
 
 The German table is [`spec/data/tax/de.json`](data/tax/de.json): the rates of § 12 UStG, exempt supplies with and
-without deduction (§ 4 Nr. 1 to 7, § 4 Nr. 8 to 29), small businesses (§ 19), intra-Community supplies and
-acquisitions (§ 4 Nr. 1 Buchst. b, § 1a), reverse charge (§ 13b), import VAT and non-deductible input tax
+without deduction (§ 4 Nr. 1 to 7, § 4 Nr. 8 to 29), small businesses (§ 19), intra-Community supplies – of new
+vehicles to buyers without a VAT identification number on their own (§ 1b) – and acquisitions (§ 4 Nr. 1 Buchst. b,
+§ 1a), reverse charge (§ 13b), import VAT and non-deductible input tax
 ([UStG](https://www.gesetze-im-internet.de/ustg_1980/)). How the codes fill a VAT return is a report mapping (part
 0009).

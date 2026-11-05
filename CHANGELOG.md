@@ -2,6 +2,20 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.14.0 – 2026-11-05
+
+The annual VAT return.
+
+- [0009 Reports](spec/0009-reports.md): the German annual VAT return of 2026 (Umsatzsteuererklärung, form USt 2 A
+  of the BMF letter of 29 December 2025) as the mapping `de-ust-2026.json`, over the calendar year; its Kennzahlen
+  named in German and English. The form of 2025 and the exempt supplies outside the total turnover stay OPEN.
+- [0007 Filings](spec/0007-filings.md): a `vat_return` is filed for a month, a quarter or a year; in Germany the
+  advance return (`de-ustva`) or the annual return (`de-ust`).
+- [0001 Base types](spec/0001-base-types.md): the tax code `de-out-ig-new-vehicle`, an intra-Community supply of a
+  new vehicle to a buyer without a VAT identification number – Kz 44 of the advance return, Kz 744 of the annual
+  return, not part of the recapitulative statement (§ 18a Abs. 6 Nr. 1 UStG).
+- Library: `ReportMapping::de_ust_2026`.
+
 ## 0.13.0 – 2026-11-05
 
 Customers and suppliers.

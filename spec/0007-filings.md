@@ -1,6 +1,6 @@
 # 0007 Filings
 
-Version 0.12, draft. Implemented in the reference library: filings and their events (`Filing`,
+Version 0.14, draft. Implemented in the reference library: filings and their events (`Filing`,
 `EventSet::report_content`, `EventSet::filings`, `EventSet::review_filings`) and what an implementation and an
 adapter send each other (`Submission`, `SubmissionStatus`, `Receipt`, `AdapterError`).
 
@@ -35,7 +35,7 @@ and reported on the review list, not in the filing.
 
 | `kind` | Content | Derived | Germany |
 |---|---|---|---|
-| `vat_return` | the VAT return | over the period | Umsatzsteuer-Voranmeldung (`de-ustva`) |
+| `vat_return` | the VAT return, for a month, a quarter or a year | over the period | Umsatzsteuer-Voranmeldung (`de-ustva`), Umsatzsteuererklärung (`de-ust`) |
 | `cash_basis_statement` | the income statement on a cash basis | over the period | Anlage EÜR (`de-euer`) |
 | `annual_accounts` | balance sheet and profit and loss account | balances on the last day, and over the period | E-Bilanz (`de-ebilanz-bs`, `de-ebilanz-is-gkv`) |
 | `recapitulative_statement` | supplies to businesses in other EU member states, per customer | per customer over the period | Zusammenfassende Meldung (`de-zm`) |

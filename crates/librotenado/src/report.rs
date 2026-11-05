@@ -166,6 +166,11 @@ impl ReportMapping {
             .expect("the published mapping is valid")
     }
 
+    /// The German annual VAT return of 2026 (Umsatzsteuererklärung, § 18 Abs. 3 UStG), from tax codes.
+    pub fn de_ust_2026() -> Self {
+        crate::from_root(include_bytes!("../data/reports/de-ust-2026.json")).expect("the published mapping is valid")
+    }
+
     /// The German recapitulative statement of 2026 (Zusammenfassende Meldung, § 18a UStG), from tax codes, per
     /// customer (`EventSet::customer_report`).
     pub fn de_zm_2026() -> Self {
@@ -593,6 +598,42 @@ mod tests {
         assert_eq!(field("66"), 3_800, "deductible VAT from invoices");
         assert_eq!((field("46"), field("47"), field("67")), (50_000, 9_500, 9_500), "reverse charge");
         assert_eq!(report.len(), 5, "81, 66, 46, 47, 67");
+
+        // The annual return of the year takes the same postings into its own Kennzahlen.
+        let year = set
+            .period_report(
+                &ReportMapping::de_ust_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-01-01".parse().unwrap(),
+                "2026-12-31".parse().unwrap(),
+            )
+            .unwrap();
+        let field = |kz: &str| year.get(kz).copied().unwrap_or(0);
+        assert_eq!((field("177"), field("320")), (100_000, 3_800));
+        assert_eq!((field("846"), field("847"), field("467")), (50_000, 9_500, 9_500));
+        assert_eq!(year.len(), 5, "177, 320, 846, 847, 467");
+    }
+
+    /// Every German output and input code reaches the advance return, the annual return and the Anlage EÜR – a new
+    /// code is not left out of one of them.
+    #[test]
+    fn every_german_tax_code_reaches_the_vat_returns() {
+        let table = TaxTable::de();
+        for mapping in [ReportMapping::de_ustva_2026(), ReportMapping::de_ust_2026()] {
+            for code in &table.codes {
+                if code.code.as_str() == "de-in-no-deduction" {
+                    continue;
+                }
+                assert!(
+                    mapping.taxes.iter().any(|rule| rule.tax == code.code),
+                    "{} has no rule for {}",
+                    mapping.report,
+                    code.code
+                );
+            }
+        }
     }
 
     #[test]

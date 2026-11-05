@@ -1,6 +1,6 @@
 # 0009 Reports
 
-Version 0.11, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
+Version 0.14, draft. Implemented in the reference library (`ReportMapping`, `EventSet::account_report`,
 `EventSet::period_report`, `EventSet::customer_report`).
 
 Books end in national reports: a balance sheet, a profit and loss account, a VAT return, a tax return. Each country
@@ -103,6 +103,7 @@ resolve:
 | Income statement on a cash basis 2026 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2026.json`](data/reports/de-euer-2026.json) | BMF letter of 1 September 2026, IV C 6 - S 2142/00024/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2026-09-01-anlage-EUER-2026.html)) |
 | Income statement on a cash basis 2025 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2025.json`](data/reports/de-euer-2025.json) | BMF letter of 29 August 2025, IV C 6 - S 2142/00023/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-08-29-anlage-EUER-2025.html)) |
 | VAT return 2026 (Umsatzsteuer-Voranmeldung) | [`de-ustva-2026.json`](data/reports/de-ustva-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00039/007/036, form USt 1 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-vordruckmuster-USt-voranmeldung-2026.html)) |
+| Annual VAT return 2026 (Umsatzsteuererklärung) | [`de-ust-2026.json`](data/reports/de-ust-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00040/008/034, form USt 2 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-muster-USt-erklaerung-2026.pdf?__blob=publicationFile&v=5)) |
 | Recapitulative statement 2026 (Zusammenfassende Meldung) | [`de-zm-2026.json`](data/reports/de-zm-2026.json) | [§ 18a UStG](https://www.gesetze-im-internet.de/ustg_1980/__18a.html) |
 
 - **Positions of the HGB** are written as their place in the law: `aktiv.B.II.1` is § 266 Abs. 2 B. II. 1.
@@ -117,6 +118,12 @@ resolve:
 - **Fields of the VAT return** are its Kennzahlen (`81`, `66`, …). The fields the form computes or asks for directly –
   the totals, the advance payment (Kz 83), the special advance payment (Kz 39), the yes/no questions – are not part of
   the mapping.
+- **Fields of the annual VAT return** are the Kennzahlen of form USt 2 A (`177`, `320`, …), over the calendar year
+  (§ 18 Abs. 3 UStG). As in the advance return, the form computes the tax at the standard and reduced rates and the
+  totals; the advance payments of the year (line 125), the balance (Kz 816, 820) and the yes/no questions are not part
+  of the mapping. Exempt supplies without deduction (`de-out-exempt`) fall to Kz 240, those that belong to the total
+  turnover of § 19 Abs. 2 UStG; the letting of land (§ 4 Nr. 12, Kz 286) and the other exempt supplies outside the
+  total turnover (Kz 287) need tax codes of their own (OPEN). The form of 2025 is not part of this version (OPEN).
 - **Fields of the Anlage EÜR** are its section and Kennzahl (`1.112`, `2.280`, `5.122`): the same Kennzahl appears in
   more than one section. Income falls into its line by its tax code – taxable, exempt or zero-rated, small business –,
   expenses by their account; VAT received and deductible VAT by tax code, VAT paid to and refunded by the tax office by
@@ -224,6 +231,5 @@ number its other member state gave it and the sum of the assessment bases (Abs. 
   positions stay with the taxonomy until the conditions for reusing it (© XBRL Deutschland e.V.) are clarified.
 - The recapitulative statement: whether `L`, `S` and `D` are the codes of the official data set (OPEN – the
   adapter translates them); whether amounts are stated in whole euros; transfers of own goods (§ 6a Abs. 2 UStG) and
-  call-off stock (§ 6b UStG), which have no tax code yet; supplies of new vehicles to buyers without a VAT
-  identification number, which carry `de-out-ig-supply` but are not reported (§ 18a Abs. 6 Nr. 1) and so are
-  reported as missing a number.
+  call-off stock (§ 6b UStG), which have no tax code yet. Supplies of new vehicles to buyers without a VAT
+  identification number carry `de-out-ig-new-vehicle` and are not reported (§ 18a Abs. 6 Nr. 1).

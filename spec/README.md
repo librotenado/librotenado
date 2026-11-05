@@ -1,6 +1,6 @@
 # librotenado specification
 
-Version 0.13 – a draft, not yet stable. Normative statements will use the key words of
+Version 0.14 – a draft, not yet stable. Normative statements will use the key words of
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
 | Part | Content | State |
@@ -13,7 +13,7 @@ Version 0.13 – a draft, not yet stable. Normative statements will use the key 
 | [0006 Encryption](0006-encryption.md) | end-to-end encryption: members and their keys, an ordered member list, a books key per member, a chain of keys, envelopes, relays, invitations, recovery codes | draft, implemented |
 | [0007 Filings](0007-filings.md) | submissions to authorities: derived from a state of the books, never changed; adapters over HTTPS | draft, implemented |
 | [0008 Parties](0008-parties.md) | the organisations and persons books belong to and deal with: legal form, registers, tax numbers, roles and shares, contacts and bank accounts, customers and suppliers and how documents name them; how each keeps its books and writes invoices, series of invoice numbers per device | draft, implemented |
-| [0009 Reports](0009-reports.md) | report mappings per country and version: HGB balance sheet and profit and loss account, VAT return, recapitulative statement | draft, implemented |
+| [0009 Reports](0009-reports.md) | report mappings per country and version: HGB balance sheet and profit and loss account, advance and annual VAT return, recapitulative statement | draft, implemented |
 | [0010 Audit and retention](0010-audit.md) | what the protocol guarantees for audits; Germany: retention, GoBD, data transfer (Z3) | draft, implemented |
 
 The reasoning behind the protocol is in the [whitepaper](https://github.com/librotenado/whitepaper).

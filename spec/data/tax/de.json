@@ -3,6 +3,7 @@
   {"code": "de-out-7", "direction": "output", "rate": "7", "law": "UStG § 12 Abs. 2"},
   {"code": "de-out-0", "direction": "output", "rate": "0", "law": "UStG § 12 Abs. 3"},
   {"code": "de-out-ig-supply", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. b, § 6a"},
+  {"code": "de-out-ig-new-vehicle", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. b, § 6a, § 1b Abs. 2 und 3"},
   {"code": "de-out-export", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. a, § 6; § 4 Nr. 2 bis 7"},
   {"code": "de-out-exempt", "direction": "output", "law": "UStG § 4 Nr. 8 bis 29"},
   {"code": "de-out-small-business", "direction": "output", "law": "UStG § 19 Abs. 1"},
