@@ -204,6 +204,10 @@ pub struct ReportMapping {
     /// of each year before it; a pool older than the last has dissolved.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pools: Vec<crate::AssetFields>,
+    /// For a report of the payroll (spec part 0013): per field, the figures of the payslips it sums – a name, or a
+    /// name, `@` and the religious community church tax goes to (`church@ev`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payroll_fields: BTreeMap<String, Vec<String>>,
 }
 
 impl Object for ReportMapping {
@@ -268,6 +272,11 @@ impl ReportMapping {
     /// customer (`EventSet::customer_report`).
     pub fn de_zm_2026() -> Self {
         crate::from_root(include_bytes!("../data/reports/de-zm-2026.json")).expect("the published mapping is valid")
+    }
+
+    /// The German wage tax return of 2026 (Lohnsteuer-Anmeldung, § 41a EStG), from the payslips (spec part 0013).
+    pub fn de_lsta_2026() -> Self {
+        crate::from_root(include_bytes!("../data/reports/de-lsta-2026.json")).expect("the published mapping is valid")
     }
 
     /// The German income statement on a cash basis of 2026 (Anlage EÜR, § 4 Abs. 3 EStG).
@@ -1284,6 +1293,7 @@ mod tests {
             asset_groups: BTreeMap::new(),
             asset_fields: BTreeMap::new(),
             pools: vec![],
+            payroll_fields: BTreeMap::new(),
         };
         let set = books(vec![vec![posting("4111", 5_000, None), posting("5121", -5_000, None)]]);
         let report = set.account_report(&mapping, &Chart::v0_1(), &party(1), None).unwrap();

@@ -103,6 +103,7 @@ pub mod mt940;
 mod names;
 mod object;
 mod party;
+pub mod payroll;
 mod profit_tax;
 mod report;
 mod statement;
@@ -208,6 +209,12 @@ pub enum ParseError {
     /// A code of a configuration that is not a country in lower case, `-` and a name.
     #[error("not a configuration code: {0:?}")]
     RegimeCode(String),
+    /// An employment identity that is not a UUID in lower case.
+    #[error("not an employment id: {0:?}")]
+    Employment(String),
+    /// A payslip identity that is not a UUID in lower case.
+    #[error("not a payslip id: {0:?}")]
+    Payslip(String),
     /// A hash that is not `sha256:` and 64 lower-case hexadecimal digits.
     #[error("not a hash: {0:?}")]
     Hash(String),

@@ -2,6 +2,26 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.20.0 – 2026-11-05
+
+Payroll.
+
+- [0013 Payroll](spec/0013-payroll.md), new: employments (`employment_described`) and payslips (`payslip_recorded`)
+  with their items and figures, and what needs review – an employer that is not an owner, payslips of unknown
+  employments, twice, outside the employment or a month, overlapping, or with figures the rules compute otherwise.
+  Germany: the wage tax, solidarity surcharge and base of church tax by the Programmablaufplan 2026 of the BMF,
+  translated mechanically from its XML pseudocode (`scripts/pap.py`) and tested against it on 600 cases; church tax
+  by the state of the employer; the flat tax of 2 %. The social insurance of 2026: ceilings by the days insured,
+  one-off payments within the ceilings of the year so far, rounding by the BVV, the transition range (§ 20 Abs. 2a SGB
+  IV), minor employment, care with its surcharge, reductions and Saxony, the levies U1, U2 and U3. The
+  Lohnsteuer-Anmeldung, the Beitragsnachweis per insurer, the postings of a payslip.
+- [0009 Reports](spec/0009-reports.md): reports of the payroll (`payroll_fields`); mapping `de-lsta-2026`.
+- [0007 Filings](spec/0007-filings.md): the kind `wage_tax_return`.
+- Library: module `payroll` (`Employment`, `Payslip`, `PayItem`, `wage_tax`, `PayrollError`, `PayrollProblem`);
+  `EventSet::employments`, `employment`, `payslips`, `payslips_for`, `payslip_figures`, `review_payroll`,
+  `payroll_report`, `employees_paid`, `contribution_statement`; `Payslip::postings`; `Derivation::Payroll`;
+  `ReportMapping::de_lsta_2026`; `FilingKind::WageTaxReturn`; names `payroll/*`, `de-lsta/*`, `de-bn/*`.
+
 ## 0.19.0 – 2026-11-05
 
 Income tax of a person running a business.

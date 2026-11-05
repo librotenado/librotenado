@@ -61,6 +61,8 @@ pub enum FilingKind {
     /// A statement of supplies to customers in other EU member states, per customer – in Germany the
     /// Zusammenfassende Meldung (§ 18a UStG).
     RecapitulativeStatement,
+    /// The taxes an employer withheld on wages – in Germany the Lohnsteuer-Anmeldung (§ 41a EStG, spec part 0013).
+    WageTaxReturn,
     /// A kind of a later version; kept as received, not interpreted, and not written by this version.
     #[serde(other, skip_serializing)]
     Unknown,
@@ -124,6 +126,8 @@ pub enum Derivation {
     /// From the postings of the period, per customer – a recapitulative statement. Bookings it cannot place are left
     /// out; [`EventSet::customer_report`] names them for the review list.
     Customers,
+    /// From the payslips of the employer for periods ending in the period – a Lohnsteuer-Anmeldung (spec part 0013).
+    Payroll,
 }
 
 impl EventSet {
@@ -145,6 +149,7 @@ impl EventSet {
             Derivation::Period => self.period_report(mapping, taxes, chart, filer, from, to)?,
             Derivation::Balances => self.account_report(mapping, chart, filer, Some(to))?,
             Derivation::Customers => self.customer_report(mapping, chart, filer, from, to)?.0,
+            Derivation::Payroll => self.payroll_report(mapping, filer, from, to),
         };
         let fields = units
             .into_iter()

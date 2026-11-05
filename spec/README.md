@@ -1,6 +1,6 @@
 # librotenado specification
 
-Version 0.19 – a draft, not yet stable. Normative statements will use the key words of
+Version 0.20 – a draft, not yet stable. Normative statements will use the key words of
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
 | Part | Content | State |
@@ -17,5 +17,6 @@ Version 0.19 – a draft, not yet stable. Normative statements will use the key 
 | [0010 Audit and retention](0010-audit.md) | what the protocol guarantees for audits; Germany: retention, GoBD, data transfer (Z3) | draft, implemented |
 | [0011 Fixed assets](0011-assets.md) | the register of fixed assets: cost, depreciation on a straight line, at once or in pools, disposals; Germany: the Anlage AVEÜR | draft, implemented |
 | [0012 Taxes on profit](0012-taxes-on-profit.md) | the taxable profit from the tax balance sheet; Germany: corporation tax, the solidarity surcharge, trade tax with its additions and reductions, income tax with the reduction for trade tax, church tax and advance payments | draft, implemented |
+| [0013 Payroll](0013-payroll.md) | employments and payslips; Germany: the wage tax by the BMF's Programmablaufplan, the social insurance with its ceilings, the transition range and minor employment, the levies; the Lohnsteuer-Anmeldung, the Beitragsnachweis, the bookings | draft, implemented |
 
 The reasoning behind the protocol is in the [whitepaper](https://github.com/librotenado/whitepaper).

@@ -39,6 +39,7 @@ and reported on the review list, not in the filing.
 | `cash_basis_statement` | the income statement on a cash basis | over the period | Anlage EÜR (`de-euer`) |
 | `annual_accounts` | balance sheet and profit and loss account | balances on the last day, and over the period | E-Bilanz (`de-ebilanz-bs`, `de-ebilanz-is-gkv`) |
 | `recapitulative_statement` | supplies to businesses in other EU member states, per customer | per customer over the period | Zusammenfassende Meldung (`de-zm`) |
+| `wage_tax_return` | the taxes an employer withheld on wages | from the payslips for periods ending in the period (part 0013) | Lohnsteuer-Anmeldung (`de-lsta`) |
 
 - **A filing is derived from the books and records from what.** `basis` is the state of the books when it was
   derived: whoever has the same events derives it again and gets the same content. A filing is **outdated** when its

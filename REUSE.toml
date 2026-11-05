@@ -60,3 +60,10 @@ path = "docs/_includes/components/footer.html"
 precedence = "override"
 SPDX-FileCopyrightText = ["2016 Patrick Marsceill", "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"]
 SPDX-License-Identifier = "MIT"
+
+# Expected results of the wage tax, from the BMF's Programmablaufplan run by scripts/pap.py.
+[[annotations]]
+path = "crates/librotenado/tests/data/payroll/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the librotenado contributors"
+SPDX-License-Identifier = "MIT"

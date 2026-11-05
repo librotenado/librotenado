@@ -96,6 +96,13 @@ resolve:
 - **Several VAT identification numbers** – a booking whose documents name more than one; it is left out, too. Each
   customer's sales are booked on their own.
 
+### Reports of the payroll
+
+A report of the payroll – the German Lohnsteuer-Anmeldung – takes no postings but the payslips (part 0013): its
+member `payroll_fields` names, per field, the figures it sums over the payslips of the filer for periods ending in the
+period of the report. A name `<figure>@<community>` counts only payslips of employees whose church tax goes to that
+religious community.
+
 ## The German reports of 2026
 
 | Report | File | Source |

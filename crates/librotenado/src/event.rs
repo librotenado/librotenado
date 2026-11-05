@@ -145,6 +145,16 @@ pub enum Payload {
         /// The disposal.
         disposal: crate::Disposal,
     },
+    /// An employment was described, or its description changed from a day (spec part 0013).
+    EmploymentDescribed {
+        /// The employment.
+        employment: Box<crate::payroll::Employment>,
+    },
+    /// The wages of a period were paid (spec part 0013).
+    PayslipRecorded {
+        /// The payslip.
+        payslip: crate::payroll::Payslip,
+    },
     /// An owner's books were closed up to a date (spec part 0002).
     PeriodClosed {
         /// The closing.

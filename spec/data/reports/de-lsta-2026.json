@@ -1,0 +1,1 @@
+{"type": "report_mapping", "report": "de-lsta", "country": "DE", "version": "2026", "valid_from": "2026-01-01", "into": "librotenado/0.1", "status": "draft", "payroll_fields": {"42": ["wage_tax"], "48": ["wage_tax"], "49": ["solidarity"], "61": ["church@ev"], "62": ["church@rk"], "83": ["wage_tax", "solidarity", "church"]}}
