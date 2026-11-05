@@ -130,6 +130,21 @@ pub struct ReportMapping {
     /// Mussfelder of the E-Bilanz.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::non_empty")]
     pub mandatory: Vec<String>,
+    /// The report counts receipts and payments in the year they count in (§ 11 EStG): on the day a booking is
+    /// `attributed` to, where it has one, else on its date.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cash_basis: bool,
+    /// A report of the fixed assets (spec part 0011): account → group, for the assets depreciated on a straight
+    /// line or not at all. An account holds for every account that refines it, unless a refinement has its own.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub asset_groups: BTreeMap<AccountId, String>,
+    /// Per group, its fields.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub asset_fields: BTreeMap<String, crate::AssetFields>,
+    /// The fields of the pools of low-value assets (§ 6 Abs. 2a EStG): of the pool of the year of the report, then
+    /// of each year before it; a pool older than the last has dissolved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pools: Vec<crate::AssetFields>,
 }
 
 impl Object for ReportMapping {
@@ -164,6 +179,12 @@ impl ReportMapping {
     pub fn de_ebilanz_is_gkv_6_10() -> Self {
         crate::from_root(include_bytes!("../data/reports/de-ebilanz-is-gkv-6.10.json"))
             .expect("the published mapping is valid")
+    }
+
+    /// The German register of fixed assets of 2026 for the Anlage EÜR (Anlage AVEÜR), from the assets
+    /// (`EventSet::asset_report`, spec part 0011).
+    pub fn de_aveuer_2026() -> Self {
+        crate::from_root(include_bytes!("../data/reports/de-aveuer-2026.json")).expect("the published mapping is valid")
     }
 
     /// The German annual VAT return of 2026 (Umsatzsteuererklärung, § 18 Abs. 3 UStG), from tax codes.
@@ -219,6 +240,72 @@ fn ancestry<'a>(account: &'a AccountId, parents: &'a BTreeMap<AccountId, Account
 }
 
 impl EventSet {
+    /// The report of the fixed assets of `owner` from `from` to `to` (spec part 0011), in base units: per group of
+    /// `mapping.asset_groups` the cost and book value of the assets held at the beginning, the additions, the
+    /// depreciation, the book value of those that left and the book value at the end; per pool of a year the same.
+    /// Low-value assets depreciated at once are not part of it. Fields without an amount are left out.
+    pub fn asset_report(
+        &self,
+        mapping: &ReportMapping,
+        chart: &Chart,
+        owner: &PartyId,
+        from: Date,
+        to: Date,
+    ) -> BTreeMap<String, i128> {
+        let parents = self.account_parents(chart);
+        let group_of =
+            |account: &AccountId| ancestry(account, &parents).into_iter().find_map(|id| mapping.asset_groups.get(id));
+        let before = from.previous();
+        let mut fields: BTreeMap<String, i128> = BTreeMap::new();
+        let mut add = |field: &Option<String>, units: i128| {
+            if let Some(field) = field
+                && units != 0
+            {
+                *fields.entry(field.clone()).or_default() += units;
+            }
+        };
+        for state in self.assets(owner) {
+            let asset = &state.asset;
+            if asset.acquired > to {
+                continue;
+            }
+            let held = asset.acquired < from && state.disposal.as_ref().is_none_or(|d| d.date >= from);
+            let opening = before.map_or(0, |day| state.book_value(day));
+            let depreciation = state.depreciation(from, to);
+            let cost = asset.cost.base_units();
+            let fields_of = match asset.depreciation {
+                crate::Depreciation::Immediate => continue,
+                crate::Depreciation::Pool => {
+                    let age = usize::from(from.year().saturating_sub(asset.acquired.year()));
+                    match mapping.pools.get(age) {
+                        Some(pool) => pool,
+                        None => continue,
+                    }
+                }
+                _ => match group_of(&asset.account).and_then(|g| mapping.asset_fields.get(g)) {
+                    Some(group) => group,
+                    None => continue,
+                },
+            };
+            let pool = asset.depreciation == crate::Depreciation::Pool;
+            if held || (pool && asset.acquired < from) {
+                add(&fields_of.cost, cost);
+                add(&fields_of.opening, opening);
+            }
+            if asset.acquired >= from {
+                add(&fields_of.additions, cost);
+            }
+            add(&fields_of.depreciation, depreciation);
+            let left = state.disposal.as_ref().filter(|d| d.date >= from && d.date <= to);
+            if let (Some(_), false) = (left, pool) {
+                add(&fields_of.disposals, state.value_at_disposal().unwrap_or(0));
+            }
+            add(&fields_of.closing, state.book_value(to));
+        }
+        fields.retain(|_, units| *units != 0);
+        fields
+    }
+
     /// The fields of a report over a period – a VAT return, a profit and loss account, an income statement on a
     /// cash basis – for `owner`, from the bookings dated from `from` to `to` inclusive (spec part 0009). Per posting:
     ///
@@ -258,7 +345,8 @@ impl EventSet {
                 Payload::BookingReversed { booking, .. } => (booking, true),
                 _ => continue,
             };
-            if booking.date < from || booking.date > to {
+            let day = if mapping.cash_basis { booking.attributed.unwrap_or(booking.date) } else { booking.date };
+            if day < from || day > to {
                 continue;
             }
             for posting in booking.postings.iter().filter(|p| p.owner == *owner) {
@@ -546,6 +634,7 @@ mod tests {
         let mut clock = Clock::new("a".parse().unwrap());
         for (ms, postings) in bookings.into_iter().enumerate() {
             let booking = Booking {
+                attributed: None,
                 date: "2026-03-15".parse().unwrap(),
                 text: "test".into(),
                 postings,
@@ -558,6 +647,57 @@ mod tests {
             set.insert(Event { time: clock.now(ms as u64), seq, prev, payload: Payload::BookingRecorded { booking } });
         }
         set
+    }
+
+    /// A VAT payment for the last quarter, made on 8 January, counts in the year before on a cash basis (§ 11 Abs. 2
+    /// Satz 2 EStG); attributed to a year not within ten days, it is reported.
+    #[test]
+    fn a_payment_within_ten_days_counts_in_the_year_it_belongs_to() {
+        let mut set = EventSet::new();
+        let mut clock = Clock::new("a".parse().unwrap());
+        let mut add = |set: &mut EventSet, date: &str, attributed: Option<&str>| {
+            let booking = Booking {
+                attributed: attributed.map(|d| d.parse().unwrap()),
+                date: date.parse().unwrap(),
+                text: "VAT for the fourth quarter".into(),
+                postings: vec![posting("44571", 19_000, None), posting("512", -19_000, None)],
+                documents: vec![],
+                entries: vec![],
+                transaction: None,
+            };
+            let (seq, prev) = set.chain_head(&"a".parse().unwrap());
+            let time = clock.now(seq);
+            set.insert(Event { time, seq, prev, payload: Payload::BookingRecorded { booking } }).0
+        };
+        add(&mut set, "2027-01-08", Some("2026-12-31"));
+        let euer = |set: &EventSet, year: u16| {
+            set.period_report(
+                &ReportMapping::de_euer_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                Date::new(year, 1, 1).unwrap(),
+                Date::new(year, 12, 31).unwrap(),
+            )
+            .unwrap()
+        };
+        assert_eq!(euer(&set, 2026).get("2.186"), Some(&19_000));
+        assert_eq!(euer(&set, 2027).get("2.186"), None);
+        // The VAT return goes by the date: the payment is of January.
+        let ustva = set
+            .period_report(
+                &ReportMapping::de_ustva_2026(),
+                &TaxTable::de(),
+                &Chart::v0_1(),
+                &party(1),
+                "2026-10-01".parse().unwrap(),
+                "2026-12-31".parse().unwrap(),
+            )
+            .unwrap();
+        assert!(ustva.is_empty());
+        assert!(set.review_bookings().is_empty());
+        let late = add(&mut set, "2027-02-01", Some("2026-12-31"));
+        assert_eq!(set.review_bookings(), [crate::BookingProblem::Attribution { event: late }]);
     }
 
     #[test]
@@ -906,6 +1046,10 @@ mod tests {
             vat_settlement: None,
             taxes: vec![],
             mandatory: vec![],
+            cash_basis: false,
+            asset_groups: BTreeMap::new(),
+            asset_fields: BTreeMap::new(),
+            pools: vec![],
         };
         let set = books(vec![vec![posting("4111", 5_000, None), posting("5121", -5_000, None)]]);
         let report = set.account_report(&mapping, &Chart::v0_1(), &party(1), None).unwrap();
@@ -925,6 +1069,7 @@ mod tests {
     #[test]
     fn a_balance_sheet_shows_the_result_on_equity() {
         let dated = |date: &str, postings: Vec<Posting>| Booking {
+            attributed: None,
             date: date.parse().unwrap(),
             text: "test".into(),
             postings,
@@ -1008,6 +1153,7 @@ mod tests {
             document
         };
         let sale = |documents: Vec<crate::DocumentId>, tax: &str, units: i128| Booking {
+            attributed: None,
             date: "2026-03-15".parse().unwrap(),
             text: "sale".into(),
             postings: vec![posting("411", units, None), posting("706", -units, Some(tax))],

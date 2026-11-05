@@ -105,6 +105,11 @@ pub struct Booking {
     /// is recorded in these books only.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
     pub transaction: Option<Transaction>,
+    /// The day it counts on where profit is determined by receipts and payments, if not its date: a regularly
+    /// recurring receipt or payment within ten days of the turn of the year counts in the year it belongs to
+    /// (§ 11 Abs. 1 Satz 2, Abs. 2 Satz 2 EStG; spec part 0001). Left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub attributed: Option<Date>,
 }
 
 impl Object for Exchange {
@@ -242,6 +247,7 @@ impl Booking {
             documents: self.documents.clone(),
             entries: self.entries.clone(),
             transaction: None,
+            attributed: self.attributed,
         }
     }
 }
@@ -282,6 +288,7 @@ pub(crate) mod tests {
     #[test]
     fn foreign_currency_balances_converted_too() {
         let booking = |postings| Booking {
+            attributed: None,
             date: "2026-10-28".parse().unwrap(),
             text: "".into(),
             postings,
@@ -349,6 +356,7 @@ pub(crate) mod tests {
 
     fn booking(postings: Vec<Posting>) -> Booking {
         Booking {
+            attributed: None,
             date: "2026-10-24".parse().unwrap(),
             text: "test".into(),
             postings,

@@ -429,6 +429,7 @@ mod tests {
             exchange: None,
         };
         Booking {
+            attributed: None,
             date: date.parse().unwrap(),
             text: "internet".into(),
             postings: vec![posting(1, base_units), posting(2, -base_units)],

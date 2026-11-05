@@ -4,7 +4,12 @@ Specification and library share one version. Until 1.0, any version may change w
 
 ## 0.14.0 – 2026-11-05
 
-The annual VAT return.
+The annual VAT return, the ten-day rule, fixed assets.
+
+- [0011 Fixed assets](spec/0011-assets.md), new: the register – `asset_acquired`, `asset_disposed`; depreciation on a
+  straight line by month, at once (low-value assets, § 6 Abs. 2 EStG) or in pools (§ 6 Abs. 2a EStG); book values;
+  reported – assets of non-owners, duplicates, invalid ones, unknown, twice or early disposals. Reports of the register
+  by `asset_groups`, `asset_fields` and `pools`; the German Anlage AVEÜR 2026 as `de-aveuer-2026.json`.
 
 - [0009 Reports](spec/0009-reports.md): the German annual VAT return of 2026 (Umsatzsteuererklärung, form USt 2 A
   of the BMF letter of 29 December 2025) as the mapping `de-ust-2026.json`, over the calendar year; its Kennzahlen
@@ -14,7 +19,23 @@ The annual VAT return.
 - [0001 Base types](spec/0001-base-types.md): the tax code `de-out-ig-new-vehicle`, an intra-Community supply of a
   new vehicle to a buyer without a VAT identification number – Kz 44 of the advance return, Kz 744 of the annual
   return, not part of the recapitulative statement (§ 18a Abs. 6 Nr. 1 UStG).
-- Library: `ReportMapping::de_ust_2026`.
+- [0009 Reports](spec/0009-reports.md), Anlage EÜR 2025 and 2026: the accounts of depreciation reach their own lines
+  instead of all line 130 – intangible assets 131, buildings and the home office 136, low-value assets 132, pools
+  137, special depreciation 134, reductions under § 7g Abs. 2 EStG 138.
+- [0001 Base types](spec/0001-base-types.md): the tax codes `de-out-exempt-letting` (§ 4 Nr. 12 UStG) and
+  `de-in-13b-eu-service-7`, `de-in-13b-domestic-7` (reverse charge at 7 %).
+- [0005 Documents](spec/0005-documents.md): under reverse charge and for intra-Community acquisitions, the VAT owed and
+  deducted follows the rate of the tax code; the proposal takes the code at 19 %, as the invoice states no rate.
+- [0001 Base types](spec/0001-base-types.md): `attributed` on a booking – the day a regularly recurring receipt or
+  payment within ten days of the turn of the year counts on where profit is determined by receipts and payments
+  (§ 11 EStG; BFH VIII R 34/12). [0002 Events](spec/0002-events.md): reported – an attribution outside the ten days.
+  [0009 Reports](spec/0009-reports.md): `cash_basis` on a mapping, set for the Anlage EÜR.
+- Library: `ReportMapping::de_ust_2026`; `Booking::attributed`, `ReportMapping::cash_basis`,
+  `BookingProblem::Attribution`. `Booking` has a new member: code that writes it needs `attributed: None`.
+  `Asset`, `AssetId`, `Disposal`, `Depreciation`, `AssetState`, `AssetFields`, `AssetProblem`,
+  `Payload::AssetAcquired`, `Payload::AssetDisposed`, `EventSet::assets`, `EventSet::review_assets`,
+  `EventSet::asset_report`, `ReportMapping::de_aveuer_2026`; `ReportMapping` has the new members `asset_groups`,
+  `asset_fields`, `pools`.
 
 ## 0.13.0 – 2026-11-05
 

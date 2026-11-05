@@ -1,6 +1,6 @@
 # 0001 Base types
 
-Version 0.3, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.14, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Money
 
@@ -121,13 +121,25 @@ RECOMMENDED for new accounts.
 A booking (type `booking`) is an object with `date`, `text`, `postings` and, if it is based on documents,
 `documents` – an array of document identities (part 0005), absent when empty, never an empty array (part 0003) – and, if it books what a bank statement shows,
 `entries`: the entries of the statement it books (part 0005) – and, if the same business transaction is recorded in
-other sets of books as well, `transaction`: its identity and those other sets (part 0002).
+other sets of books as well, `transaction`: its identity and those other sets (part 0002) – and, if it counts in
+another year than its date where profit is determined by receipts and payments, `attributed`: the day it counts on
+(below).
 A posting (type `posting`) is `{"owner": …, "account": …, "amount": Money}` and, if there is something to
 remark, `note` – for example why there is no document for it; absent if none, never empty – and, if it is treated for
 VAT, `tax`, a tax code (below), and, if its currency is not the functional currency of its owner, `exchange`
 (below). `owner` is the
 organisation or person whose books the posting is in (part 0008); every posting has one. A positive amount is a
 debit, a negative amount a credit.
+
+**Receipts and payments around the turn of the year.** Where profit is determined by receipts and payments, a
+booking counts on its date – except a regularly recurring receipt or payment made a short time before or after the
+turn of the year it belongs to, which counts in that year (§ 11 Abs. 1 Satz 2, Abs. 2 Satz 2 EStG,
+[gesetze-im-internet.de](https://www.gesetze-im-internet.de/estg/__11.html)). The courts take the short time as ten
+days (BFH, judgment of 11 November 2014, VIII R 34/12), not extended where a deadline moves to the next working day.
+Such a booking carries `attributed`, a day of the year it belongs to; whether the payment recurs regularly and was
+due within the ten days is for whoever books to decide. A report that counts receipts and payments (part 0009) takes
+`attributed` where it is given; every other report takes `date`. A reversal carries the `attributed` of the booking it
+cancels.
 
 A booking MUST have at least two postings, MUST NOT contain a posting of zero, and MUST balance **for every owner in
 every currency**: the `base_units` of the postings of one owner in one currency sum to zero. Each owner's books thus
@@ -166,8 +178,8 @@ code means is reference data of its country, a root object of type `tax_table` w
 percent as a decimal number if it taxes at one, and `law`, the provisions it rests on.
 
 The German table is [`spec/data/tax/de.json`](data/tax/de.json): the rates of § 12 UStG, exempt supplies with and
-without deduction (§ 4 Nr. 1 to 7, § 4 Nr. 8 to 29), small businesses (§ 19), intra-Community supplies – of new
+without deduction (§ 4 Nr. 1 to 7, § 4 Nr. 8 to 29, the letting of land under § 4 Nr. 12 on its own), small businesses (§ 19), intra-Community supplies – of new
 vehicles to buyers without a VAT identification number on their own (§ 1b) – and acquisitions (§ 4 Nr. 1 Buchst. b,
-§ 1a), reverse charge (§ 13b), import VAT and non-deductible input tax
+§ 1a), reverse charge (§ 13b, at 19 % and at 7 %), import VAT and non-deductible input tax
 ([UStG](https://www.gesetze-im-internet.de/ustg_1980/)). How the codes fill a VAT return is a report mapping (part
 0009).

@@ -711,6 +711,12 @@ pub fn de_tax_code(
     Some(code.parse().expect("a valid code"))
 }
 
+/// The rate in whole per cent of a German code of reverse charge or intra-Community acquisition.
+fn self_assessed_rate(code: &TaxCode) -> Option<i128> {
+    let table = crate::TaxTable::de();
+    table.get(code)?.rate.as_ref()?.to_string().parse().ok()
+}
+
 /// Why no booking can be proposed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProposalError {
@@ -724,7 +730,8 @@ pub enum ProposalError {
 
 /// A booking proposed for an invoice or credit note: per VAT category and rate, the net amount on the counter
 /// account and the VAT on the VAT account, each with its German tax code; the gross amount on the party's account.
-/// Under reverse charge and for intra-Community acquisitions the VAT owed and deducted is computed at 19 per cent.
+/// Under reverse charge and for intra-Community acquisitions the VAT owed and deducted is computed at the rate of the
+/// tax code: 19 per cent as proposed, as the invoice does not state the rate.
 /// A credit note books the other way round. Whoever books reviews and may change every posting.
 pub fn propose_booking(
     document: &Document,
@@ -770,8 +777,10 @@ pub fn propose_booking(
         total = total.checked_add(base).and_then(|t| t.checked_add(tax)).ok_or(ProposalError::Overflow)?;
         let self_assessed = matches!(breakdown.category, VatCategory::ReverseCharge | VatCategory::IntraCommunity);
         if side == InvoiceSide::Purchase && self_assessed {
-            // 19 per cent, rounded half away from zero.
-            let owed = (base * 19 + base.signum() * 50) / 100;
+            // At the rate of the tax code – the invoice does not state it, the code proposed is the one at 19 per
+            // cent –, rounded half away from zero.
+            let percent = code.as_ref().and_then(self_assessed_rate).unwrap_or(19);
+            let owed = (base * percent + base.signum() * 50) / 100;
             post(&accounts.vat_input, sign * owed, code.as_ref())?;
             post(&accounts.vat_reverse_charge, -sign * owed, code.as_ref())?;
         }
@@ -786,6 +795,7 @@ pub fn propose_booking(
         None => name.clone(),
     };
     Ok(Booking {
+        attributed: None,
         date: document.date,
         text,
         postings,

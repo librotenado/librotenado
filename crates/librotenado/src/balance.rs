@@ -134,6 +134,7 @@ mod tests {
             exchange: None,
         };
         Booking {
+            attributed: None,
             date: date.parse().unwrap(),
             text: "test".into(),
             postings: vec![posting(to, cents), posting(2, -cents)],

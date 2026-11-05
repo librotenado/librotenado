@@ -7,6 +7,7 @@
   {"tax": "de-out-ig-new-vehicle", "base": "744"},
   {"tax": "de-out-export", "base": "752"},
   {"tax": "de-out-exempt", "base": "240"},
+  {"tax": "de-out-exempt-letting", "base": "286"},
   {"tax": "de-out-small-business", "base": "236"},
   {"tax": "de-out-13b", "base": "209"},
   {"tax": "de-out-eu-service", "base": "721"},
@@ -17,7 +18,9 @@
   {"tax": "de-in-ig-acquisition-19", "base": "781", "input": "761"},
   {"tax": "de-in-ig-acquisition-7", "base": "793", "input": "761"},
   {"tax": "de-in-13b-eu-service", "base": "846", "output": "847", "input": "467"},
+  {"tax": "de-in-13b-eu-service-7", "base": "846", "output": "847", "input": "467"},
   {"tax": "de-in-13b-domestic", "base": "877", "output": "878", "input": "467"},
+  {"tax": "de-in-13b-domestic-7", "base": "877", "output": "878", "input": "467"},
   {"tax": "de-in-13b-real-estate", "base": "873", "output": "874", "input": "467"},
   {"tax": "de-in-import-vat", "input": "762"}
 ]}

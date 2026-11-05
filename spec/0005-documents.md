@@ -169,6 +169,11 @@ The German tax codes follow from category, rate and side:
 | `G` | `de-out-export` | – |
 | `O` | `de-out-not-taxable` | – |
 
+Under reverse charge (`AE`) and for an intra-Community acquisition (`K`), the invoice states no German rate: the
+proposal takes the code at 19 % and computes the VAT owed and deducted at it. Where the supply is taxed at 7 %, a person
+chooses the code at 7 % (`de-in-13b-domestic-7`, `de-in-13b-eu-service-7`, `de-in-ig-acquisition-7`), and the VAT
+follows its rate.
+
 ## The original
 
 The original is an object of type `original`:
@@ -318,8 +323,7 @@ header is MT940, anything else is read as CSV.
 
 - The extension of XRechnung (sub-invoice lines, third-party payments), which the model does not carry yet.
 - Code lists (ISO/IEC 6523, UNTDID 7143, VATEX …) are not checked before writing; the KoSIT validator checks them.
-- Reverse charge and intra-Community acquisitions at the reduced rate: the proposal assumes 19 %; rates other than
-  19 % and 7 % get no tax code.
+- Rates other than 19 % and 7 % get no tax code.
 - Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED). The file name `xrechnung.xml`, `fx:Version` 1.0 and
   `fx:ConformanceLevel` XRECHNUNG follow a vendor's documentation of the ZUGFeRD / Factur-X specification
   ([IDEAL Software](https://idealsoftware.com/manuals/ctrl/setfacturxparams.html)) and are accepted by Mustang;

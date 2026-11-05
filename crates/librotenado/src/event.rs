@@ -126,6 +126,16 @@ pub enum Payload {
         /// The document.
         document: Document,
     },
+    /// A fixed asset was acquired, or made or brought into the business (spec part 0011).
+    AssetAcquired {
+        /// The asset.
+        asset: crate::Asset,
+    },
+    /// A fixed asset left the business (spec part 0011).
+    AssetDisposed {
+        /// The disposal.
+        disposal: crate::Disposal,
+    },
     /// An owner's books were closed up to a date (spec part 0002).
     PeriodClosed {
         /// The closing.
@@ -353,6 +363,15 @@ pub enum PartyProblem {
     },
 }
 
+/// Whether a booking dated `date` may count on `attributed`: in the year before, when dated 1 to 10 January; in the
+/// year after, when dated 22 to 31 December – the ten days the courts take as the "short time" of § 11 EStG (BFH,
+/// judgment of 11 November 2014, VIII R 34/12).
+fn within_ten_days(date: Date, attributed: Date) -> bool {
+    let (year, month, day) = (date.year(), date.month(), date.day());
+    (month == 1 && day <= 10 && attributed.year() + 1 == year)
+        || (month == 12 && day >= 22 && attributed.year() == year + 1)
+}
+
 /// An organisation or a person of the books a party of a document may be, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartyMatch {
@@ -422,6 +441,13 @@ pub enum BookingProblem {
         event: EventHash,
         /// The booking.
         reverses: EventHash,
+    },
+    /// A booking attributed to a day that is not in the year before or after its date, within ten days of the turn
+    /// of the year (§ 11 Abs. 1 Satz 2 EStG).
+    #[error("event {event} is attributed to a year it is not within ten days of")]
+    Attribution {
+        /// The booking.
+        event: EventHash,
     },
     /// A reversal whose postings are not the booking's with the opposite amounts.
     #[error("event {event} does not cancel {reverses}")]
@@ -907,6 +933,13 @@ impl EventSet {
             if let Err(error) = booking.validate() {
                 problems.push(BookingProblem::Invalid { event: hash, error });
             }
+            // A reversal takes the day of the booking it cancels, so that it cancels in the same year.
+            if reverses.is_none()
+                && let Some(attributed) = booking.attributed
+                && !within_ten_days(booking.date, attributed)
+            {
+                problems.push(BookingProblem::Attribution { event: hash });
+            }
             let Some(reverses) = reverses else { continue };
             let Some(Payload::BookingRecorded { booking: original }) = self.get(&reverses).map(|e| &e.payload) else {
                 problems.push(BookingProblem::UnknownReversal { event: hash, reverses });
@@ -966,6 +999,7 @@ mod tests {
     fn booking(base_units: i128) -> Booking {
         let money = |units: i128| Money::new(units, "EUR".parse().unwrap()).unwrap();
         Booking {
+            attributed: None,
             date: "2026-10-24".parse().unwrap(),
             text: "groceries".into(),
             postings: vec![

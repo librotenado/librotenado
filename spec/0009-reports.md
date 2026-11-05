@@ -29,6 +29,7 @@ A report mapping is a root object of type `report_mapping`:
 | `vat_settlement` | `debit` and `credit`: the fields for VAT paid to and refunded by the tax office |
 | `taxes` | per tax code, the fields it fills (below); absent for a report computed from accounts alone |
 | `mandatory` | positions to state even without an amount (the E-Bilanz below); absent when none |
+| `cash_basis` | `true` for a report that counts receipts and payments (§ 11 EStG): it takes a booking's `attributed` day where given (part 0001); absent otherwise |
 
 ### Reports from accounts
 
@@ -103,6 +104,7 @@ resolve:
 | Income statement on a cash basis 2026 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2026.json`](data/reports/de-euer-2026.json) | BMF letter of 1 September 2026, IV C 6 - S 2142/00024/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2026-09-01-anlage-EUER-2026.html)) |
 | Income statement on a cash basis 2025 (Anlage EÜR, § 4 Abs. 3 EStG) | [`de-euer-2025.json`](data/reports/de-euer-2025.json) | BMF letter of 29 August 2025, IV C 6 - S 2142/00023/010/001 ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Einkommensteuer/2025-08-29-anlage-EUER-2025.html)) |
 | VAT return 2026 (Umsatzsteuer-Voranmeldung) | [`de-ustva-2026.json`](data/reports/de-ustva-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00039/007/036, form USt 1 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-vordruckmuster-USt-voranmeldung-2026.html)) |
+| Register of fixed assets 2026 (Anlage AVEÜR) | [`de-aveuer-2026.json`](data/reports/de-aveuer-2026.json) | as the Anlage EÜR 2026; see part 0011 |
 | Annual VAT return 2026 (Umsatzsteuererklärung) | [`de-ust-2026.json`](data/reports/de-ust-2026.json) | BMF letter of 29 December 2025, III C 3 - S 7344/00040/008/034, form USt 2 A ([BMF](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-muster-USt-erklaerung-2026.pdf?__blob=publicationFile&v=5)) |
 | Recapitulative statement 2026 (Zusammenfassende Meldung) | [`de-zm-2026.json`](data/reports/de-zm-2026.json) | [§ 18a UStG](https://www.gesetze-im-internet.de/ustg_1980/__18a.html) |
 
@@ -122,14 +124,15 @@ resolve:
   (§ 18 Abs. 3 UStG). As in the advance return, the form computes the tax at the standard and reduced rates and the
   totals; the advance payments of the year (line 125), the balance (Kz 816, 820) and the yes/no questions are not part
   of the mapping. Exempt supplies without deduction (`de-out-exempt`) fall to Kz 240, those that belong to the total
-  turnover of § 19 Abs. 2 UStG; the letting of land (§ 4 Nr. 12, Kz 286) and the other exempt supplies outside the
-  total turnover (Kz 287) need tax codes of their own (OPEN). The form of 2025 is not part of this version (OPEN).
+  turnover of § 19 Abs. 2 UStG; the letting of land (`de-out-exempt-letting`, § 4 Nr. 12) to Kz 286. The other exempt
+  supplies outside the total turnover (Kz 287) need a tax code of their own (OPEN). The form of 2025 is not part of this version (OPEN).
 - **Fields of the Anlage EÜR** are its section and Kennzahl (`1.112`, `2.280`, `5.122`): the same Kennzahl appears in
   more than one section. Income falls into its line by its tax code – taxable, exempt or zero-rated, small business –,
   expenses by their account; VAT received and deductible VAT by tax code, VAT paid to and refunded by the tax office by
   `vat_settlement`; withdrawals and contributions of the proprietor by the side of their account. The EÜR counts
   receipts and payments when they occur (§ 11 EStG), so a set of books that determines its profit this way dates its
-  bookings when paid. The lines the form computes – totals, the profit, its corrections – are not part of the
+  bookings when paid; both mappings are `cash_basis`, so that a regularly recurring payment within ten days of the
+  turn of the year counts in the year it belongs to (part 0001). The lines the form computes – totals, the profit, its corrections – are not part of the
   mapping.
 - **Every expense account has its line**, after the instructions to the form (Anleitung zur Anlage EÜR 2026): an
   account falls to the line of other expenses (`2.183`, line 61) only by a mapping of its own, never as the default

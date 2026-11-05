@@ -79,6 +79,7 @@ pub(crate) fn safe_u64<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
     Ok(value)
 }
 
+mod asset;
 mod balance;
 pub mod bank_csv;
 mod booking;
@@ -105,6 +106,7 @@ mod report;
 mod statement;
 mod tax;
 
+pub use asset::{Asset, AssetFields, AssetId, AssetProblem, AssetState, Depreciation, Disposal};
 pub use balance::{BalanceError, Balances};
 pub use booking::{AccountId, Booking, BookingError, Exchange, Posting};
 pub use books::{
@@ -170,6 +172,9 @@ pub enum ParseError {
     /// A document identity that is not a UUID in lower case.
     #[error("not a document id: {0:?}")]
     Document(String),
+    /// An asset identity that is not a UUID in lower case.
+    #[error("not an asset id: {0:?}")]
+    Asset(String),
     /// A party identity that is not a UUID in lower case.
     #[error("not a party id: {0:?}")]
     Party(String),

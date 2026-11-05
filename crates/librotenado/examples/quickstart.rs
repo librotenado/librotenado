@@ -14,6 +14,7 @@ const TRAVEL: &str = "0192f1e4-0000-7000-8000-000000000003";
 fn booking(text: &str, account: &str, cents: i128) -> Booking {
     let money = |base_units: i128| Money::new(base_units, "EUR".parse().unwrap()).expect("within range");
     Booking {
+        attributed: None,
         date: "2026-10-24".parse().unwrap(),
         text: text.into(),
         postings: vec![

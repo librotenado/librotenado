@@ -6,6 +6,7 @@
   {"code": "de-out-ig-new-vehicle", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. b, § 6a, § 1b Abs. 2 und 3"},
   {"code": "de-out-export", "direction": "output", "law": "UStG § 4 Nr. 1 Buchst. a, § 6; § 4 Nr. 2 bis 7"},
   {"code": "de-out-exempt", "direction": "output", "law": "UStG § 4 Nr. 8 bis 29"},
+  {"code": "de-out-exempt-letting", "direction": "output", "law": "UStG § 4 Nr. 12"},
   {"code": "de-out-small-business", "direction": "output", "law": "UStG § 19 Abs. 1"},
   {"code": "de-out-13b", "direction": "output", "law": "UStG § 13b Abs. 5"},
   {"code": "de-out-eu-service", "direction": "output", "law": "UStG § 3a Abs. 2, § 18b Satz 1 Nr. 2"},
@@ -16,7 +17,9 @@
   {"code": "de-in-ig-acquisition-19", "direction": "input", "rate": "19", "law": "UStG § 1a, § 15 Abs. 1 Satz 1 Nr. 3"},
   {"code": "de-in-ig-acquisition-7", "direction": "input", "rate": "7", "law": "UStG § 1a, § 15 Abs. 1 Satz 1 Nr. 3"},
   {"code": "de-in-13b-eu-service", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 1, § 15 Abs. 1 Satz 1 Nr. 4"},
+  {"code": "de-in-13b-eu-service-7", "direction": "input", "rate": "7", "law": "UStG § 13b Abs. 1, § 12 Abs. 2, § 15 Abs. 1 Satz 1 Nr. 4"},
   {"code": "de-in-13b-domestic", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 2 Nr. 1, 2, 4 bis 12, § 15 Abs. 1 Satz 1 Nr. 4"},
+  {"code": "de-in-13b-domestic-7", "direction": "input", "rate": "7", "law": "UStG § 13b Abs. 2 Nr. 1, 2, 4 bis 12, § 12 Abs. 2, § 15 Abs. 1 Satz 1 Nr. 4"},
   {"code": "de-in-13b-real-estate", "direction": "input", "rate": "19", "law": "UStG § 13b Abs. 2 Nr. 3, § 15 Abs. 1 Satz 1 Nr. 4"},
   {"code": "de-in-import-vat", "direction": "input", "law": "UStG § 15 Abs. 1 Satz 1 Nr. 2"},
   {"code": "de-in-no-deduction", "direction": "input", "law": "UStG § 15 Abs. 2"}

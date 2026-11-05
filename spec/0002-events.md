@@ -1,6 +1,6 @@
 # 0002 Events and synchronisation
 
-Version 0.9, draft. Implemented in the reference library (`crates/librotenado`).
+Version 0.14, draft. Implemented in the reference library (`crates/librotenado`).
 
 ## Events
 
@@ -102,6 +102,8 @@ silently resolve:
 - **Reversal mismatch** – a reversal whose postings are not those of the booking with the opposite amounts: the same
   owners, accounts, tax codes and exchange rates in the same order, the amounts and converted amounts negated. Notes,
   the date and the text may differ.
+- **Attribution** – a booking attributed to a day that is not in the year before its date, dated 1 to 10 January, or
+  the year after, dated 22 to 31 December (part 0001).
 
 ## Accounts of the books
 
