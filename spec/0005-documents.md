@@ -1,6 +1,6 @@
 # 0005 Documents
 
-Version 0.16, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
+Version 0.17, draft. Implemented in the reference library (`Document`, `Original`, `InvoiceData`, `en16931`,
 `propose_booking`, `StatementData`, `read_statements`, `camt`, `mt940`, `bank_csv`, event kinds `document_recorded` and
 `document_corrected`; `EventSet::documents`).
 
@@ -145,7 +145,8 @@ rules of EN 16931 a writer cannot repair, and names what is missing instead of w
   exemption reasons (CEF VATEX), units (UN/ECE Rec. 20 and 21) and media types of attached files. The lists are
   [`spec/data/codelists/en16931.json`](data/codelists/en16931.json), taken from the validation artefacts of CEN/TC 434
   in version 1.3.16, which the XRechnung configuration 3.0.2 uses
-  ([eInvoicing-EN16931](https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/tag/validation-1.3.16)).
+  ([eInvoicing-EN16931](https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/tag/validation-1.3.16)):
+  the codes of other standards, published here under CC BY 4.0 like the rest of the specification.
 
 An invoice with sub-lines or payments for third parties is written in UBL with the specification identifier of the
 extension (`…#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0`, BT-24): sub-lines as `cac:SubInvoiceLine`
@@ -357,8 +358,6 @@ header is MT940, anything else is read as CSV.
 ## Open points
 
 - The extension of XRechnung in CII, for which the test suite has no case.
-- Whether the code lists may be published under CC BY 4.0: they are lists of the codes of other standards, extracted
-  from artefacts of CEN/TC 434 published under the EUPL 1.2.
 - Rates other than 19 % and 7 % get no tax code.
 - Profiles of ZUGFeRD other than XRECHNUNG (EN 16931, EXTENDED). The file name `xrechnung.xml`, `fx:Version` 1.0 and
   `fx:ConformanceLevel` XRECHNUNG follow a vendor's documentation of the ZUGFeRD / Factur-X specification

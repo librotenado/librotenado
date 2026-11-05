@@ -2,6 +2,19 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.17.0 – 2026-11-05
+
+The tax codes of DATEV's automatic accounts, and the cash discounts of SKR 03 and SKR 04.
+
+- [0004 Chart of accounts](spec/0004-chart-of-accounts.md): the attribute `tax`, the tax code postings on an account
+  carry – on the 163 accounts of the chart DATEV computes VAT on (`AM`, `AV`, Kontenrahmen SKR 03 and SKR 04 valid for
+  2026) where a code of part 0001 says the same. Added to the chart of version 0.1: the 31 collective accounts of
+  cash discounts granted and received (`S/AM`, `S/AV`), with names in German, English and French and their numbers in
+  both charts; SKR 04 3900 translates into the deferred income of SKR 03 0990. Fixed: the names of SKR 03 8950, 3793
+  and SKR 04 5793, which had taken in text of the accounts beside them.
+- [0005 Documents](spec/0005-documents.md): the code lists are published under CC BY 4.0 with the specification.
+- Library: `Chart::tax_code`.
+
 ## 0.16.0 – 2026-11-05
 
 Withdrawn currencies, a financial year from the middle of a month, remaining terms, the E-Bilanz per legal form and

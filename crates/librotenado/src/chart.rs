@@ -178,6 +178,12 @@ impl Chart {
         Ok(())
     }
 
+    /// The tax code postings on the account carry, by its attribute `tax`, own or inherited (spec part 0004): the
+    /// automatic accounts of DATEV (AM, AV) and their like.
+    pub fn tax_code(&self, id: &AccountId) -> Option<crate::TaxCode> {
+        self.attributes(id).get("tax")?.parse().ok()
+    }
+
     /// The account's attributes including those inherited from its parents (its own values win).
     pub fn attributes(&self, id: &AccountId) -> BTreeMap<String, String> {
         let mut chain = Vec::new();
@@ -409,6 +415,39 @@ mod tests {
             for (number, account) in &translation.accounts {
                 let placed = bs.position(account, &parents, false).or(gkv.position(account, &parents, false));
                 assert!(placed.is_some(), "{} {number}", translation.chart);
+            }
+        }
+    }
+
+    /// The automatic accounts of SKR 03 and SKR 04 carry the tax code DATEV computes on them, a code of the tax
+    /// table; the others none.
+    #[test]
+    fn automatic_accounts_carry_their_tax_code() {
+        let chart = Chart::v0_1();
+        let table = crate::TaxTable::de();
+        let code = |translation: &ChartTranslation, number: &str| {
+            chart.tax_code(&translation.accounts[number]).map(|c| c.to_string())
+        };
+        let (skr03, skr04) = (ChartTranslation::de_skr03(), ChartTranslation::de_skr04());
+        for (number, expected) in [
+            ("8400", Some("de-out-19")),
+            ("8300", Some("de-out-7")),
+            ("8125", Some("de-out-ig-supply")),
+            ("3425", Some("de-in-ig-acquisition-19")),
+            ("3123", Some("de-in-13b-eu-service")),
+            ("8736", Some("de-out-19")),
+            ("3736", Some("de-in-19")),
+            ("8340", None),
+            ("1200", None),
+        ] {
+            assert_eq!(code(&skr03, number).as_deref(), expected, "SKR 03 {number}");
+        }
+        assert_eq!(code(&skr04, "4400").as_deref(), Some("de-out-19"));
+        assert_eq!(code(&skr04, "5736").as_deref(), Some("de-in-19"));
+        for account in &chart.accounts {
+            if let Some(value) = account.attributes.get("tax") {
+                let parsed: crate::TaxCode = value.parse().expect("a tax code");
+                assert!(table.get(&parsed).is_some(), "{value} is in the tax table");
             }
         }
     }
