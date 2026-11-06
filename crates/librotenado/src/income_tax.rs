@@ -42,10 +42,6 @@ pub struct IncomeTaxFacts {
     pub single_parent_children: u8,
 }
 
-/// The allowances for one child, both parents together, in 2026: twice 3,414 euros for the child and twice 1,464
-/// euros for care, education and training (§ 32 Abs. 6 EStG; the PAP 2026 uses 9,756).
-const CHILD_ALLOWANCE_2026: i128 = 9_756 * 100;
-
 /// The income tax of a person for a calendar year, in base units of the euro.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct IncomeTax {
@@ -86,28 +82,36 @@ pub struct IncomeTax {
 
 const EURO: i128 = 100;
 
-/// The tariff income tax in full euros for a taxable income in full euros (§ 32a Abs. 1 EStG), from 2026; `None` for
-/// earlier years (OPEN).
+/// The tariff income tax in full euros for a taxable income in full euros (§ 32a Abs. 1 EStG), by the values of the
+/// year (`LawValues::de`, keys `est.*`): from 2026; `None` for a year without them (OPEN).
 pub fn income_tax_tariff(year: u16, taxable_euros: i128) -> Option<i128> {
-    if year < 2026 {
-        return None;
-    }
+    let law = crate::LawValues::de();
+    let day = Date::new(year, 1, 1)?;
+    let euros = |key: &str| law.cents(key, day).map(|c| c / EURO);
+    let frac = |key: &str| law.fraction(key, day);
+    let (gfb, z2, z3, z4) =
+        (euros("est.basic_allowance")?, euros("est.zone2_end")?, euros("est.zone3_end")?, euros("est.zone4_end")?);
+    // A value a × 10^-s in ten-billionths of a euro, times n.
+    let scaled = |(units, denominator): (i128, i128), n: i128| units * n * 10_000_000_000 / denominator;
     let x = taxable_euros.max(0);
-    // Each zone in hundred-millionths of a euro, then rounded down to full euros.
-    let scaled: i128 = match x {
-        ..=12_348 => 0,
-        12_349..=17_799 => {
-            let d = x - 12_348;
-            91_451 * d * d + 1_400 * 1_000_000 * d
-        }
-        17_800..=69_878 => {
-            let d = x - 17_799;
-            17_310 * d * d + 2_397 * 1_000_000 * d + 103_487 * 100_000_000
-        }
-        69_879..=277_825 => (42 * x - 1_113_563) * 100_000_000,
-        _ => (45 * x - 1_947_038) * 100_000_000,
+    // Each zone in ten-billionths of a euro, then rounded down to full euros; y and z are ten-thousandths of the
+    // income above the zone's start.
+    let tenth_billions: i128 = if x <= gfb {
+        0
+    } else if x <= z2 {
+        let d = x - gfb;
+        scaled(frac("est.zone2_a")?, d * d) / 100_000_000 + scaled(frac("est.zone2_b")?, d) / 10_000
+    } else if x <= z3 {
+        let d = x - z2;
+        scaled(frac("est.zone3_a")?, d * d) / 100_000_000
+            + scaled(frac("est.zone3_b")?, d) / 10_000
+            + scaled(frac("est.zone3_c")?, 1)
+    } else {
+        let (rate, minus) =
+            if x <= z4 { ("est.zone4_rate", "est.zone4_minus") } else { ("est.zone5_rate", "est.zone5_minus") };
+        scaled(frac(rate)?, x) / 100 - scaled(frac(minus)?, 1)
     };
-    Some(scaled / 10_000_000_000)
+    Some(tenth_billions / 10_000_000_000)
 }
 
 /// The tariff for a taxable income in base units: on the income rounded down to full euros, by the splitting tariff
@@ -131,15 +135,20 @@ fn fifth(year: u16, taxable: i128, extraordinary: i128, joint: bool) -> Option<i
     Some(base + 5 * (tariff(year, rest + x / 5, joint)? - base))
 }
 
-/// The solidarity surcharge on an income tax assessed (§ 3 Abs. 3, § 4 SolZG): none up to the exemption limit of
-/// 20,350 euros, or 40,700 euros for spouses; 5.5 %, but no more than 11.9 % of what exceeds the limit; fractions of a
-/// cent left out.
+/// The solidarity surcharge on an income tax assessed (§ 3 Abs. 3, § 4 SolZG) of 2026: none up to the exemption
+/// limit of 20,350 euros, or 40,700 euros for spouses; 5.5 %, but no more than 11.9 % of what exceeds the limit;
+/// fractions of a cent left out. The values are those of `LawValues::de` (`soli.*`).
 pub fn solidarity_surcharge(assessed: i128, joint: bool) -> i128 {
-    let limit = if joint { 40_700 * EURO } else { 20_350 * EURO };
+    let law = crate::LawValues::de();
+    let day = Date::new(2026, 1, 1).expect("a date");
+    let single = law.cents("soli.limit", day).expect("published");
+    let limit = if joint { 2 * single } else { single };
     if assessed <= limit {
         return 0;
     }
-    (assessed * 55 / 1000).min((assessed - limit) * 119 / 1000)
+    let rate = law.millionths("soli.rate", day).expect("published");
+    let mitigation = law.millionths("soli.mitigation", day).expect("published");
+    (assessed * rate / 1_000_000).min((assessed - limit) * mitigation / 1_000_000)
 }
 
 impl EventSet {
@@ -170,18 +179,29 @@ impl EventSet {
         };
         let total = tax.business + tax.other_income;
         // Losses: up to 1 million euros, 2 million for spouses, in full, above it up to 70 % (§ 10d Abs. 2 EStG).
-        let threshold = if facts.joint { 2_000_000 * EURO } else { 1_000_000 * EURO };
+        let law = crate::LawValues::de();
+        let day = Date::new(to.year(), 1, 1).expect("a year of a date");
+        let value = |key: &str| law.cents(key, day).expect("published");
+        let percent = |key: &str| law.millionths(key, day).expect("published") / 10_000;
+        let full = value("est.loss_full");
+        let threshold = if facts.joint { 2 * full } else { full };
         if total > 0 && facts.losses > 0 {
-            let limit = if total <= threshold { total } else { threshold + (total - threshold) * 70 / 100 };
+            let rest = percent("est.loss_rest");
+            let limit = if total <= threshold { total } else { threshold + (total - threshold) * rest / 100 };
             tax.loss_deduction = facts.losses.min(limit);
         }
         // The relief for single parents: 4,260 euros and 240 for each further child (§ 24b Abs. 2 EStG).
         if facts.single_parent_children > 0 {
-            tax.single_parent_relief = (4_260 + 240 * i128::from(facts.single_parent_children - 1)) * EURO;
+            tax.single_parent_relief = value("est.single_parent")
+                + value("est.single_parent_more") * i128::from(facts.single_parent_children - 1);
         }
         let before_children = (total - tax.loss_deduction - tax.deductions - tax.single_parent_relief).max(0);
         let year = to.year();
-        let allowances = if year >= 2026 { CHILD_ALLOWANCE_2026 * i128::from(facts.child_allowances) / 10 } else { 0 };
+        // The allowances for one child, both parents together (`est.child_allowance`, § 32 Abs. 6 EStG).
+        let law = crate::LawValues::de();
+        let day = Date::new(year, 1, 1).expect("a year of a date");
+        let child = law.cents("est.child_allowance", day).unwrap_or(0);
+        let allowances = child * i128::from(facts.child_allowances) / 10;
         let with = (before_children - allowances).max(0) / EURO * EURO;
         let without = before_children / EURO * EURO;
         let extraordinary = facts.extraordinary.max(0);
@@ -208,25 +228,30 @@ impl EventSet {
         let positive = tax.business.max(0) + tax.other_income.max(0);
         let credit = |tariff: i128| {
             let share = if positive > 0 { tariff * tax.business.max(0) / positive } else { 0 };
-            (4 * base).min(paid).min(share).max(0)
+            (law.fraction("est.trade_tax_credit", day).map_or(4, |(n, d)| n / d) * base).min(paid).min(share).max(0)
         };
         if base > 0 {
             tax.trade_tax_credit = credit(tax.tariff);
         }
         // Capital income: after the saver's allowance of 1,000 euros, 2,000 for spouses (§ 20 Abs. 9 EStG), 25 %; with
         // church tax (e − 4q) / (4 + k), q the foreign tax credited, here none (§ 32d Abs. 1 Satz 3 to 5 EStG).
-        let allowance = if facts.joint { 2_000 * EURO } else { 1_000 * EURO };
+        let saver = value("est.saver_allowance");
+        let allowance = if facts.joint { 2 * saver } else { saver };
         tax.capital_income = (facts.capital_income - allowance).max(0);
         let k = facts.church_rate.map_or(0, i128::from);
-        tax.capital_tax = tax.capital_income * 100 / (400 + k);
+        // 25 % as e / (4 + k): with the rate r, e · r / (1 + r · k).
+        let r = percent("est.capital_rate");
+        tax.capital_tax = tax.capital_income * r * 100 / (10_000 + r * k);
         tax.assessed = tax.tariff - tax.trade_tax_credit + tax.child_benefit_added + tax.capital_tax;
         // The solidarity surcharge: the exemption limit tested without the tax on capital income, which bears 5.5 %
         // in any case (§ 3 Abs. 3, § 4 Satz 4 SolZG).
         let surcharge_base = base_tariff - if base > 0 { credit(base_tariff) } else { 0 };
-        tax.solidarity = solidarity_surcharge(surcharge_base, facts.joint) + tax.capital_tax * 55 / 1000;
+        tax.solidarity = solidarity_surcharge(surcharge_base, facts.joint)
+            + tax.capital_tax * law.millionths("soli.rate", day).expect("published") / 1_000_000;
         tax.church = facts.church_rate.map_or(0, |rate| (base_tariff + tax.capital_tax) * i128::from(rate) / 100);
         let quarter = tax.assessed / 4;
-        tax.advance_payment = if tax.assessed >= 400 * EURO && quarter >= 100 * EURO { quarter } else { 0 };
+        let due = tax.assessed >= value("est.advance_year") && quarter >= value("est.advance_quarter");
+        tax.advance_payment = if due { quarter } else { 0 };
         Ok(Some(tax))
     }
 }

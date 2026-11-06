@@ -2,6 +2,16 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## Unreleased
+
+- The rulebook at librotenado.dev/rules, written from the library when the documentation is built
+  (`examples/rulebook.rs`): every account of SKR 03 and SKR 04 with its attributes and its position in each report,
+  the tax codes with the fields of the VAT return and the EÜR, and the values of the law.
+- [0009 Reports](spec/0009-reports.md): values of the law as data (`spec/data/law/de.json`, `LawValues`) – limits,
+  rates, allowances and tariffs of the social insurance, wage tax, income tax, solidarity surcharge, corporation
+  tax, trade tax and the interest barrier, each with its provision and the state of its review; the library computes
+  with them.
+
 ## 0.22.0 – 2026-11-06
 
 The gaps of German law that need neither ERiC nor a tax adviser.

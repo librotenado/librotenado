@@ -263,20 +263,24 @@ impl EventSet {
         let tax = &de.tax;
         if tax.flat {
             // 2 % of the wages, with solidarity surcharge and church tax (§ 40a Abs. 2 EStG).
-            figures.insert("flat_tax", (current + s.one_off) * 2 / 100);
+            let rate = crate::LawValues::de().millionths("lst.flat_minor", to).ok_or(PayrollError::Year(year))?;
+            figures.insert("flat_tax", (current + s.one_off) * rate / 1_000_000);
         } else if tax.short_term {
             // 25 % of the wages of an employment of at most 18 days with at most 150 euros a day (§ 40a Abs. 1
             // EStG); the solidarity surcharge 5.5 % of it (§ 3 Abs. 1 Nr. 3, § 4 SolZG). The days are counted as
             // calendar days of the employment, the hourly limit of 19 euros (Abs. 4 Nr. 1) is not checked (OPEN).
+            let law = crate::LawValues::de();
             let span = described.end.map(|end| day_number(end) - day_number(described.start) + 1);
             let wages = current + s.one_off;
             match span {
-                Some(span) if span <= 18 && wages <= 15_000 * i128::from(span) => {}
+                Some(span)
+                    if i128::from(span) <= law.fraction("lst.short_term_days", to).map_or(0, |(n, d)| n / d)
+                        && wages <= law.cents("lst.short_term_daily", to).unwrap_or(0) * i128::from(span) => {}
                 _ => return Err(PayrollError::ShortTerm),
             }
-            let flat = wages * 25 / 100;
+            let flat = wages * law.millionths("lst.flat_short_term", to).unwrap_or(0) / 1_000_000;
             figures.insert("flat_wage_tax", flat);
-            figures.insert("flat_solidarity", flat * 55 / 1000);
+            figures.insert("flat_solidarity", flat * law.millionths("soli.rate", to).unwrap_or(0) / 1_000_000);
         } else {
             let class = tax.class.ok_or(PayrollError::Class)?;
             let private = match (&insurance.private, groups[0]) {
@@ -341,7 +345,8 @@ impl EventSet {
                 ..facts
             };
             // The Aktivrente: a twelfth of 24,000 euros of the current wages a month free of tax (§ 3 Nr. 21 EStG).
-            let active = if tax.active_pension { current.min(200_000) } else { 0 };
+            let monthly = crate::LawValues::de().cents("lst.active_pension", to).unwrap_or(0) / 12;
+            let active = if tax.active_pension { current.min(monthly) } else { 0 };
             if active > 0 {
                 figures.insert("active_pension_free", active);
             }

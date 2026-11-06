@@ -99,6 +99,7 @@ mod filing;
 pub mod gobd;
 mod income_tax;
 mod invoice;
+mod law;
 mod money;
 pub mod mt940;
 mod names;
@@ -143,6 +144,7 @@ pub use invoice::{
     Payment, PaymentCard, Period, PostalAddress, PrecedingInvoice, ProposalAccounts, ProposalError, SupportingDocument,
     ThirdPartyPayment, VatBreakdown, VatCategory, de_tax_code, propose_booking,
 };
+pub use law::{LawValue, LawValues};
 pub use money::{Currency, CurrencyDefinition, CurrencyTable, DefinitionError, FixedRate, Money, Withdrawn};
 pub use names::Names;
 pub use object::{Object, ObjectError, from_root, to_root};

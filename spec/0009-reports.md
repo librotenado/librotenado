@@ -103,6 +103,17 @@ member `payroll_fields` names, per field, the figures it sums over the payslips 
 period of the report. A name `<figure>@<community>` counts only payslips of employees whose church tax goes to that
 religious community.
 
+## Values of the law
+
+The limits, rates, allowances and tariffs a country's rules compute with are data, not code
+([`law/de.json`](data/law/de.json), type `law_values`), so that the rules can be reviewed where they are used: per
+value its `key` (`sv.health_ceiling`), the day it applies `from` – until the next value of the same key –, the
+`value` in its `unit` (`EUR`, `EUR/year`, `EUR/month`, `EUR/day`, `percent`, `factor`, `days`), the provision
+(`law`) with its `url`, and the `status` of its review: `draft` until a tax adviser has reviewed it, then who did and
+when. An implementation computes with the value that applies on the first day of the year concerned. The rulebook at
+[librotenado.dev/rules](https://librotenado.dev/rules/) is written from the same data and from the library when the
+documentation is built.
+
 ## The German reports of 2026
 
 | Report | File | Source |

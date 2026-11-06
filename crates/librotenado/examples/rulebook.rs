@@ -4,7 +4,9 @@
 //!   cargo run --example rulebook -- <directory>
 use std::{collections::BTreeMap, fmt::Write as _, fs, path::Path};
 
-use librotenado::{AccountId, Chart, ChartTranslation, EventSet, Names, ReportMapping, TaxDirection, TaxTable};
+use librotenado::{
+    AccountId, Chart, ChartTranslation, EventSet, LawValues, Names, ReportMapping, TaxDirection, TaxTable,
+};
 
 /// The reports whose positions the account pages show, with a short column title.
 fn reports() -> Vec<(&'static str, ReportMapping)> {
@@ -66,6 +68,7 @@ fn main() {
          The attributes of accounts are those of the specification: `profit` and `trade_tax` for the taxes on profit \
          ([0012](../spec/0012-taxes-on-profit.html)), `tax` the code of an automatic account, `term` the remaining \
          term, `interest` the interest income of the interest barrier ([0004](../spec/0004-chart-of-accounts.html)).\n\n\
+         - [Values of the law of Germany](de-values.html) – limits, rates, tariffs, with their provision and review\n\
          - [Tax codes of Germany](de-tax-codes.html)\n"
     )
     .unwrap();
@@ -106,12 +109,8 @@ fn main() {
             }
             page.push('\n');
             for (number, id) in accounts {
-                let attributes = chart
-                    .attributes(id)
-                    .iter()
-                    .map(|(k, v)| format!("{k}: {v}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                let attributes =
+                    chart.attributes(id).iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join(", ");
                 write!(page, "| {number} | {} | {} |", cell(de.get(id.as_str()).unwrap_or("")), cell(&attributes))
                     .unwrap();
                 for (_, mapping) in &reports {
@@ -140,7 +139,8 @@ fn main() {
     .unwrap();
     for code in &table.codes {
         let rule = ustva.taxes.iter().find(|r| r.tax == code.code);
-        let field = |f: fn(&librotenado::TaxRule) -> &Option<String>| rule.and_then(|r| f(r).clone()).unwrap_or_default();
+        let field =
+            |f: fn(&librotenado::TaxRule) -> &Option<String>| rule.and_then(|r| f(r).clone()).unwrap_or_default();
         let euer_rule = euer.taxes.iter().find(|r| r.tax == code.code);
         let euer_base = euer_rule.and_then(|r| r.base.clone()).unwrap_or_default();
         let euer_tax = euer_rule.and_then(|r| r.output.clone().or_else(|| r.input.clone())).unwrap_or_default();
@@ -165,5 +165,47 @@ fn main() {
         .unwrap();
     }
     fs::write(dir.join("de-tax-codes.md"), page).unwrap();
+
+    // The values of the law: what the rules compute with, each with its provision and the state of its review.
+    let law = LawValues::de();
+    let mut page = front("Values of the law of Germany", Some("Rulebook"), 0, "/rules/de-values.html");
+    page.push_str(
+        "Every limit, rate and allowance the German rules of the library compute with, as the library reads them \
+         (`spec/data/law/de.json`). A value applies from its day until the next value of the same key. The wage tax \
+         itself follows the Programmablaufplan of the BMF, translated from its XML pseudocode and checked against \
+         the BMF's interface for programme tests ([0013](../spec/0013-payroll.html)).\n\n",
+    );
+    let groups = [
+        ("sv.", "Sozialversicherung"),
+        ("lst.", "Lohnsteuer"),
+        ("est.", "Einkommensteuer"),
+        ("soli.", "Solidaritätszuschlag"),
+        ("kst.", "Körperschaftsteuer"),
+        ("gewst.", "Gewerbesteuer"),
+        ("zins.", "Zinsschranke"),
+    ];
+    for (prefix, title) in groups {
+        write!(
+            page,
+            "## {title}\n\n| Wert | ab | Betrag | Einheit | Vorschrift | Prüfung |\n|---|---|---|---|---|---|\n"
+        )
+        .unwrap();
+        for v in law.values.iter().filter(|v| v.key.starts_with(prefix)) {
+            writeln!(
+                page,
+                "| `{}` | {} | {} | {} | [{}]({}) | {} |",
+                v.key,
+                v.from,
+                v.value,
+                v.unit,
+                cell(&v.law),
+                v.url,
+                cell(&v.status)
+            )
+            .unwrap();
+        }
+        page.push('\n');
+    }
+    fs::write(dir.join("de-values.md"), page).unwrap();
     fs::write(dir.join("index.md"), index).unwrap();
 }

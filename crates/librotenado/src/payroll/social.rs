@@ -45,52 +45,46 @@ pub(super) struct Year {
     pub factor: (i128, i128),
 }
 
-/// The year 2026.
-pub(super) const Y2026: Year = Year {
-    health_ceiling: 6_975_000,
-    pension_ceiling: 10_140_000,
-    health: 146_000,
-    health_reduced: 140_000,
-    care: 36_000,
-    childless: 6_000,
-    per_child: 2_500,
-    saxony: 10_000,
-    pension: 186_000,
-    unemployment: 26_000,
-    insolvency: 1_500,
-    average_additional: 29_000,
-    trainee_limit: 32_500,
-    pension_threshold: 19_775,
-    minor_limit: 60_300,
-    minor_health: 130_000,
-    minor_pension: 150_000,
-    minor_u1: 8_000,
-    minor_u2: 2_200,
-    minor_minimum: 17_500,
-    household_health: 50_000,
-    household_pension: 50_000,
-    household_accident: 16_000,
-    transition_limit: 200_000,
-    factor: (6_619, 10_000),
-};
-
-/// The year 2025, for one-off payments of January to March attributed to it (§ 23a Abs. 4 SGB IV).
-pub(super) const Y2025: Year = Year {
-    health_ceiling: 6_615_000,
-    pension_ceiling: 9_660_000,
-    minor_limit: 55_600,
-    minor_u1: 11_000,
-    factor: (6_683, 10_000),
-    ..Y2026
-};
-
-/// The values of `year`, where this version has them.
+/// The values of `year` from the values of the law of Germany (`LawValues::de`), as they apply on its first day;
+/// `None` for a year this version has not all of them for.
 pub(super) fn year(year: u16) -> Option<Year> {
-    match year {
-        2025 => Some(Y2025),
-        2026 => Some(Y2026),
-        _ => None,
-    }
+    let law = crate::LawValues::de();
+    let day = crate::Date::new(year, 1, 1)?;
+    let cents = |key: &str| law.cents(key, day);
+    let rate = |key: &str| law.millionths(key, day);
+    Some(Year {
+        health_ceiling: cents("sv.health_ceiling")?,
+        pension_ceiling: cents("sv.pension_ceiling")?,
+        health: rate("sv.health")?,
+        health_reduced: rate("sv.health_reduced")?,
+        care: rate("sv.care")?,
+        childless: rate("sv.care_childless")?,
+        per_child: rate("sv.care_per_child")?,
+        saxony: rate("sv.care_saxony")?,
+        pension: rate("sv.pension")?,
+        unemployment: rate("sv.unemployment")?,
+        insolvency: rate("sv.insolvency")?,
+        // The average additional rate of 2026 for the years before it too: only trainees use it (OPEN).
+        average_additional: law
+            .millionths("sv.average_additional", day)
+            .or_else(|| law.millionths("sv.average_additional", crate::Date::new(2026, 1, 1).expect("a date")))?,
+        trainee_limit: cents("sv.trainee_limit")?,
+        // The twentieth of the reference value of 2026 for the years before it too: pensions in a one-off payment
+        // attributed to 2025 do not occur (OPEN).
+        pension_threshold: cents("sv.pension_threshold")
+            .or_else(|| law.cents("sv.pension_threshold", crate::Date::new(2026, 1, 1).expect("a date")))?,
+        minor_limit: cents("sv.minor_limit")?,
+        minor_health: rate("sv.minor_health")?,
+        minor_pension: rate("sv.minor_pension")?,
+        minor_u1: rate("sv.minor_u1")?,
+        minor_u2: rate("sv.minor_u2")?,
+        minor_minimum: cents("sv.minor_minimum")?,
+        household_health: rate("sv.household_health")?,
+        household_pension: rate("sv.household_pension")?,
+        household_accident: rate("sv.household_accident")?,
+        transition_limit: cents("sv.transition_limit")?,
+        factor: law.fraction("sv.factor_f", day)?,
+    })
 }
 
 /// What the contributions of a month depend on.
@@ -354,7 +348,7 @@ mod tests {
 
     #[test]
     fn a_month_of_3000_euros() {
-        let c = contributions(&Y2026, &month(300_000));
+        let c = contributions(&year(2026).unwrap(), &month(300_000));
         // 7.3 % = 219.00, 1.45 % = 43.50, 1.8 % = 54.00, 9.3 % = 279.00, 1.3 % = 39.00, U3 0.15 % = 4.50.
         assert_eq!((c["health_employee"], c["health_employer"]), (21_900, 21_900));
         assert_eq!((c["health_additional_employee"], c["health_additional_employer"]), (4_350, 4_350));
@@ -362,19 +356,19 @@ mod tests {
         assert_eq!((c["pension_employee"], c["unemployment_employee"]), (27_900, 3_900));
         assert_eq!(c["u3"], 450);
         // Without children 0.6 % more for the employee; with three children two reductions of 0.25 %.
-        let c = contributions(&Y2026, &Month { childless: true, ..month(300_000) });
+        let c = contributions(&year(2026).unwrap(), &Month { childless: true, ..month(300_000) });
         assert_eq!(c["care_employee"], 5_400 + 1_800);
-        let c = contributions(&Y2026, &Month { children: 3, ..month(300_000) });
+        let c = contributions(&year(2026).unwrap(), &Month { children: 3, ..month(300_000) });
         assert_eq!(c["care_employee"], 5_400 - 1_500);
         // Saxony: 2.3 % and 1.3 %.
-        let c = contributions(&Y2026, &Month { saxony: true, ..month(300_000) });
+        let c = contributions(&year(2026).unwrap(), &Month { saxony: true, ..month(300_000) });
         assert_eq!((c["care_employee"], c["care_employer"]), (6_900, 3_900));
     }
 
     #[test]
     fn ceilings_and_one_off_payments() {
         // 7,000 euros: health up to 5,812.50, pension below 8,450.
-        let c = contributions(&Y2026, &month(700_000));
+        let c = contributions(&year(2026).unwrap(), &month(700_000));
         assert_eq!((c["health_base"], c["pension_base"]), (581_250, 700_000));
         // A bonus of 10,000 in the third month after two of 7,000: health has no room left, pension 3 × 8,450 −
         // 3 × 7,000 = 4,350.
@@ -385,10 +379,10 @@ mod tests {
             pension_before: 2 * 700_000,
             ..month(700_000)
         };
-        let c = contributions(&Y2026, &m);
+        let c = contributions(&year(2026).unwrap(), &m);
         assert_eq!((c["health_base"], c["pension_base"]), (581_250, 700_000 + 435_000));
         // Half a month: the ceiling of 15 days.
-        let c = contributions(&Y2026, &Month { days: 15, ..month(700_000) });
+        let c = contributions(&year(2026).unwrap(), &Month { days: 15, ..month(700_000) });
         assert_eq!(c["health_base"], 6_975_000 * 15 / 360);
     }
 
@@ -396,25 +390,25 @@ mod tests {
     fn the_transition_range() {
         // 1,000 euros: BE = 0.6619 × 603 + (2000 − 603 × 0.6619) / 1397 × 397 = 854.06…;
         // BE_AN = 2000 / 1397 × 397 = 568.36…
-        let c = contributions(&Y2026, &month(100_000));
+        let c = contributions(&year(2026).unwrap(), &month(100_000));
         // Pension: total 2 × round(9.3 % × BE), employee 9.3 % × BE_AN = 52.86.
         assert_eq!(c["pension_employee"], 5_286);
         let total = c["pension_employee"] + c["pension_employer"];
         assert_eq!(total, 2 * 7_943);
         // At the upper limit the shares are equal again.
-        let c = contributions(&Y2026, &month(200_000));
+        let c = contributions(&year(2026).unwrap(), &month(200_000));
         assert_eq!(c["pension_employee"], c["pension_employer"]);
     }
 
     #[test]
     fn a_minor_employment() {
         let m = Month { groups: [6, 1, 0, 0], minor: true, current: 60_000, days: 30, ..Month::default() };
-        let c = contributions(&Y2026, &m);
+        let c = contributions(&year(2026).unwrap(), &m);
         // 13 % = 78.00; pension 15 % = 90.00 and the employee 18.6 % − that = 111.60 − 90.00 = 21.60.
         assert_eq!((c["health_flat"], c["pension_flat"], c["pension_employee"]), (7_800, 9_000, 2_160));
         assert_eq!((c["u1"], c["u2"], c["u3"]), (480, 132, 90));
         // In a private household: 5 % and 5 %, the employee 13.6 %, accident insurance 1.6 %, no insolvency levy.
-        let c = contributions(&Y2026, &Month { household: true, ..m });
+        let c = contributions(&year(2026).unwrap(), &Month { household: true, ..m });
         assert_eq!((c["health_flat"], c["pension_flat"], c["pension_employee"]), (3_000, 3_000, 8_160));
         assert_eq!((c["accident"], c.get("u3")), (960, None));
     }
@@ -422,9 +416,9 @@ mod tests {
     #[test]
     fn a_short_term_employment() {
         let m = Month { short_term: true, current: 150_000, days: 10, ..Month::default() };
-        let c = contributions(&Y2026, &m);
+        let c = contributions(&year(2026).unwrap(), &m);
         assert_eq!((c.get("u1"), c["u2"], c["u3"]), (None, 330, 225));
-        let c = contributions(&Y2026, &Month { over_four_weeks: true, ..m });
+        let c = contributions(&year(2026).unwrap(), &Month { over_four_weeks: true, ..m });
         assert_eq!(c["u1"], 1_200);
         assert!(!c.keys().any(|k| k.contains("employee")));
     }

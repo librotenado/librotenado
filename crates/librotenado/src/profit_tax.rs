@@ -288,15 +288,26 @@ fn part(units: i128, numerator: i128, denominator: i128) -> i128 {
     units * numerator / denominator
 }
 
-/// The rate of corporation tax for a year, in tenths of a per cent (§ 23 Abs. 1 KStG).
+/// The rate of corporation tax for a year, in tenths of a per cent (§ 23 Abs. 1 KStG; `kst.rate` of
+/// `LawValues::de`); before the first year the values know, their first rate.
 pub fn corporation_tax_rate(year: u16) -> i128 {
-    match year {
-        ..=2027 => 150,
-        2028 => 140,
-        2029 => 130,
-        2030 => 120,
-        2031 => 110,
-        _ => 100,
+    let law = crate::LawValues::de();
+    let day = Date::new(year.max(1), 1, 1).expect("a year");
+    let first = law.values.iter().filter(|v| v.key == "kst.rate").map(|v| v.from).min().expect("published");
+    law.millionths("kst.rate", day.max(first)).expect("published") / 1_000
+}
+
+/// A value of the law of Germany on the first day of `year`: amounts in cents, percentages in millionths.
+fn law(year: u16) -> impl Fn(&str) -> i128 {
+    let values = crate::LawValues::de();
+    let day = Date::new(year, 1, 1).expect("a year");
+    move |key: &str| {
+        let v = values.get(key, day).unwrap_or_else(|| panic!("{key} is published for {year}"));
+        if v.unit == "percent" {
+            values.millionths(key, day).expect("published")
+        } else {
+            values.cents(key, day).expect("published")
+        }
     }
 }
 
@@ -306,7 +317,7 @@ fn usable_losses(income: i128, losses: i128, percent: i128) -> i128 {
     if income <= 0 || losses <= 0 {
         return 0;
     }
-    let million = 1_000_000 * EURO;
+    let million = law(2025)("est.loss_full");
     let limit = if income <= million { income } else { million + part(income - million, percent, 100) };
     losses.min(limit)
 }
@@ -415,13 +426,15 @@ impl EventSet {
         // and the EBITDA carried forward, where the net expense reaches 3 million euros and no exception applies.
         let interest_expense = trade.financing.get(&'a').copied().unwrap_or(0) + facts.interest_carryforward;
         tax.net_interest = interest_expense - interest_income;
-        let applies = tax.net_interest >= 3_000_000 * EURO && !facts.interest_exception;
+        let value = law(to.year().max(2025));
+        let applies = tax.net_interest >= value("zins.limit") && !facts.interest_exception;
         if applies {
             let depreciation: i128 = self.assets(owner).iter().map(|state| state.depreciation(from, to)).sum();
             // The income it starts from: without the barrier, losses, donations and the interest carried forward
             // (§ 4h Abs. 1 Satz 6, Abs. 3 Satz 1 EStG, § 8a Abs. 1 Satz 1 KStG).
             let current_net = tax.net_interest - facts.interest_carryforward;
-            let ebitda = part((before_donations + current_net + depreciation).max(0), 30, 100);
+            let ebitda =
+                part((before_donations + current_net + depreciation).max(0), value("zins.ebitda_rate"), 1_000_000);
             if tax.net_interest <= ebitda {
                 // EBITDA beyond the net interest is carried forward (Satz 3).
                 tax.ebitda_carried = facts.ebitda_carryforward + ebitda - tax.net_interest;
@@ -458,12 +471,12 @@ impl EventSet {
             None => {}
         }
         let losses = if matches!(facts.group, Some(GroupRole::Member { .. })) { 0 } else { facts.income_losses };
-        tax.loss_deduction = usable_losses(tax.income, losses, 70);
+        tax.loss_deduction = usable_losses(tax.income, losses, value("est.loss_rest") / 10_000);
         tax.taxable = tax.income - tax.loss_deduction;
         if corporate && tax.taxable > 0 {
             // Fractions of a cent stay out (§ 4 Satz 3 SolZG; OPEN for corporation tax).
             tax.corporation_tax = part(tax.taxable, corporation_tax_rate(to.year()), 1000);
-            tax.solidarity = part(tax.corporation_tax, 55, 1000);
+            tax.solidarity = part(tax.corporation_tax, value("soli.rate"), 1_000_000);
         }
         // A controlled company is an establishment of the controlling one for trade tax: its trade income is added
         // there, and it pays none itself.
@@ -475,7 +488,7 @@ impl EventSet {
             // Only interest deductible counts as a charge of § 8 Nr. 1 a GewStG (BFH III R 27/21).
             let financing =
                 financing - tax.interest_not_deductible.min(trade.financing.get(&'a').copied().unwrap_or(0));
-            trade.financing_addition = part((financing - 200_000 * EURO).max(0), 1, 4);
+            trade.financing_addition = part((financing - value("gewst.financing_allowance")).max(0), 1, 4);
             trade.dividends = dividends_exempt;
             trade.donations_added = tax.donations_deducted;
             // § 9 Nr. 1 Satz 1 GewStG from 2025: the land tax booked as an expense; with what is stated beside it.
@@ -492,16 +505,17 @@ impl EventSet {
             };
             trade.trade_income =
                 with_additions - trade.land - trade.partnership_profits - trade.donations + group_trade;
-            trade.loss_deduction = usable_losses(trade.trade_income, facts.trade_losses, 60);
+            trade.loss_deduction =
+                usable_losses(trade.trade_income, facts.trade_losses, value("gewst.loss_rest") / 10_000);
             let after_losses = trade.trade_income - trade.loss_deduction;
             trade.rounded = if after_losses > 0 { after_losses / (100 * EURO) * (100 * EURO) } else { 0 };
             trade.allowance = match facts.subject {
-                TaxSubject::Individual | TaxSubject::Partnership => 24_500 * EURO,
-                TaxSubject::Association => 5_000 * EURO,
+                TaxSubject::Individual | TaxSubject::Partnership => value("gewst.allowance_person"),
+                TaxSubject::Association => value("gewst.allowance_association"),
                 TaxSubject::Corporation => 0,
             }
             .min(trade.rounded);
-            trade.base = part(trade.rounded - trade.allowance, 35, 1000);
+            trade.base = part(trade.rounded - trade.allowance, value("gewst.base_rate"), 1_000_000);
             trade.tax = part(trade.base, i128::from(multiplier), 100);
             tax.trade = Some(trade);
         }

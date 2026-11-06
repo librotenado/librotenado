@@ -1,0 +1,673 @@
+{
+ "type": "law_values",
+ "country": "DE",
+ "into": "librotenado/0.1",
+ "values": [
+  {
+   "key": "sv.health_ceiling",
+   "from": "2025-01-01",
+   "value": "66150",
+   "unit": "EUR/year",
+   "law": "SVBezGrV 2025 § 2 Abs. 2",
+   "url": "https://www.gesetze-im-internet.de/svbezgrv_2025/__2.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.health_ceiling",
+   "from": "2026-01-01",
+   "value": "69750",
+   "unit": "EUR/year",
+   "law": "SVBezGrV 2026 § 2 Abs. 2",
+   "url": "https://www.gesetze-im-internet.de/svbezgrv_2026/BJNR1160A0025.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.pension_ceiling",
+   "from": "2025-01-01",
+   "value": "96600",
+   "unit": "EUR/year",
+   "law": "SVBezGrV 2025 § 4 Abs. 1 Nr. 1",
+   "url": "https://www.gesetze-im-internet.de/svbezgrv_2025/__4.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.pension_ceiling",
+   "from": "2026-01-01",
+   "value": "101400",
+   "unit": "EUR/year",
+   "law": "SVBezGrV 2026 § 4 Abs. 1 Nr. 1",
+   "url": "https://www.gesetze-im-internet.de/svbezgrv_2026/BJNR1160A0025.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.health",
+   "from": "2025-01-01",
+   "value": "14.6",
+   "unit": "percent",
+   "law": "§ 241 SGB V",
+   "url": "https://www.gesetze-im-internet.de/sgb_5/__241.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.health_reduced",
+   "from": "2025-01-01",
+   "value": "14",
+   "unit": "percent",
+   "law": "§ 243 SGB V",
+   "url": "https://www.gesetze-im-internet.de/sgb_5/__243.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.average_additional",
+   "from": "2026-01-01",
+   "value": "2.9",
+   "unit": "percent",
+   "law": "§ 242a SGB V; BMG, BAnz AT 10.11.2025 B7",
+   "url": "https://www.bundesanzeiger.de/",
+   "status": "draft"
+  },
+  {
+   "key": "sv.care",
+   "from": "2025-01-01",
+   "value": "3.6",
+   "unit": "percent",
+   "law": "§ 1 PBAV 2025",
+   "url": "https://www.gesetze-im-internet.de/pbav_2025/__1.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.care_childless",
+   "from": "2025-01-01",
+   "value": "0.6",
+   "unit": "percent",
+   "law": "§ 55 Abs. 3 Satz 1 SGB XI",
+   "url": "https://www.gesetze-im-internet.de/sgb_11/__55.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.care_per_child",
+   "from": "2025-01-01",
+   "value": "0.25",
+   "unit": "percent",
+   "law": "§ 55 Abs. 3 Satz 4 SGB XI",
+   "url": "https://www.gesetze-im-internet.de/sgb_11/__55.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.care_saxony",
+   "from": "2025-01-01",
+   "value": "1",
+   "unit": "percent",
+   "law": "§ 58 Abs. 3 SGB XI",
+   "url": "https://www.gesetze-im-internet.de/sgb_11/__58.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.pension",
+   "from": "2025-01-01",
+   "value": "18.6",
+   "unit": "percent",
+   "law": "RVBeitrSBek 2026",
+   "url": "https://www.gesetze-im-internet.de/rvbeitrsbek_2026/BJNR1230A0025.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.unemployment",
+   "from": "2025-01-01",
+   "value": "2.6",
+   "unit": "percent",
+   "law": "§ 341 Abs. 2 SGB III",
+   "url": "https://www.gesetze-im-internet.de/sgb_3/__341.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.insolvency",
+   "from": "2025-01-01",
+   "value": "0.15",
+   "unit": "percent",
+   "law": "§ 360 SGB III",
+   "url": "https://www.gesetze-im-internet.de/sgb_3/__360.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.trainee_limit",
+   "from": "2025-01-01",
+   "value": "325",
+   "unit": "EUR/month",
+   "law": "§ 20 Abs. 3 Satz 1 Nr. 1 SGB IV",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__20.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.pension_threshold",
+   "from": "2026-01-01",
+   "value": "197.75",
+   "unit": "EUR/month",
+   "law": "§ 226 Abs. 2 SGB V; § 1 SVBezGrV 2026 (1/20 of 3,955)",
+   "url": "https://www.gesetze-im-internet.de/sgb_5/__226.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_limit",
+   "from": "2025-01-01",
+   "value": "556",
+   "unit": "EUR/month",
+   "law": "§ 8 Abs. 1a SGB IV (Mindestlohn 12.82)",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__8.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_limit",
+   "from": "2026-01-01",
+   "value": "603",
+   "unit": "EUR/month",
+   "law": "§ 8 Abs. 1a SGB IV; § 1 MiLoV5 (13.90 × 130 / 3)",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__8.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_health",
+   "from": "2025-01-01",
+   "value": "13",
+   "unit": "percent",
+   "law": "§ 249b SGB V",
+   "url": "https://www.gesetze-im-internet.de/sgb_5/__249b.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_pension",
+   "from": "2025-01-01",
+   "value": "15",
+   "unit": "percent",
+   "law": "§ 168 Abs. 1 Nr. 1b SGB VI",
+   "url": "https://www.gesetze-im-internet.de/sgb_6/__168.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_u1",
+   "from": "2025-01-01",
+   "value": "1.1",
+   "unit": "percent",
+   "law": "Minijob-Zentrale",
+   "url": "https://www.minijob-zentrale.de/",
+   "status": "draft (as the insurer publishes it)"
+  },
+  {
+   "key": "sv.minor_u1",
+   "from": "2026-01-01",
+   "value": "0.8",
+   "unit": "percent",
+   "law": "Minijob-Zentrale",
+   "url": "https://www.minijob-zentrale.de/DE/fuer-gewerbetreibende/abgaben-und-steuern",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_u2",
+   "from": "2025-01-01",
+   "value": "0.22",
+   "unit": "percent",
+   "law": "Minijob-Zentrale",
+   "url": "https://www.minijob-zentrale.de/DE/fuer-gewerbetreibende/abgaben-und-steuern",
+   "status": "draft"
+  },
+  {
+   "key": "sv.minor_minimum",
+   "from": "2025-01-01",
+   "value": "175",
+   "unit": "EUR/month",
+   "law": "§ 163 Abs. 8 SGB VI",
+   "url": "https://www.gesetze-im-internet.de/sgb_6/__163.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.household_health",
+   "from": "2025-01-01",
+   "value": "5",
+   "unit": "percent",
+   "law": "§ 249b SGB V",
+   "url": "https://www.gesetze-im-internet.de/sgb_5/__249b.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.household_pension",
+   "from": "2025-01-01",
+   "value": "5",
+   "unit": "percent",
+   "law": "§ 168 Abs. 1 SGB VI",
+   "url": "https://www.gesetze-im-internet.de/sgb_6/__168.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.household_accident",
+   "from": "2025-01-01",
+   "value": "1.6",
+   "unit": "percent",
+   "law": "Minijob-Zentrale",
+   "url": "https://www.minijob-zentrale.de/DE/fuer-haushalte/abgaben-und-fristen",
+   "status": "draft"
+  },
+  {
+   "key": "sv.transition_limit",
+   "from": "2025-01-01",
+   "value": "2000",
+   "unit": "EUR/month",
+   "law": "§ 20 Abs. 2 SGB IV",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__20.html",
+   "status": "draft"
+  },
+  {
+   "key": "sv.factor_f",
+   "from": "2025-01-01",
+   "value": "0.6683",
+   "unit": "factor",
+   "law": "§ 20 Abs. 2a SGB IV; BMAS (as the insurers publish it)",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__20.html",
+   "status": "draft (as the insurers publish it)"
+  },
+  {
+   "key": "sv.factor_f",
+   "from": "2026-01-01",
+   "value": "0.6619",
+   "unit": "factor",
+   "law": "§ 20 Abs. 2a SGB IV; BAnz AT 18.12.2025 B5 (as the insurers publish it)",
+   "url": "https://www.gesetze-im-internet.de/sgb_4/__20.html",
+   "status": "draft (as the insurers publish it)"
+  },
+  {
+   "key": "lst.active_pension",
+   "from": "2026-01-01",
+   "value": "24000",
+   "unit": "EUR/year",
+   "law": "§ 3 Nr. 21 EStG (Aktivrente; first year under § 52 OPEN)",
+   "url": "https://www.gesetze-im-internet.de/estg/__3.html",
+   "status": "draft"
+  },
+  {
+   "key": "lst.flat_minor",
+   "from": "2025-01-01",
+   "value": "2",
+   "unit": "percent",
+   "law": "§ 40a Abs. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__40a.html",
+   "status": "draft"
+  },
+  {
+   "key": "lst.flat_short_term",
+   "from": "2025-01-01",
+   "value": "25",
+   "unit": "percent",
+   "law": "§ 40a Abs. 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__40a.html",
+   "status": "draft"
+  },
+  {
+   "key": "lst.short_term_days",
+   "from": "2025-01-01",
+   "value": "18",
+   "unit": "days",
+   "law": "§ 40a Abs. 1 Satz 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__40a.html",
+   "status": "draft"
+  },
+  {
+   "key": "lst.short_term_daily",
+   "from": "2025-01-01",
+   "value": "150",
+   "unit": "EUR/day",
+   "law": "§ 40a Abs. 1 Satz 2 Nr. 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__40a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.basic_allowance",
+   "from": "2026-01-01",
+   "value": "12348",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_end",
+   "from": "2026-01-01",
+   "value": "17799",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_a",
+   "from": "2026-01-01",
+   "value": "914.51",
+   "unit": "factor",
+   "law": "§ 32a Abs. 1 Nr. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_b",
+   "from": "2026-01-01",
+   "value": "1400",
+   "unit": "factor",
+   "law": "§ 32a Abs. 1 Nr. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_end",
+   "from": "2026-01-01",
+   "value": "69878",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 3 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_a",
+   "from": "2026-01-01",
+   "value": "173.1",
+   "unit": "factor",
+   "law": "§ 32a Abs. 1 Nr. 3 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_b",
+   "from": "2026-01-01",
+   "value": "2397",
+   "unit": "factor",
+   "law": "§ 32a Abs. 1 Nr. 3 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_c",
+   "from": "2026-01-01",
+   "value": "1034.87",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 3 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_end",
+   "from": "2026-01-01",
+   "value": "277825",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 4 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_rate",
+   "from": "2026-01-01",
+   "value": "42",
+   "unit": "percent",
+   "law": "§ 32a Abs. 1 Nr. 4 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_minus",
+   "from": "2026-01-01",
+   "value": "11135.63",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 4 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone5_rate",
+   "from": "2026-01-01",
+   "value": "45",
+   "unit": "percent",
+   "law": "§ 32a Abs. 1 Nr. 5 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone5_minus",
+   "from": "2026-01-01",
+   "value": "19470.38",
+   "unit": "EUR",
+   "law": "§ 32a Abs. 1 Nr. 5 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.child_allowance",
+   "from": "2026-01-01",
+   "value": "9756",
+   "unit": "EUR",
+   "law": "§ 32 Abs. 6 EStG (2 × 3,414 + 2 × 1,464; PAP 2026)",
+   "url": "https://www.gesetze-im-internet.de/estg/__32.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.single_parent",
+   "from": "2025-01-01",
+   "value": "4260",
+   "unit": "EUR",
+   "law": "§ 24b Abs. 2 Satz 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__24b.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.single_parent_more",
+   "from": "2025-01-01",
+   "value": "240",
+   "unit": "EUR",
+   "law": "§ 24b Abs. 2 Satz 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__24b.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.saver_allowance",
+   "from": "2025-01-01",
+   "value": "1000",
+   "unit": "EUR",
+   "law": "§ 20 Abs. 9 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__20.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.capital_rate",
+   "from": "2025-01-01",
+   "value": "25",
+   "unit": "percent",
+   "law": "§ 32d Abs. 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__32d.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.loss_full",
+   "from": "2025-01-01",
+   "value": "1000000",
+   "unit": "EUR",
+   "law": "§ 10d Abs. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__10d.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.loss_rest",
+   "from": "2025-01-01",
+   "value": "70",
+   "unit": "percent",
+   "law": "§ 10d Abs. 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__10d.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.advance_year",
+   "from": "2025-01-01",
+   "value": "400",
+   "unit": "EUR",
+   "law": "§ 37 Abs. 5 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__37.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.advance_quarter",
+   "from": "2025-01-01",
+   "value": "100",
+   "unit": "EUR",
+   "law": "§ 37 Abs. 5 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__37.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.trade_tax_credit",
+   "from": "2025-01-01",
+   "value": "4",
+   "unit": "factor",
+   "law": "§ 35 Abs. 1 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__35.html",
+   "status": "draft"
+  },
+  {
+   "key": "soli.rate",
+   "from": "2025-01-01",
+   "value": "5.5",
+   "unit": "percent",
+   "law": "§ 4 Satz 1 SolZG",
+   "url": "https://www.gesetze-im-internet.de/solzg_1995/__4.html",
+   "status": "draft"
+  },
+  {
+   "key": "soli.limit",
+   "from": "2026-01-01",
+   "value": "20350",
+   "unit": "EUR",
+   "law": "§ 3 Abs. 3 SolZG",
+   "url": "https://www.gesetze-im-internet.de/solzg_1995/__3.html",
+   "status": "draft"
+  },
+  {
+   "key": "soli.mitigation",
+   "from": "2025-01-01",
+   "value": "11.9",
+   "unit": "percent",
+   "law": "§ 4 Satz 2 SolZG",
+   "url": "https://www.gesetze-im-internet.de/solzg_1995/__4.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2025-01-01",
+   "value": "15",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2028-01-01",
+   "value": "14",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2029-01-01",
+   "value": "13",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2030-01-01",
+   "value": "12",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2031-01-01",
+   "value": "11",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "kst.rate",
+   "from": "2032-01-01",
+   "value": "10",
+   "unit": "percent",
+   "law": "§ 23 Abs. 1 KStG",
+   "url": "https://www.gesetze-im-internet.de/kstg_1977/__23.html",
+   "status": "draft"
+  },
+  {
+   "key": "gewst.financing_allowance",
+   "from": "2025-01-01",
+   "value": "200000",
+   "unit": "EUR",
+   "law": "§ 8 Nr. 1 GewStG",
+   "url": "https://www.gesetze-im-internet.de/gewstg/__8.html",
+   "status": "draft"
+  },
+  {
+   "key": "gewst.allowance_person",
+   "from": "2025-01-01",
+   "value": "24500",
+   "unit": "EUR",
+   "law": "§ 11 Abs. 1 Satz 3 Nr. 1 GewStG",
+   "url": "https://www.gesetze-im-internet.de/gewstg/__11.html",
+   "status": "draft"
+  },
+  {
+   "key": "gewst.allowance_association",
+   "from": "2025-01-01",
+   "value": "5000",
+   "unit": "EUR",
+   "law": "§ 11 Abs. 1 Satz 3 Nr. 2 GewStG",
+   "url": "https://www.gesetze-im-internet.de/gewstg/__11.html",
+   "status": "draft"
+  },
+  {
+   "key": "gewst.base_rate",
+   "from": "2025-01-01",
+   "value": "3.5",
+   "unit": "percent",
+   "law": "§ 11 Abs. 2 GewStG",
+   "url": "https://www.gesetze-im-internet.de/gewstg/__11.html",
+   "status": "draft"
+  },
+  {
+   "key": "gewst.loss_rest",
+   "from": "2025-01-01",
+   "value": "60",
+   "unit": "percent",
+   "law": "§ 10a GewStG",
+   "url": "https://www.gesetze-im-internet.de/gewstg/__10a.html",
+   "status": "draft"
+  },
+  {
+   "key": "zins.limit",
+   "from": "2025-01-01",
+   "value": "3000000",
+   "unit": "EUR",
+   "law": "§ 4h Abs. 2 Satz 1 Buchstabe a EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__4h.html",
+   "status": "draft"
+  },
+  {
+   "key": "zins.ebitda_rate",
+   "from": "2025-01-01",
+   "value": "30",
+   "unit": "percent",
+   "law": "§ 4h Abs. 1 Satz 2 EStG",
+   "url": "https://www.gesetze-im-internet.de/estg/__4h.html",
+   "status": "draft"
+  }
+ ]
+}
