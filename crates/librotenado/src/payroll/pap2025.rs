@@ -549,6 +549,394 @@ impl Default for Pap2025 {
 }
 
 impl Pap2025 {
+    /// The values of the PAP after a run – its inputs, internal fields and outputs –, each with its name and the
+    /// PAP's explanation of it.
+    pub fn trace(&self) -> Vec<(&'static str, &'static str, Dec)> {
+        vec![
+            (
+                "af",
+                "1, wenn die Anwendung des Faktorverfahrens gewählt wurden (nur in Steuerklasse IV)",
+                Dec::of(self.af),
+            ),
+            (
+                "AJAHR",
+                "Auf die Vollendung des 64. Lebensjahres folgende Kalenderjahr (erforderlich, wenn ALTER1=1)",
+                Dec::of(self.AJAHR),
+            ),
+            (
+                "ALTER1",
+                "1, wenn das 64. Lebensjahr zu Beginn des Kalenderjahres vollendet wurde, in dem der Lohnzahlungszeitraum endet (§ 24 a EStG), sonst = 0",
+                Dec::of(self.ALTER1),
+            ),
+            ("f", "eingetragener Faktor mit drei Nachkommastellen", self.f),
+            (
+                "JFREIB",
+                "Jahresfreibetrag für die Ermittlung der Lohnsteuer für die sonstigen Bezüge sowie für Vermögensbeteiligungen nach § 19a Absatz 1 und 4 EStG nach Maßgabe der elektronischen Lohnsteuerabzugsmerkmale nach § 39e EStG oder der Eintragung auf der Bescheinigung für den Lohnsteuerabzug 2025 in Cent (ggf. 0)",
+                self.JFREIB,
+            ),
+            (
+                "JHINZU",
+                "Jahreshinzurechnungsbetrag für die Ermittlung der Lohnsteuer für die sonstigen Bezüge sowie für Vermögensbeteiligungen nach § 19a Absatz 1 und 4 EStG nach Maßgabe der elektronischen Lohnsteuerabzugsmerkmale nach § 39e EStG oder der Eintragung auf der Bescheinigung für den Lohnsteuerabzug 2025 in Cent (ggf. 0)",
+                self.JHINZU,
+            ),
+            (
+                "JRE4",
+                "Voraussichtlicher Jahresarbeitslohn ohne sonstige Bezüge (d.h. auch ohne die zu besteuernden Vorteile bei Vermögensbeteiligungen, § 19a Absatz 4 EStG) in Cent. Anmerkung: Die Eingabe dieses Feldes (ggf. 0) ist erforderlich bei Eingaben zu sonstigen Bezügen (Feld SONSTB). Sind in einem vorangegangenen Abrechnungszeitraum bereits sonstige Bezüge gezahlt worden, so sind sie dem voraussichtlichen Jahresarbeitslohn hinzuzurechnen. Gleiches gilt für zu besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 4 EStG).",
+                self.JRE4,
+            ),
+            (
+                "JRE4ENT",
+                "In JRE4 enthaltene Entschädigungen nach § 24 Nummer 1 EStG und zu besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 4 EStG in Cent",
+                self.JRE4ENT,
+            ),
+            ("JVBEZ", "In JRE4 enthaltene Versorgungsbezuege in Cents (ggf. 0)", self.JVBEZ),
+            (
+                "KRV",
+                "Merker für die Vorsorgepauschale 0 = der Arbeitnehmer ist in der gesetzlichen Rentenversicherung oder einer berufsständischen Versorgungseinrichtung pflichtversichert oder bei Befreiung von der Versicherungspflicht freiwillig versichert; es gilt die allgemeine Beitragsbemessungsgrenze 1 = wenn nicht 0",
+                Dec::of(self.KRV),
+            ),
+            (
+                "KVZ",
+                "Kassenindividueller Zusatzbeitragssatz bei einem gesetzlich krankenversicherten Arbeitnehmer in Prozent (bspw. 2,50 für 2,50 %) mit 2 Dezimalstellen. Es ist der volle Zusatzbeitragssatz anzugeben. Die Aufteilung in Arbeitnehmer- und Arbeitgeber- anteil erfolgt im Programmablauf.",
+                self.KVZ,
+            ),
+            ("LZZ", "Lohnzahlungszeitraum: 1 = Jahr 2 = Monat 3 = Woche 4 = Tag", Dec::of(self.LZZ)),
+            (
+                "LZZFREIB",
+                "Der als elektronisches Lohnsteuerabzugsmerkmal für den Arbeitgeber nach § 39e EStG festgestellte oder in der Bescheinigung für den Lohnsteuerabzug 2025 eingetragene Freibetrag für den Lohnzahlungszeitraum in Cent",
+                self.LZZFREIB,
+            ),
+            (
+                "LZZHINZU",
+                "Der als elektronisches Lohnsteuerabzugsmerkmal für den Arbeitgeber nach § 39e EStG festgestellte oder in der Bescheinigung für den Lohnsteuerabzug 2025 eingetragene Hinzurechnungsbetrag für den Lohnzahlungszeitraum in Cent",
+                self.LZZHINZU,
+            ),
+            (
+                "MBV",
+                "Nicht zu besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) in Cent",
+                self.MBV,
+            ),
+            (
+                "PKPV",
+                "Dem Arbeitgeber mitgeteilte Zahlungen des Arbeitnehmers zur privaten Kranken- bzw. Pflegeversicherung im Sinne des §10 Abs. 1 Nr. 3 EStG 2010 als Monatsbetrag in Cent (der Wert ist inabhängig vom Lohnzahlungszeitraum immer als Monatsbetrag anzugeben).",
+                self.PKPV,
+            ),
+            (
+                "PKV",
+                "Krankenversicherung: 0 = gesetzlich krankenversicherte Arbeitnehmer 1 = ausschließlich privat krankenversicherte Arbeitnehmer ohne Arbeitgeberzuschuss 2 = ausschließlich privat krankenversicherte Arbeitnehmer mit Arbeitgeberzuschuss",
+                Dec::of(self.PKV),
+            ),
+            (
+                "PVA",
+                "Zahl der beim Arbeitnehmer zu berücksichtigenden Beitragsabschläge in der sozialen Pflegeversicherung bei mehr als einem Kind 0 = kein Abschlag 1 = Beitragsabschlag für das 2. Kind 2 = Beitragsabschläge für das 2. und 3. Kind 3 = Beitragsabschläge für 2. bis 4. Kinder 4 = Beitragsabschläge für 2. bis 5. oder mehr Kinder",
+                self.PVA,
+            ),
+            (
+                "PVS",
+                "1, wenn bei der sozialen Pflegeversicherung die Besonderheiten in Sachsen zu berücksichtigen sind bzw. zu berücksichtigen wären",
+                Dec::of(self.PVS),
+            ),
+            (
+                "PVZ",
+                "1, wenn er der Arbeitnehmer den Zuschlag zur sozialen Pflegeversicherung zu zahlen hat",
+                Dec::of(self.PVZ),
+            ),
+            (
+                "R",
+                "Religionsgemeinschaft des Arbeitnehmers lt. elektronischer Lohnsteuerabzugsmerkmale oder der Bescheinigung für den Lohnsteuerabzug 2025 (bei keiner Religionszugehörigkeit = 0)",
+                Dec::of(self.R),
+            ),
+            (
+                "RE4",
+                "Steuerpflichtiger Arbeitslohn für den Lohnzahlungszeitraum vor Berücksichtigung des Versorgungsfreibetrags und des Zuschlags zum Versorgungsfreibetrag, des Altersentlastungsbetrags und des als elektronisches Lohnsteuerabzugsmerkmal festgestellten oder in der Bescheinigung für den Lohnsteuerabzug 2025 für den Lohnzahlungszeitraum eingetragenen Freibetrags bzw. Hinzurechnungsbetrags in Cent",
+                self.RE4,
+            ),
+            (
+                "SONSTB",
+                "Sonstige Bezüge einschließlich zu besteuernde Vorteile bei Vermögensbeteiligungen und Sterbegeld bei Versorgungsbezügen sowie Kapitalauszahlungen/Abfindungen, in Cent (ggf. 0)",
+                self.SONSTB,
+            ),
+            (
+                "SONSTENT",
+                "In SONSTB enthaltene Entschädigungen nach § 24 Nummer 1 EStG sowie zu besteuernde Vorteile bei Vermögensbeteiligungen (§ 19a Absatz 4 EStG), in Cent",
+                self.SONSTENT,
+            ),
+            (
+                "STERBE",
+                "Sterbegeld bei Versorgungsbezuegen sowie Kapitalauszahlungen/Abfindungen (in SONSTB enthalten), in Cent",
+                self.STERBE,
+            ),
+            ("STKL", "Steuerklasse: 1 = I 2 = II 3 = III 4 = IV 5 = V 6 = VI", Dec::of(self.STKL)),
+            (
+                "VBEZ",
+                "In RE4 enthaltene Versorgungsbezüge in Cent (ggf. 0) ggf. unter Berücksichtigung einer geänderten Bemessungsgrundlage nach § 19 Absatz 2 Satz 10 und 11 EStG",
+                self.VBEZ,
+            ),
+            (
+                "VBEZM",
+                "Versorgungsbezug im Januar 2005 bzw. für den ersten vollen Monat, wenn der Versorgungsbezug erstmalig nach Januar 2005 gewährt wurde, in Cent",
+                self.VBEZM,
+            ),
+            (
+                "VBEZS",
+                "Voraussichtliche Sonderzahlungen von Versorgungsbezügen im Kalenderjahr des Versorgungsbeginns bei Versorgungsempfängern ohne Sterbegeld, Kapitalauszahlungen/Abfindungen in Cent",
+                self.VBEZS,
+            ),
+            ("VBS", "In SONSTB enthaltene Versorgungsbezuege einschliesslich Sterbegeld in Cents (ggf. 0)", self.VBS),
+            (
+                "VJAHR",
+                "Jahr, in dem der Versorgungsbezug erstmalig gewährt wurde; werden mehrere Versorgungsbezüge gezahlt, wird aus Vereinfachungsgründen für die Berechnung das Jahr des ältesten erstmaligen Bezugs herangezogen; auf die Möglichkeit der getrennten Abrechnung verschiedenartiger Bezüge (§ 39e Absatz 5a EStG) wird im Übrigen verwiesen",
+                Dec::of(self.VJAHR),
+            ),
+            (
+                "ZKF",
+                "Zahl der Freibetraege fuer Kinder (eine Dezimalstelle, nur bei Steuerklassen I, II, III und IV)",
+                self.ZKF,
+            ),
+            (
+                "ZMVB",
+                "Zahl der Monate, fuer die Versorgungsbezuege gezahlt werden [nur erforderlich bei Jahresberechnung (LZZ = 1)]",
+                Dec::of(self.ZMVB),
+            ),
+            ("ALTE", "Altersentlastungsbetrag nach Alterseinkünftegesetz in Euro, Cent (2 Dezimalstellen)", self.ALTE),
+            ("ANP", "Arbeitnehmer-Pauschbetrag/Werbungskosten-Pauschbetrag in Euro", self.ANP),
+            (
+                "ANTEIL1",
+                "Auf den Lohnzahlungszeitraum entfallender Anteil von Jahreswerten auf ganze Cents abgerundet",
+                self.ANTEIL1,
+            ),
+            (
+                "BBGKVPV",
+                "Beitragsbemessungsgrenze in der gesetzlichen Krankenversicherung und der sozialen Pflegeversicherung in Euro",
+                self.BBGKVPV,
+            ),
+            ("BBGRV", "Allgemeine Beitragsbemessungsgrenze in der allgemeinen Rentenversicherung in Euro", self.BBGRV),
+            ("BMG", "Bemessungsgrundlage für Altersentlastungsbetrag in Euro, Cent (2 Dezimalstellen)", self.BMG),
+            ("DIFF", "Differenz zwischen ST1 und ST2 in Euro", self.DIFF),
+            ("EFA", "Entlastungsbetrag für Alleinerziehende in Euro", self.EFA),
+            ("FVB", "Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen)", self.FVB),
+            (
+                "FVBSO",
+                "Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) für die Berechnung der Lohnsteuer beim sonstigen Bezug",
+                self.FVBSO,
+            ),
+            ("FVBZ", "Zuschlag zum Versorgungsfreibetrag in Euro", self.FVBZ),
+            (
+                "FVBZSO",
+                "Zuschlag zum Versorgungsfreibetrag in Euro fuer die Berechnung der Lohnsteuer beim sonstigen Bezug",
+                self.FVBZSO,
+            ),
+            ("GFB", "Grundfreibetrag in Euro", self.GFB),
+            ("HBALTE", "Maximaler Altersentlastungsbetrag in Euro", self.HBALTE),
+            ("HFVB", "Maßgeblicher maximaler Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen)", self.HFVB),
+            (
+                "HFVBZ",
+                "Maßgeblicher maximaler Zuschlag zum Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen)",
+                self.HFVBZ,
+            ),
+            (
+                "HFVBZSO",
+                "Maßgeblicher maximaler Zuschlag zum Versorgungsfreibetrag in Euro, Cent (2 Dezimalstellen) für die Berechnung der Lohnsteuer beim sonstigen Bezug",
+                self.HFVBZSO,
+            ),
+            (
+                "HOCH",
+                "Zwischenfeld zu X fuer die Berechnung der Steuer nach § 39b Abs. 2 Satz 7 EStG in Euro",
+                self.HOCH,
+            ),
+            ("J", "Nummer der Tabellenwerte fuer Versorgungsparameter", Dec::of(self.J)),
+            (
+                "JBMG",
+                "Jahressteuer nach § 51a EStG, aus der Solidaritaetszuschlag und Bemessungsgrundlage fuer die Kirchenlohnsteuer ermittelt werden in Euro",
+                self.JBMG,
+            ),
+            ("JLFREIB", "Auf einen Jahreslohn hochgerechneter LZZFREIB in Euro, Cent (2 Dezimalstellen)", self.JLFREIB),
+            ("JLHINZU", "Auf einen Jahreslohn hochgerechnete LZZHINZU in Euro, Cent (2 Dezimalstellen)", self.JLHINZU),
+            (
+                "JW",
+                "Jahreswert, dessen Anteil fuer einen Lohnzahlungszeitraum in UPANTEIL errechnet werden soll in Cents",
+                self.JW,
+            ),
+            ("K", "Nummer der Tabellenwerte fuer Parameter bei Altersentlastungsbetrag", Dec::of(self.K)),
+            ("KFB", "Summe der Freibeträge fuer Kinder in Euro", self.KFB),
+            (
+                "KVSATZAG",
+                "Beitragssatz des Arbeitgebers zur Krankenversicherung unter Berücksichtigung des durchschnittlichen Zusatzbeitragssatzes für die Ermittlung des Arbeitgeberzuschusses (5 Dezimalstellen)",
+                self.KVSATZAG,
+            ),
+            ("KVSATZAN", "Beitragssatz des Arbeitnehmers zur Krankenversicherung (5 Dezimalstellen)", self.KVSATZAN),
+            (
+                "KZTAB",
+                "Kennzahl fuer die Einkommensteuer-Tabellenart: 1 = Grundtarif 2 = Splittingverfahren",
+                Dec::of(self.KZTAB),
+            ),
+            ("LSTJAHR", "Jahreslohnsteuer in Euro", self.LSTJAHR),
+            ("LSTOSO", "Zwischenfelder der Jahreslohnsteuer in Cent", self.LSTOSO),
+            ("LSTSO", "", self.LSTSO),
+            ("MIST", "Mindeststeuer fuer die Steuerklassen V und VI in Euro", self.MIST),
+            ("PVSATZAG", "Beitragssatz des Arbeitgebers zur Pflegeversicherung (6 Dezimalstellen)", self.PVSATZAG),
+            ("PVSATZAN", "Beitragssatz des Arbeitnehmers zur Pflegeversicherung (6 Dezimalstellen)", self.PVSATZAN),
+            (
+                "RVSATZAN",
+                "Beitragssatz des Arbeitnehmers in der allgemeinen gesetzlichen Rentenversicherung (4 Dezimalstellen)",
+                self.RVSATZAN,
+            ),
+            ("RW", "Rechenwert in Gleitkommadarstellung", self.RW),
+            ("SAP", "Sonderausgaben-Pauschbetrag in Euro", self.SAP),
+            ("SOLZFREI", "Freigrenze fuer den Solidaritaetszuschlag in Euro", self.SOLZFREI),
+            ("SOLZJ", "Solidaritaetszuschlag auf die Jahreslohnsteuer in Euro, Cent (2 Dezimalstellen)", self.SOLZJ),
+            (
+                "SOLZMIN",
+                "Zwischenwert fuer den Solidaritaetszuschlag auf die Jahreslohnsteuer in Euro, Cent (2 Dezimalstellen)",
+                self.SOLZMIN,
+            ),
+            (
+                "SOLZSBMG",
+                "Bemessungsgrundlage des Solidaritätszuschlags zur Prüfung der Freigrenze beim Solidaritätszuschlag für sonstige Bezüge in Euro",
+                self.SOLZSBMG,
+            ),
+            (
+                "SOLZSZVE",
+                "Zu versteuerndes Einkommen für die Ermittlung der Bemessungsgrundlage des Solidaritätszuschlags zur Prüfung der Freigrenze beim Solidaritätszuschlag für sonstige Bezüge in Euro, Cent (2 Dezimalstellen)",
+                self.SOLZSZVE,
+            ),
+            (
+                "SOLZVBMG",
+                "Bemessungsgrundlage des Solidaritätszuschlags für die Prüfung der Freigrenze beim Solidaritätszuschlag für die Vergütung für mehrjährige Tätigkeit in Euro",
+                self.SOLZVBMG,
+            ),
+            ("ST", "Tarifliche Einkommensteuer in Euro", self.ST),
+            ("ST1", "Tarifliche Einkommensteuer auf das 1,25-fache ZX in Euro", self.ST1),
+            ("ST2", "Tarifliche Einkommensteuer auf das 0,75-fache ZX in Euro", self.ST2),
+            ("VBEZB", "Bemessungsgrundlage fuer den Versorgungsfreibetrag in Cent", self.VBEZB),
+            (
+                "VBEZBSO",
+                "Bemessungsgrundlage für den Versorgungsfreibetrag in Cent für den sonstigen Bezug",
+                self.VBEZBSO,
+            ),
+            (
+                "VERGL",
+                "Zwischenfeld zu X fuer die Berechnung der Steuer nach § 39b Abs. 2 Satz 7 EStG in Euro",
+                self.VERGL,
+            ),
+            (
+                "VHB",
+                "Höchstbetrag der Mindestvorsorgepauschale für die Kranken- und Pflegeversicherung in Euro, Cent (2 Dezimalstellen)",
+                self.VHB,
+            ),
+            (
+                "VKV",
+                "Jahreswert der berücksichtigten Beiträge zur privaten Basis-Krankenversicherung und privaten Pflege-Pflichtversicherung (ggf. auch die Mindestvorsorgepauschale) in Cent.",
+                self.VKV,
+            ),
+            (
+                "VSP",
+                "Vorsorgepauschale mit Teilbeträgen für die Rentenversicherung sowie die gesetzliche Kranken- und soziale Pflegeversicherung nach fiktiven Beträgen oder ggf. für die private Basiskrankenversicherung und private Pflege-Pflichtversicherung in Euro, Cent (2 Dezimalstellen)",
+                self.VSP,
+            ),
+            (
+                "VSPN",
+                "Vorsorgepauschale mit Teilbeträgen für die Rentenversicherung sowie der Mindestvorsorgepauschale für die Kranken- und Pflegeversicherung in Euro, Cent (2 Dezimalstellen)",
+                self.VSPN,
+            ),
+            (
+                "VSP1",
+                "Zwischenwert 1 bei der Berechnung der Vorsorgepauschale in Euro, Cent (2 Dezimalstellen)",
+                self.VSP1,
+            ),
+            (
+                "VSP2",
+                "Zwischenwert 2 bei der Berechnung der Vorsorgepauschale in Euro, Cent (2 Dezimalstellen)",
+                self.VSP2,
+            ),
+            (
+                "VSP3",
+                "Vorsorgepauschale mit Teilbeträgen für die gesetzliche Kranken- und soziale Pflegeversicherung nach fiktiven Beträgen oder ggf. für die private Basiskrankenversicherung und private Pflege- Pflichtversicherung in Euro, Cent (2 Dezimalstellen)",
+                self.VSP3,
+            ),
+            ("W1STKL5", "Erster Grenzwert in Steuerklasse V/VI in Euro", self.W1STKL5),
+            ("W2STKL5", "Zweiter Grenzwert in Steuerklasse V/VI in Euro", self.W2STKL5),
+            ("W3STKL5", "Dritter Grenzwert in Steuerklasse V/VI in Euro", self.W3STKL5),
+            ("X", "Zu versteuerndes Einkommen gem. § 32a Abs. 1 und 2 EStG Euro, Cent (2 Dezimalstellen)", self.X),
+            ("Y", "Gem. § 32a Abs. 1 EStG (6 Dezimalstellen)", self.Y),
+            (
+                "ZRE4",
+                "Auf einen Jahreslohn hochgerechnetes RE4 in Euro, Cent (2 Dezimalstellen) nach Abzug der Freibeträge nach § 39 b Abs. 2 Satz 3 und 4 EStG",
+                self.ZRE4,
+            ),
+            ("ZRE4J", "Auf einen Jahreslohn hochgerechnetes RE4 in Euro, Cent (2 Dezimalstellen)", self.ZRE4J),
+            (
+                "ZRE4VP",
+                "Auf einen Jahreslohn hochgerechnetes RE4, ggf. nach Abzug der Entschädigungen i.S.d. § 24 Nummer 1 EStG in Euro, Cent (2 Dezimalstellen)",
+                self.ZRE4VP,
+            ),
+            (
+                "ZTABFB",
+                "Feste Tabellenfreibeträge (ohne Vorsorgepauschale) in Euro, Cent (2 Dezimalstellen)",
+                self.ZTABFB,
+            ),
+            (
+                "ZVBEZ",
+                "Auf einen Jahreslohn hochgerechnetes VBEZ abzüglich FVB in Euro, Cent (2 Dezimalstellen)",
+                self.ZVBEZ,
+            ),
+            ("ZVBEZJ", "Auf einen Jahreslohn hochgerechnetes VBEZ in Euro, Cent (2 Dezimalstellen)", self.ZVBEZJ),
+            ("ZVE", "Zu versteuerndes Einkommen in Euro, Cent (2 Dezimalstellen)", self.ZVE),
+            ("ZX", "Zwischenfeld zu X fuer die Berechnung der Steuer nach § 39b Abs. 2 Satz 7 EStG in Euro", self.ZX),
+            ("ZZX", "Zwischenfeld zu X fuer die Berechnung der Steuer nach § 39b Abs. 2 Satz 7 EStG in Euro", self.ZZX),
+            ("BK", "Bemessungsgrundlage fuer die Kirchenlohnsteuer in Cents", self.BK),
+            (
+                "BKS",
+                "Bemessungsgrundlage der sonstigen Bezüge für die Kirchenlohnsteuer in Cent. Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) resultieren, mindern BK (maximal bis 0). Der Sonderausgabenabzug für tatsächlich erbrachte Vorsorgeaufwendungen im Rahmen der Veranlagung zur Einkommensteuer bleibt unberührt.",
+                self.BKS,
+            ),
+            ("LSTLZZ", "Fuer den Lohnzahlungszeitraum einzubehaltende Lohnsteuer in Cents", self.LSTLZZ),
+            ("SOLZLZZ", "Fuer den Lohnzahlungszeitraum einzubehaltender Solidaritaetszuschlag in Cents", self.SOLZLZZ),
+            (
+                "SOLZS",
+                "Solidaritätszuschlag für sonstige Bezüge in Cent. Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) resultieren, mindern SOLZLZZ (maximal bis 0). Der Sonderausgabenabzug für tatsächlich erbrachte Vorsorgeaufwendungen im Rahmen der Veranlagung zur Einkommensteuer bleibt unberührt.",
+                self.SOLZS,
+            ),
+            (
+                "STS",
+                "Lohnsteuer für sonstige Bezüge in Cent Hinweis: Negativbeträge, die aus nicht zu besteuernden Vorteilen bei Vermögensbeteiligungen (§ 19a Absatz 1 Satz 4 EStG) resultieren, mindern LSTLZZ (maximal bis 0). Der Sonderausgabenabzug für tatsächlich erbrachte Vorsorgeaufwendungen im Rahmen der Veranlagung zur Einkommensteuer bleibt unberührt.",
+                self.STS,
+            ),
+            (
+                "VKVLZZ",
+                "Für den Lohnzahlungszeitraum berücksichtigte Beiträge des Arbeitnehmers zur privaten Basis-Krankenversicherung und privaten Pflege-Pflichtversicherung (ggf. auch die Mindestvorsorgepauschale) in Cent beim laufenden Arbeitslohn. Für Zwecke der Lohn- steuerbescheinigung sind die einzelnen Ausgabewerte außerhalb des eigentlichen Lohn- steuerbescheinigungsprogramms zu addieren; hinzuzurechnen sind auch die Ausgabewerte VKVSONST",
+                self.VKVLZZ,
+            ),
+            (
+                "VKVSONST",
+                "Für den Lohnzahlungszeitraum berücksichtigte Beiträge des Arbeitnehmers zur privaten Basis-Krankenversicherung und privaten Pflege-Pflichtversicherung (ggf. auch die Mindestvorsorgepauschale) in Cent bei sonstigen Bezügen. Der Ausgabewert kann auch negativ sein.",
+                self.VKVSONST,
+            ),
+            ("VFRB", "Verbrauchter Freibetrag bei Berechnung des laufenden Arbeitslohns, in Cent", self.VFRB),
+            (
+                "VFRBS1",
+                "Verbrauchter Freibetrag bei Berechnung des voraussichtlichen Jahresarbeitslohns, in Cent",
+                self.VFRBS1,
+            ),
+            ("VFRBS2", "Verbrauchter Freibetrag bei Berechnung der sonstigen Bezüge, in Cent", self.VFRBS2),
+            (
+                "WVFRB",
+                "Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE über dem Grundfreibetrag bei der Berechnung des laufenden Arbeitslohns, in Cent",
+                self.WVFRB,
+            ),
+            (
+                "WVFRBO",
+                "Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE über dem Grundfreibetrag bei der Berechnung des voraussichtlichen Jahresarbeitslohns, in Cent",
+                self.WVFRBO,
+            ),
+            (
+                "WVFRBM",
+                "Für die weitergehende Berücksichtigung des Steuerfreibetrags nach dem DBA Türkei verfügbares ZVE über dem Grundfreibetrag bei der Berechnung der sonstigen Bezüge, in Cent",
+                self.WVFRBM,
+            ),
+        ]
+    }
+
     /// Runs the PAP on the inputs set.
     pub fn run(&mut self) {
         self.MPARA();

@@ -2,4 +2,6 @@
 [toolchain]
 channel = "1.99.1"
 components = ["rustfmt", "clippy"]
+# The calculators of the rulebook run the library as WebAssembly (docs/prepare.sh).
+targets = ["wasm32-wasip1"]
 profile = "minimal"

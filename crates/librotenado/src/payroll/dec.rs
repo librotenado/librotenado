@@ -142,6 +142,22 @@ impl Dec {
     }
 }
 
+impl std::fmt::Display for Dec {
+    /// The value with as many places as it needs: `1234.5`, `-0.25`, `0`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let d = self.normal();
+        let sign = if d.m < 0 { "-" } else { "" };
+        let digits = d.m.unsigned_abs().to_string();
+        if d.s == 0 {
+            return write!(f, "{sign}{digits}");
+        }
+        let s = d.s as usize;
+        let padded = format!("{digits:0>width$}", width = s + 1);
+        let (whole, fraction) = padded.split_at(padded.len() - s);
+        write!(f, "{sign}{whole}.{fraction}")
+    }
+}
+
 impl std::ops::Neg for Dec {
     type Output = Dec;
     fn neg(self) -> Dec {
@@ -167,5 +183,9 @@ mod tests {
         assert_eq!(d(15, 1).compare_to(d(150, 2)), 0);
         assert_eq!(d(-15, 1).compare_to(Dec::ZERO), -1);
         assert_eq!(d(1999, 2).long_value(), 19);
+        assert_eq!(
+            (d(12345, 1).to_string(), d(-25, 2).to_string(), d(1200, 2).to_string()),
+            ("1234.5".into(), "-0.25".into(), "12".into())
+        );
     }
 }

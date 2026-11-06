@@ -2,7 +2,9 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
-## Unreleased
+## 0.23.0 – 2026-11-06
+
+The rulebook.
 
 - The rulebook at librotenado.dev/rules, written from the library when the documentation is built
   (`examples/rulebook.rs`): every account of SKR 03 and SKR 04 with its attributes and its position in each report,
@@ -11,6 +13,12 @@ Specification and library share one version. Until 1.0, any version may change w
   rates, allowances and tariffs of the social insurance, wage tax, income tax, solidarity surcharge, corporation
   tax, trade tax and the interest barrier, each with its provision and the state of its review; the library computes
   with them.
+- Calculators in the rulebook – payslip, income tax, corporation and trade tax – running the library compiled to
+  WebAssembly (`wasm32-wasip1`) in the browser, by a shim of five WASI functions of our own; the wage tax with every
+  value of the Programmablaufplan and the BMF's explanation of it. Review cases (`spec/data/cases/de.json`), tested
+  and shown.
+- Library: `LawValues`, `LawValue`; `calculator::calculate`; `payroll::wage_tax_steps`, `WageTaxStep`;
+  `scripts/pap.py` writes `trace()` with the PAP's explanations.
 
 ## 0.22.0 – 2026-11-06
 

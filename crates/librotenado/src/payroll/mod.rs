@@ -19,4 +19,7 @@ pub use employment::{
 };
 pub use figures::PayrollError;
 pub use register::PayrollProblem;
-pub use wage_tax::{HealthCover, MAX_AMOUNT, PayPeriod, WageTax, WageTaxError, WageTaxFacts, Wages, wage_tax};
+pub use wage_tax::{
+    HealthCover, MAX_AMOUNT, PayPeriod, WageTax, WageTaxError, WageTaxFacts, WageTaxStep, Wages, wage_tax,
+    wage_tax_steps,
+};

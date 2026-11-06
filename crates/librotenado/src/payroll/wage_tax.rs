@@ -151,6 +151,37 @@ fn cents(units: i128) -> Result<Dec, WageTaxError> {
 /// year: 2025 and 2026 (their XML pseudocode, of 17 September and 23 October 2025); other years are not part of
 /// this version.
 pub fn wage_tax(year: u16, period: PayPeriod, wages: &Wages, facts: &WageTaxFacts) -> Result<WageTax, WageTaxError> {
+    compute(year, period, wages, facts).map(|(tax, _)| tax)
+}
+
+/// One value of the PAP after it ran: its name in the PAP, the PAP's explanation of it, and the value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WageTaxStep {
+    /// The name of the variable in the PAP (`ZVE`, `VSP`, `LSTLZZ`).
+    pub name: &'static str,
+    /// The PAP's explanation of it.
+    pub description: &'static str,
+    /// Its value, as the PAP holds it – cents or euros as the explanation says.
+    pub value: String,
+}
+
+/// The way the wage tax of a period is computed: every input, internal field and output of the Programmablaufplan
+/// after it ran, in the PAP's order, with the PAP's explanation of each.
+pub fn wage_tax_steps(
+    year: u16,
+    period: PayPeriod,
+    wages: &Wages,
+    facts: &WageTaxFacts,
+) -> Result<Vec<WageTaxStep>, WageTaxError> {
+    compute(year, period, wages, facts).map(|(_, steps)| steps)
+}
+
+fn compute(
+    year: u16,
+    period: PayPeriod,
+    wages: &Wages,
+    facts: &WageTaxFacts,
+) -> Result<(WageTax, Vec<WageTaxStep>), WageTaxError> {
     if !(1..=6).contains(&facts.class) {
         return Err(WageTaxError::Class(facts.class));
     }
@@ -223,14 +254,22 @@ macro_rules! run {
         }
         ($more)(&mut pap)?;
         pap.run();
-        Ok(WageTax {
-            tax: pap.LSTLZZ.units(0),
-            solidarity: pap.SOLZLZZ.units(0),
-            church_base: pap.BK.units(0),
-            one_off_tax: pap.STS.units(0),
-            one_off_solidarity: pap.SOLZS.units(0),
-            one_off_church_base: pap.BKS.units(0),
-        })
+        let steps = pap
+            .trace()
+            .into_iter()
+            .map(|(name, description, value)| WageTaxStep { name, description, value: value.to_string() })
+            .collect();
+        Ok((
+            WageTax {
+                tax: pap.LSTLZZ.units(0),
+                solidarity: pap.SOLZLZZ.units(0),
+                church_base: pap.BK.units(0),
+                one_off_tax: pap.STS.units(0),
+                one_off_solidarity: pap.SOLZS.units(0),
+                one_off_church_base: pap.BKS.units(0),
+            },
+            steps,
+        ))
     }};
 }
 use run;

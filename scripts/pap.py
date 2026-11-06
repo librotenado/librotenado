@@ -175,6 +175,21 @@ class Pap:
         root = ET.fromstring(open(path, encoding="utf-8-sig").read())
         self.name = root.get("name")
         self.types, self.defaults, self.inputs, self.outputs = {}, {}, [], []
+        # The comment before each variable is the PAP's explanation of it.
+        self.docs = {}
+        commented = ET.fromstring(
+            open(path, encoding="utf-8-sig").read(), parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+        )
+        for group in commented.iter():
+            last = None
+            for child in group:
+                if child.tag is ET.Comment:
+                    last = " ".join((child.text or "").split())
+                elif child.tag in ("INPUT", "OUTPUT", "INTERNAL"):
+                    if last:
+                        self.docs[child.get("name")] = last
+                    last = None
+        self.internals = [v.get("name") for v in root.iter("INTERNAL")]
         for kind in ("INPUT", "OUTPUT", "INTERNAL"):
             for v in root.iter(kind):
                 t = v.get("type")
@@ -351,6 +366,17 @@ class Rust:
         out.append("}")
         out.append("")
         out.append(f"impl Pap{year} {{")
+        out.append("    /// The values of the PAP after a run – its inputs, internal fields and outputs –, each with its name and the")
+        out.append("    /// PAP's explanation of it.")
+        out.append("    pub fn trace(&self) -> Vec<(&'static str, &'static str, Dec)> {")
+        out.append("        vec![")
+        for name in p.inputs + p.internals + p.outputs:
+            doc = p.docs.get(name, "").replace("\\", "\\\\").replace('"', '\\"')
+            value = f"Dec::of(self.{name})" if p.types[name] == "int" else f"self.{name}"
+            out.append(f'            ("{name}", "{doc}", {value}),')
+        out.append("        ]")
+        out.append("    }")
+        out.append("")
         out.append("    /// Runs the PAP on the inputs set.")
         out.append("    pub fn run(&mut self) {")
         out.extend(self.block(p.main, 2))

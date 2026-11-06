@@ -4,6 +4,7 @@
 /docs/spec
 /docs/changelog.md
 /docs/rules
+/docs/assets/calculator.wasm
 /docs/_includes/quickstart.rs
 /docs/_site
 /_site

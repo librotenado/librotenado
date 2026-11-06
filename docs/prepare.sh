@@ -24,8 +24,12 @@ cat ../spec/README.md >> spec/README.md
 printf -- '---\ntitle: Changelog\nnav_order: 99\nedit_path: CHANGELOG.md\n---\n\n' > changelog.md
 cat ../CHANGELOG.md >> changelog.md
 
-# The rulebook: pages written by the library from its own data (examples/rulebook.rs).
+# The rulebook: pages written by the library from its own data (examples/rulebook.rs), and its calculators – the
+# library compiled to WebAssembly (examples/calculator.rs), run in the page by assets/js/wasi.js.
 cargo run --quiet --locked --example rulebook -- .
+CARGO_PROFILE_RELEASE_STRIP=true CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
+  cargo build --quiet --locked --release --example calculator --no-default-features --target wasm32-wasip1
+cp ../target/wasm32-wasip1/release/examples/calculator.wasm assets/calculator.wasm
 
 # The example from its fourth line on – after its licence header and summary.
 tail -n +4 ../crates/librotenado/examples/quickstart.rs > _includes/quickstart.rs

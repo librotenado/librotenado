@@ -1,6 +1,6 @@
 # librotenado specification
 
-Version 0.22 – a draft, not yet stable. Normative statements will use the key words of
+Version 0.23 – a draft, not yet stable. Normative statements will use the key words of
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
 | Part | Content | State |

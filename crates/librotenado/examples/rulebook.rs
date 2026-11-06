@@ -68,6 +68,9 @@ fn main() {
          The attributes of accounts are those of the specification: `profit` and `trade_tax` for the taxes on profit \
          ([0012](../spec/0012-taxes-on-profit.html)), `tax` the code of an automatic account, `term` the remaining \
          term, `interest` the interest income of the interest barrier ([0004](../spec/0004-chart-of-accounts.html)).\n\n\
+         - [Calculators](calculator.html) – payslip, income tax, corporation and trade tax, with their way of \
+         computing\n\
+         - [Review cases](de-cases.html) – typical cases with what the library computes, to be confirmed\n\
          - [Values of the law of Germany](de-values.html) – limits, rates, tariffs, with their provision and review\n\
          - [Tax codes of Germany](de-tax-codes.html)\n"
     )
@@ -207,5 +210,50 @@ fn main() {
         page.push('\n');
     }
     fs::write(dir.join("de-values.md"), page).unwrap();
+
+    // The review cases: what the library computes for typical cases, tested in CI, to be confirmed by tax advisers.
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../data/cases/de.json")).expect("the published cases are valid");
+    let mut page = front("Review cases", Some("Rulebook"), 2, "/rules/de-cases.html");
+    page.push_str(
+        "Typical cases with the figures the library computes for them. Each is a test of the library \
+         (`spec/data/cases/de.json`, `tests/cases.rs`): the figures shown are those the tests demand and the \
+         calculators give. A tax adviser who checks a case confirms it or reports what it should be – then the \
+         expectation changes, and the library follows. Status `open`: not yet checked.\n\n",
+    );
+    for case in cases["cases"].as_array().expect("a list") {
+        let id = case["id"].as_str().unwrap_or("");
+        let title = case["title"].as_str().unwrap_or("");
+        let result = librotenado::calculator::calculate(&case["case"]);
+        let mut figures: Vec<serde_json::Value> = result["ok"]["figures"].as_array().cloned().unwrap_or_default();
+        figures.extend(result["ok"]["trade"].as_array().cloned().unwrap_or_default());
+        write!(page, "## {title}\n\n`{id}` – status: {}\n\n", case["status"].as_str().unwrap_or("")).unwrap();
+        page.push_str("| Angabe | Wert |\n|---|---|\n");
+        for (key, value) in case["case"].as_object().expect("a case") {
+            writeln!(page, "| `{key}` | {} |", cell(value.to_string().trim_matches('"'))).unwrap();
+        }
+        page.push_str("\n| Ergebnis | Bezeichnung | Erwartet |\n|---|---|---:|\n");
+        for (name, expected) in case["expected"].as_object().expect("expectations") {
+            // The name of the figure – from the result, or, where it is zero and left out, from the names.
+            let prefixes = match case["case"]["calculation"].as_str() {
+                Some("payslip") => &["payroll"][..],
+                Some("income_tax") => &["de-est"][..],
+                _ => &["de-kst", "de-gewst"][..],
+            };
+            let label = figures
+                .iter()
+                .find(|f| f["name"] == *name)
+                .and_then(|f| f["label"].as_str())
+                .or_else(|| prefixes.iter().find_map(|p| de.get(&format!("{p}/{name}"))))
+                .unwrap_or("");
+            writeln!(page, "| `{name}` | {} | {} |", cell(label), expected.as_str().unwrap_or("")).unwrap();
+        }
+        let issue = format!(
+            "https://github.com/librotenado/librotenado/issues/new?title={}",
+            format!("Prüffall {id}").replace(' ', "%20")
+        );
+        write!(page, "\n[Abweichung melden]({issue})\n\n").unwrap();
+    }
+    fs::write(dir.join("de-cases.md"), page).unwrap();
     fs::write(dir.join("index.md"), index).unwrap();
 }

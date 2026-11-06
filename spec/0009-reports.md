@@ -114,6 +114,23 @@ when. An implementation computes with the value that applies on the first day of
 [librotenado.dev/rules](https://librotenado.dev/rules/) is written from the same data and from the library when the
 documentation is built.
 
+## The rulebook
+
+The rules are published for review where nobody needs to read code: the rulebook at
+[librotenado.dev/rules](https://librotenado.dev/rules/), written by the library when the documentation is built
+(`examples/rulebook.rs`), with
+
+- every account of the national charts with its attributes and its position in each report, and the tax codes with
+  the fields they fill;
+- the values of the law (above), with their provisions and the state of their review;
+- **calculators** – a payslip, income tax, corporation and trade tax – that run the library itself in the browser,
+  compiled to WebAssembly (`librotenado::calculator`, `examples/calculator.rs` for `wasm32-wasip1`, run by a shim of
+  the five functions of WASI it imports, `docs/assets/js/wasi.js`), with the way of computing: for the wage tax every
+  value of the Programmablaufplan with the BMF's explanation (`payroll::wage_tax_steps`);
+- **review cases** ([`cases/de.json`](data/cases/de.json)): typical cases with the figures expected of them, each a
+  test of the library (`tests/cases.rs`) and a page; a tax adviser confirms a case or reports what it should be, its
+  `status` records which.
+
 ## The German reports of 2026
 
 | Report | File | Source |

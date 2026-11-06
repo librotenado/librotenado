@@ -84,6 +84,7 @@ mod balance;
 pub mod bank_csv;
 mod booking;
 mod books;
+pub mod calculator;
 pub mod camt;
 mod canonical;
 mod capital;

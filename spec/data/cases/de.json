@@ -1,0 +1,182 @@
+{
+ "type": "cases",
+ "country": "DE",
+ "into": "librotenado/0.1",
+ "cases": [
+  {
+   "id": "lohn-gehalt-nrw",
+   "title": "Gehalt 4.000 €, Steuerklasse I, evangelisch, NRW, kinderlos",
+   "case": {
+    "calculation": "payslip",
+    "year": 2026,
+    "month": 5,
+    "wage": "4000",
+    "church": "ev",
+    "region": "DE-NW",
+    "childless": true
+   },
+   "expected": {
+    "wage_tax": "524.50",
+    "solidarity": "0.00",
+    "church": "47.20",
+    "health_employee": "292.00",
+    "health_additional_employee": "58.00",
+    "care_employee": "96.00",
+    "pension_employee": "372.00",
+    "unemployment_employee": "52.00",
+    "net": "2558.30"
+   },
+   "status": "open"
+  },
+  {
+   "id": "lohn-bayern-kind",
+   "title": "Gehalt 3.000 €, Steuerklasse III, ein Kind, römisch-katholisch, Bayern",
+   "case": {
+    "calculation": "payslip",
+    "year": 2026,
+    "month": 5,
+    "wage": "3000",
+    "class": 3,
+    "child_allowances": 10,
+    "church": "rk",
+    "region": "DE-BY",
+    "care_children": 1
+   },
+   "expected": {
+    "wage_tax": "38.33",
+    "solidarity": "0.00",
+    "church": "0.00",
+    "care_employee": "54.00",
+    "net": "2327.17"
+   },
+   "status": "open"
+  },
+  {
+   "id": "lohn-minijob",
+   "title": "Minijob 500 €, pauschal versteuert, mit Rentenversicherung",
+   "case": {
+    "calculation": "payslip",
+    "year": 2026,
+    "month": 5,
+    "wage": "500",
+    "groups": "6100",
+    "person_group": "109"
+   },
+   "expected": {
+    "flat_tax": "10.00",
+    "health_flat": "65.00",
+    "pension_flat": "75.00",
+    "pension_employee": "18.00",
+    "u1": "4.00",
+    "u2": "1.10",
+    "u3": "0.75",
+    "payout": "482.00"
+   },
+   "status": "open"
+  },
+  {
+   "id": "lohn-midijob",
+   "title": "Midijob 1.500 €, Übergangsbereich, Steuerklasse I",
+   "case": {
+    "calculation": "payslip",
+    "year": 2026,
+    "month": 5,
+    "wage": "1500"
+   },
+   "expected": {
+    "health_employee": "93.75",
+    "health_employer": "114.59",
+    "pension_employee": "119.43",
+    "pension_employer": "145.99",
+    "care_employee": "23.12",
+    "unemployment_employee": "16.69",
+    "net": "1218.48"
+   },
+   "status": "open"
+  },
+  {
+   "id": "est-freiberufler",
+   "title": "Freiberufler, Gewinn 60.000 €, ledig, keine Kirche",
+   "case": {
+    "calculation": "income_tax",
+    "year": 2026,
+    "profit": "60000"
+   },
+   "expected": {
+    "taxable": "60000.00",
+    "tariff": "14233.00",
+    "assessed": "14233.00",
+    "solidarity": "0.00",
+    "advance_payment": "3558.25"
+   },
+   "status": "open"
+  },
+  {
+   "id": "est-gewerbe-kind",
+   "title": "Gewerbetreibender, Gewinn 120.000 €, Hebesatz 400 %, Kirche 9 %, ein Kind mit 3.108 € Kindergeld",
+   "case": {
+    "calculation": "income_tax",
+    "year": 2026,
+    "profit": "120000",
+    "multiplier": 400,
+    "church_rate": 9,
+    "child_allowances": 10,
+    "child_benefit": "3108"
+   },
+   "expected": {
+    "taxable": "110244.00",
+    "tariff": "35166.00",
+    "trade_tax_credit": "13370.00",
+    "child_allowances": "9756.00",
+    "child_benefit_added": "3108.00",
+    "assessed": "24904.00",
+    "solidarity": "172.07",
+    "church": "3164.94"
+   },
+   "status": "open"
+  },
+  {
+   "id": "kst-gmbh",
+   "title": "GmbH, Jahresergebnis 200.000 €, Zinsen 50.000 €, Miete für Grundbesitz 300.000 €, Hebesatz 450 %",
+   "case": {
+    "calculation": "profit_tax",
+    "subject": "corporation",
+    "year": 2026,
+    "profit": "200000",
+    "interest": "50000",
+    "rent_immovable": "300000",
+    "multiplier": 450
+   },
+   "expected": {
+    "income": "200000.00",
+    "corporation_tax": "30000.00",
+    "solidarity": "1650.00",
+    "financing_addition": "0.00",
+    "trade_income": "200000.00",
+    "base": "7000.00",
+    "tax": "31500.00"
+   },
+   "status": "open"
+  },
+  {
+   "id": "kst-vga",
+   "title": "GmbH, Jahresergebnis 80.000 €, verdeckte Gewinnausschüttung 20.000 €, nicht abziehbare Bewirtung 2.000 €",
+   "case": {
+    "calculation": "profit_tax",
+    "subject": "corporation",
+    "year": 2026,
+    "profit": "80000",
+    "hidden_distributions": "20000",
+    "excluded": "2000",
+    "multiplier": 400
+   },
+   "expected": {
+    "income": "102000.00",
+    "corporation_tax": "15300.00",
+    "solidarity": "841.50",
+    "tax": "14280.00"
+   },
+   "status": "open"
+  }
+ ]
+}
