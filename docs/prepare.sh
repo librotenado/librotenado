@@ -6,7 +6,7 @@
 set -eu
 cd "$(dirname "$0")"
 
-rm -rf spec _includes/quickstart.rs changelog.md
+rm -rf spec rules _includes/quickstart.rs changelog.md
 mkdir -p spec _includes
 cp -R ../spec/data spec/data
 
@@ -23,6 +23,9 @@ cat ../spec/README.md >> spec/README.md
 
 printf -- '---\ntitle: Changelog\nnav_order: 99\nedit_path: CHANGELOG.md\n---\n\n' > changelog.md
 cat ../CHANGELOG.md >> changelog.md
+
+# The rulebook: pages written by the library from its own data (examples/rulebook.rs).
+cargo run --quiet --locked --example rulebook -- .
 
 # The example from its fourth line on – after its licence header and summary.
 tail -n +4 ../crates/librotenado/examples/quickstart.rs > _includes/quickstart.rs

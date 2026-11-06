@@ -3,6 +3,7 @@
 # Written by docs/prepare.sh and Jekyll
 /docs/spec
 /docs/changelog.md
+/docs/rules
 /docs/_includes/quickstart.rs
 /docs/_site
 /_site
