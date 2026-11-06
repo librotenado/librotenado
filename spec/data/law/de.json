@@ -166,6 +166,15 @@
    "status": "draft"
   },
   {
+   "key": "sv.minor_limit",
+   "from": "2027-01-01",
+   "value": "633",
+   "unit": "EUR/month",
+   "law": "§ 8 Abs. 1a SGB IV; § 1 MiLoV5 (14.60 × 130 / 3, rounded up)",
+   "url": "https://www.gesetze-im-internet.de/milov5/__1.html",
+   "status": "draft"
+  },
+  {
    "key": "sv.minor_health",
    "from": "2025-01-01",
    "value": "13",
@@ -320,11 +329,29 @@
   },
   {
    "key": "est.basic_allowance",
+   "from": "2025-01-01",
+   "value": "12096",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.basic_allowance",
    "from": "2026-01-01",
    "value": "12348",
    "unit": "EUR",
    "law": "§ 32a Abs. 1 Nr. 1 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_end",
+   "from": "2025-01-01",
+   "value": "17443",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -338,11 +365,29 @@
   },
   {
    "key": "est.zone2_a",
+   "from": "2025-01-01",
+   "value": "932.3",
+   "unit": "factor",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_a",
    "from": "2026-01-01",
    "value": "914.51",
    "unit": "factor",
    "law": "§ 32a Abs. 1 Nr. 2 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone2_b",
+   "from": "2025-01-01",
+   "value": "1400",
+   "unit": "factor",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -356,11 +401,29 @@
   },
   {
    "key": "est.zone3_end",
+   "from": "2025-01-01",
+   "value": "68480",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_end",
    "from": "2026-01-01",
    "value": "69878",
    "unit": "EUR",
    "law": "§ 32a Abs. 1 Nr. 3 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_a",
+   "from": "2025-01-01",
+   "value": "176.64",
+   "unit": "factor",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -374,11 +437,29 @@
   },
   {
    "key": "est.zone3_b",
+   "from": "2025-01-01",
+   "value": "2397",
+   "unit": "factor",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_b",
    "from": "2026-01-01",
    "value": "2397",
    "unit": "factor",
    "law": "§ 32a Abs. 1 Nr. 3 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone3_c",
+   "from": "2025-01-01",
+   "value": "1015.13",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -392,11 +473,29 @@
   },
   {
    "key": "est.zone4_end",
+   "from": "2025-01-01",
+   "value": "277825",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_end",
    "from": "2026-01-01",
    "value": "277825",
    "unit": "EUR",
    "law": "§ 32a Abs. 1 Nr. 4 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_rate",
+   "from": "2025-01-01",
+   "value": "42",
+   "unit": "percent",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -410,11 +509,29 @@
   },
   {
    "key": "est.zone4_minus",
+   "from": "2025-01-01",
+   "value": "10911.92",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone4_minus",
    "from": "2026-01-01",
    "value": "11135.63",
    "unit": "EUR",
    "law": "§ 32a Abs. 1 Nr. 4 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone5_rate",
+   "from": "2025-01-01",
+   "value": "45",
+   "unit": "percent",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
    "status": "draft"
   },
   {
@@ -428,11 +545,29 @@
   },
   {
    "key": "est.zone5_minus",
+   "from": "2025-01-01",
+   "value": "19246.67",
+   "unit": "EUR",
+   "law": "§ 32a EStG as in force for 2025; Programmablaufplan 2025 of the BMF (UPTAB25)",
+   "url": "https://www.bmf-steuerrechner.de/interface/pseudocodes.xhtml",
+   "status": "draft"
+  },
+  {
+   "key": "est.zone5_minus",
    "from": "2026-01-01",
    "value": "19470.38",
    "unit": "EUR",
    "law": "§ 32a Abs. 1 Nr. 5 EStG",
    "url": "https://www.gesetze-im-internet.de/estg/__32a.html",
+   "status": "draft"
+  },
+  {
+   "key": "est.child_allowance",
+   "from": "2025-01-01",
+   "value": "9600",
+   "unit": "EUR",
+   "law": "§ 32 Abs. 6 EStG as in force for 2025 (2 × 3,336 + 2 × 1,464); PAP 2025",
+   "url": "https://www.gesetze-im-internet.de/estg/__32.html",
    "status": "draft"
   },
   {
@@ -532,6 +667,15 @@
    "unit": "percent",
    "law": "§ 4 Satz 1 SolZG",
    "url": "https://www.gesetze-im-internet.de/solzg_1995/__4.html",
+   "status": "draft"
+  },
+  {
+   "key": "soli.limit",
+   "from": "2025-01-01",
+   "value": "19950",
+   "unit": "EUR",
+   "law": "§ 3 Abs. 3 SolZG as in force for 2025; PAP 2025 (SOLZFREI)",
+   "url": "https://www.gesetze-im-internet.de/solzg_1995/__3.html",
    "status": "draft"
   },
   {

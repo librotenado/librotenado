@@ -2,6 +2,17 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.24.0 – 2026-11-06
+
+The year change.
+
+- [0012 Taxes on profit](spec/0012-taxes-on-profit.md): income tax of 2025 – the tariff, the children's allowances
+  and the exemption limit of the solidarity surcharge of 2025, from the Programmablaufplan 2025 of the BMF.
+- [0009 Reports](spec/0009-reports.md): values the law sets each year – contribution ceilings, the basic allowance –
+  no longer carry into a year they are not published for (`LawValues::of_year`); the limit of minor employment of
+  2027 (633 euros, from the minimum wage of 14.60 euros). The Programmablaufplan 2027 and the values of the social
+  insurance of 2027 are not yet published.
+
 ## 0.23.0 – 2026-11-06
 
 The rulebook.

@@ -90,7 +90,11 @@ special expenses, extraordinary burdens, allowances –, losses carried forward,
    12,348 euros; (914.51 · y + 1,400) · y up to 17,799 euros, y a ten-thousandth of what exceeds 12,348; (173.10 · z
    + 2,397) · z + 1,034.87 up to 69,878 euros, z a ten-thousandth of what exceeds 17,799; 0.42 · x − 11,135.63 up to
    277,825 euros; 0.45 · x − 19,470.38 above; rounded down to full euros. Spouses pay twice the tax on half their
-   income (Abs. 5). The tariffs of earlier years are not part of this version (OPEN).
+   income (Abs. 5). The tariff of 2025 – basic allowance 12,096 euros, zones to 17,443, 68,480 and 277,825 euros,
+   (932.30 · y + 1,400) · y, (176.64 · z + 2,397) · z + 1,015.13, 0.42 · x − 10,911.92, 0.45 · x − 19,246.67 – is that of
+   the Programmablaufplan 2025 of the BMF; its children's allowances 9,600 euros and the exemption limit of the
+   solidarity surcharge 19,950 euros. The values of each year are those of [`law/de.json`](data/law/de.json) (part
+   0009); a year without its basic allowance has no tariff. Years before 2025 are not part of this version (OPEN).
 3. **The reduction for trade tax** ([§ 35 Abs. 1 EStG](https://www.gesetze-im-internet.de/estg/__35.html)): four
    times the base amount of trade tax, no more than the trade tax, nor than the share of the tariff tax that falls on
    the profit of the business among the positive income.
@@ -125,8 +129,8 @@ Beside it, as the person states them:
   foreign tax credited (none here); the solidarity surcharge 5.5 % of it, outside its exemption limit (§ 3 Abs. 3, § 4
   Satz 4 SolZG). The test whether the tariff is cheaper (Abs. 6) is OPEN.
 
-The tariffs of earlier years, other special tariffs (§ 32b EStG), the sale of a business at 56 % (§ 34 Abs. 3) and
-the exemption limits of the solidarity surcharge for years other than 2026 are not part of this version (OPEN).
+The tariffs before 2025, other special tariffs (§ 32b EStG) and the sale of a business at 56 % (§ 34 Abs. 3) are not
+part of this version (OPEN).
 
 ## Interest barrier, hidden distributions, tax groups
 

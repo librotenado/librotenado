@@ -57,6 +57,12 @@ impl LawValues {
         self.values.iter().filter(|v| v.key == key && v.from <= date).max_by_key(|v| v.from)
     }
 
+    /// The value of `key` set for the year of `date` itself: values the law sets anew each year – contribution
+    /// ceilings, the basic allowance – do not carry into a year they are not yet published for.
+    pub fn of_year(&self, key: &str, date: Date) -> Option<&LawValue> {
+        self.get(key, date).filter(|v| v.from.year() == date.year())
+    }
+
     /// An amount in euros as cents.
     pub(crate) fn cents(&self, key: &str, date: Date) -> Option<i128> {
         let v = &self.get(key, date)?.value;

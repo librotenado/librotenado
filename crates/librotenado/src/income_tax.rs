@@ -83,10 +83,12 @@ pub struct IncomeTax {
 const EURO: i128 = 100;
 
 /// The tariff income tax in full euros for a taxable income in full euros (§ 32a Abs. 1 EStG), by the values of the
-/// year (`LawValues::de`, keys `est.*`): from 2026; `None` for a year without them (OPEN).
+/// year (`LawValues::de`, keys `est.*`): 2025 and 2026; `None` for a year without them (OPEN).
 pub fn income_tax_tariff(year: u16, taxable_euros: i128) -> Option<i128> {
     let law = crate::LawValues::de();
     let day = Date::new(year, 1, 1)?;
+    // The tariff is set for each year: without its basic allowance, no tariff.
+    law.of_year("est.basic_allowance", day)?;
     let euros = |key: &str| law.cents(key, day).map(|c| c / EURO);
     let frac = |key: &str| law.fraction(key, day);
     let (gfb, z2, z3, z4) =
@@ -139,8 +141,13 @@ fn fifth(year: u16, taxable: i128, extraordinary: i128, joint: bool) -> Option<i
 /// limit of 20,350 euros, or 40,700 euros for spouses; 5.5 %, but no more than 11.9 % of what exceeds the limit;
 /// fractions of a cent left out. The values are those of `LawValues::de` (`soli.*`).
 pub fn solidarity_surcharge(assessed: i128, joint: bool) -> i128 {
+    solidarity_of(2026, assessed, joint)
+}
+
+/// The solidarity surcharge by the values of `year`.
+fn solidarity_of(year: u16, assessed: i128, joint: bool) -> i128 {
     let law = crate::LawValues::de();
-    let day = Date::new(2026, 1, 1).expect("a date");
+    let day = Date::new(year, 1, 1).expect("a date");
     let single = law.cents("soli.limit", day).expect("published");
     let limit = if joint { 2 * single } else { single };
     if assessed <= limit {
@@ -246,7 +253,7 @@ impl EventSet {
         // The solidarity surcharge: the exemption limit tested without the tax on capital income, which bears 5.5 %
         // in any case (§ 3 Abs. 3, § 4 Satz 4 SolZG).
         let surcharge_base = base_tariff - if base > 0 { credit(base_tariff) } else { 0 };
-        tax.solidarity = solidarity_surcharge(surcharge_base, facts.joint)
+        tax.solidarity = solidarity_of(to.year(), surcharge_base, facts.joint)
             + tax.capital_tax * law.millionths("soli.rate", day).expect("published") / 1_000_000;
         tax.church = facts.church_rate.map_or(0, |rate| (base_tariff + tax.capital_tax) * i128::from(rate) / 100);
         let quarter = tax.assessed / 4;
@@ -301,7 +308,9 @@ mod tests {
         // (914.51 × 0.1652 + 1,400) × 0.1652 = 256.23; (173.10 × 2.2201 + 2,397) × 2.2201 + 1,034.87 = 7,209.63.
         assert_eq!(t(14_000), 256);
         assert_eq!(t(40_000), 7_209);
-        assert_eq!(income_tax_tariff(2025, 40_000), None);
+        // 2025: (176.64 × 2.2557 + 2,397) × 2.2557 + 1,015.13 = 7,320.82; no tariff before it, nor for 2027 yet.
+        assert_eq!(income_tax_tariff(2025, 40_000), Some(7_320));
+        assert_eq!((income_tax_tariff(2024, 40_000), income_tax_tariff(2027, 40_000)), (None, None));
         // Splitting: twice the tax on half.
         assert_eq!(tariff(2026, 8_000_000 * 100 / 100, true), Some(2 * t(40_000) * 100));
     }

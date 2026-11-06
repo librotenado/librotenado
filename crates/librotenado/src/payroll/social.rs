@@ -52,6 +52,9 @@ pub(super) fn year(year: u16) -> Option<Year> {
     let day = crate::Date::new(year, 1, 1)?;
     let cents = |key: &str| law.cents(key, day);
     let rate = |key: &str| law.millionths(key, day);
+    // The ceilings are set for each year: without those of the year, no year.
+    law.of_year("sv.health_ceiling", day)?;
+    law.of_year("sv.pension_ceiling", day)?;
     Some(Year {
         health_ceiling: cents("sv.health_ceiling")?,
         pension_ceiling: cents("sv.pension_ceiling")?,

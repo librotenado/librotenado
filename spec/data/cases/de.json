@@ -177,6 +177,22 @@
     "tax": "14280.00"
    },
    "status": "open"
+  },
+  {
+   "id": "est-2025",
+   "title": "Freiberufler 2025, Gewinn 40.000 €, ledig",
+   "case": {
+    "calculation": "income_tax",
+    "year": 2025,
+    "profit": "40000"
+   },
+   "expected": {
+    "taxable": "40000.00",
+    "tariff": "7320.00",
+    "assessed": "7320.00",
+    "solidarity": "0.00"
+   },
+   "status": "open"
   }
  ]
 }
