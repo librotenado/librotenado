@@ -70,6 +70,9 @@ pub struct WageTaxFacts {
     pub care_reductions: u8,
     /// Whether the employee works in Saxony, which splits the care insurance otherwise (§ 58 Abs. 3 SGB XI).
     pub saxony: bool,
+    /// For pensions: the year they began and the pension of their first whole month, in cents (§ 19 Abs. 2 Satz 3,
+    /// 4 EStG – the base of the allowance for pensions).
+    pub pension_start: Option<(u16, i128)>,
 }
 
 impl Default for WageTaxFacts {
@@ -88,6 +91,7 @@ impl Default for WageTaxFacts {
             childless: false,
             care_reductions: 0,
             saxony: false,
+            pension_start: None,
         }
     }
 }
@@ -101,6 +105,8 @@ pub struct Wages {
     pub one_off: i128,
     /// Of those, compensation taxed by the fifth (§ 24 Nr. 1, § 34 EStG).
     pub compensation: i128,
+    /// Of the current wages, pensions (Versorgungsbezüge, § 19 Abs. 2 EStG).
+    pub pension: i128,
     /// For one-off payments: the wages expected for the year without them, with the one-off payments of earlier periods
     /// of the year (§ 39b Abs. 3 EStG).
     pub expected_year: i128,
@@ -189,8 +195,15 @@ macro_rules! run {
             PVZ: i64::from(facts.childless),
             PVA: Dec::lit(i128::from(facts.care_reductions.min(4)), 0),
             PVS: i64::from(facts.saxony),
+            VBEZ: cents(wages.pension)?,
             ..$pap::default()
         };
+        if let Some((year, monthly)) = facts.pension_start {
+            pap.VJAHR = i64::from(year);
+            pap.VBEZM = cents(monthly)?;
+            // Pensions in the wages expected for the year, for one-off payments: as many months as the year has.
+            pap.JVBEZ = cents(wages.pension * 12)?;
+        }
         if let Some(factor) = facts.factor {
             pap.af = 1;
             pap.f = Dec::lit(i128::from(factor), 3);

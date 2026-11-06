@@ -15,7 +15,7 @@ mod wage_tax;
 
 pub use employment::{
     Employment, EmploymentId, GermanEmployment, GermanInsurance, GermanTax, PayItem, PayItemKind, Payslip, PayslipId,
-    PrivateInsurance, YearAndMonth,
+    PensionStart, PrivateInsurance, YearAndMonth,
 };
 pub use figures::PayrollError;
 pub use register::PayrollProblem;

@@ -65,6 +65,42 @@ pub struct ProfitTaxFacts {
     /// The profit is determined by receipts and payments (§ 4 Abs. 3 EStG): a booking counts on the day it is
     /// `attributed` to, where it has one (§ 11 EStG, spec part 0001).
     pub cash_basis: bool,
+    /// Hidden profit distributions that reduced the result, added to the income (verdeckte Gewinnausschüttung, § 8
+    /// Abs. 3 Satz 2 KStG), in base units.
+    pub hidden_distributions: i128,
+    /// Hidden contributions booked as income, which stay out of it (verdeckte Einlage, § 8 Abs. 3 Satz 3 KStG), in
+    /// base units.
+    pub hidden_contributions: i128,
+    /// The part in a tax group (Organschaft, §§ 14 to 19 KStG, § 2 Abs. 2 Satz 2 GewStG); none outside one.
+    pub group: Option<GroupRole>,
+    /// The interest carried forward from earlier years by the interest barrier (Zinsvortrag, § 4h Abs. 1 Satz 5
+    /// EStG), in base units.
+    pub interest_carryforward: i128,
+    /// The EBITDA carried forward from earlier years (EBITDA-Vortrag, § 4h Abs. 1 Satz 3 EStG), in base units.
+    pub ebitda_carryforward: i128,
+    /// An exception of § 4h Abs. 2 Satz 1 Buchstabe b or c EStG applies: a business that belongs to no group, or
+    /// whose equity ratio is no lower than its group's (for a corporation with § 8a Abs. 2, 3 KStG).
+    pub interest_exception: bool,
+}
+
+/// The part of a body in a tax group (Organschaft).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupRole {
+    /// A controlled company (Organgesellschaft): its income is attributed to the controlling one (§ 14 KStG); it taxes
+    /// only 20/17 of the compensation it pays to outside shareholders (§ 16 KStG); for trade tax it is an establishment
+    /// of the controlling one.
+    Member {
+        /// The compensation paid to outside shareholders (Ausgleichszahlungen), in base units.
+        compensation: i128,
+    },
+    /// The controlling body (Organträger): the income and the trade income of its controlled companies, as computed
+    /// for them, are added to its own.
+    Parent {
+        /// The income attributed from the controlled companies, in base units.
+        income: i128,
+        /// Their trade income before losses, in base units.
+        trade_income: i128,
+    },
 }
 
 /// Taxable profit, corporation tax and trade tax of a financial year, in base units of the euro.
@@ -79,6 +115,21 @@ pub struct ProfitTax {
     pub participation: i128,
     /// Remunerations of partners booked as expenses, which are their profit (§ 15 Abs. 1 Satz 1 Nr. 2 EStG).
     pub partner_remuneration: i128,
+    /// The net interest expense of the year with the interest carried forward (§ 4h EStG).
+    pub net_interest: i128,
+    /// The interest not deductible by the interest barrier, added to the income.
+    pub interest_not_deductible: i128,
+    /// The interest carried forward to the next year.
+    pub interest_carried: i128,
+    /// The EBITDA carried forward to the next year.
+    pub ebitda_carried: i128,
+    /// Hidden profit distributions added (§ 8 Abs. 3 Satz 2 KStG).
+    pub hidden_distributions: i128,
+    /// Hidden contributions left out (§ 8 Abs. 3 Satz 3 KStG).
+    pub hidden_contributions: i128,
+    /// Income of a tax group: attributed from the controlled companies (positive), or to the controlling one
+    /// (negative); the compensation taxed by a controlled company counts in `income` (§ 16 KStG).
+    pub group_income: i128,
     /// Donations booked (positive).
     pub donations: i128,
     /// Donations deducted (§ 9 Abs. 1 Nr. 2 KStG); none for persons, who deduct them privately (§ 10b EStG).
@@ -168,6 +219,13 @@ impl ProfitTax {
             ("excluded", self.excluded),
             ("participation", self.participation),
             ("partner_remuneration", self.partner_remuneration),
+            ("net_interest", self.net_interest),
+            ("interest_not_deductible", self.interest_not_deductible),
+            ("interest_carried", self.interest_carried),
+            ("ebitda_carried", self.ebitda_carried),
+            ("hidden_distributions", self.hidden_distributions),
+            ("hidden_contributions", self.hidden_contributions),
+            ("group_income", self.group_income),
             ("donations", self.donations),
             ("donations_deducted", self.donations_deducted),
             ("income", self.income),
@@ -292,6 +350,7 @@ impl EventSet {
         let mut trade = TradeTax::default();
         let mut dividends_exempt = 0;
         let mut land_tax = 0;
+        let mut interest_income = 0;
         for (account, units) in &contributions {
             let units = *units;
             tax.result += units;
@@ -321,6 +380,9 @@ impl EventSet {
                 Some("participation-cost") if !corporate => tax.participation += part(units, 40, 100),
                 _ => {}
             }
+            if attribute(account, "interest").as_deref() == Some("income") {
+                interest_income += units;
+            }
             let expense = -units;
             match attribute(account, "trade_tax").as_deref() {
                 Some("interest") => *trade.financing.entry('a').or_default() += expense,
@@ -337,27 +399,82 @@ impl EventSet {
             }
         }
         // The income: the result without what stays out; donations of a corporation up to their limit.
-        let before_donations = tax.result - tax.excluded - tax.participation - tax.partner_remuneration + tax.donations;
+        tax.hidden_distributions = facts.hidden_distributions;
+        tax.hidden_contributions = facts.hidden_contributions;
+        let before_donations = tax.result - tax.excluded - tax.participation - tax.partner_remuneration
+            + tax.donations
+            + tax.hidden_distributions
+            - tax.hidden_contributions;
         let donation_limit = |base: i128| {
             let by_income = part(base.max(0), 20, 100);
             let by_turnover = facts.turnover_and_wages.map_or(0, |sum| part(sum, 4, 1000));
             by_income.max(by_turnover)
         };
+        // The interest barrier (§ 4h EStG, § 8a KStG): interest expense – the charges of § 8 Nr. 1 a GewStG with the
+        // interest carried forward – is deductible up to the interest income and beyond it up to 30 % of the EBITDA
+        // and the EBITDA carried forward, where the net expense reaches 3 million euros and no exception applies.
+        let interest_expense = trade.financing.get(&'a').copied().unwrap_or(0) + facts.interest_carryforward;
+        tax.net_interest = interest_expense - interest_income;
+        let applies = tax.net_interest >= 3_000_000 * EURO && !facts.interest_exception;
+        if applies {
+            let depreciation: i128 = self.assets(owner).iter().map(|state| state.depreciation(from, to)).sum();
+            // The income it starts from: without the barrier, losses, donations and the interest carried forward
+            // (§ 4h Abs. 1 Satz 6, Abs. 3 Satz 1 EStG, § 8a Abs. 1 Satz 1 KStG).
+            let current_net = tax.net_interest - facts.interest_carryforward;
+            let ebitda = part((before_donations + current_net + depreciation).max(0), 30, 100);
+            if tax.net_interest <= ebitda {
+                // EBITDA beyond the net interest is carried forward (Satz 3).
+                tax.ebitda_carried = facts.ebitda_carryforward + ebitda - tax.net_interest;
+            } else {
+                // The EBITDA carried forward covers the rest, the oldest first; what remains is carried as interest.
+                let short = tax.net_interest - ebitda;
+                let used = facts.ebitda_carryforward.min(short);
+                tax.interest_not_deductible = short - used;
+                tax.ebitda_carried = facts.ebitda_carryforward - used;
+            }
+            tax.interest_carried = tax.interest_not_deductible;
+        } else {
+            // Below the limit or excepted, the interest carried forward is deductible and no EBITDA is carried
+            // forward from the year (Satz 3).
+            tax.ebitda_carried = facts.ebitda_carryforward;
+        }
+        let before_donations = before_donations - facts.interest_carryforward + tax.interest_not_deductible;
         if corporate {
             tax.donations_deducted = tax.donations.min(donation_limit(before_donations)).max(0);
         }
         tax.income = before_donations - tax.donations_deducted;
-        tax.loss_deduction = usable_losses(tax.income, facts.income_losses, 70);
+        let own_income = tax.income;
+        match facts.group {
+            // A controlled company's income goes to the controlling one; it taxes 20/17 of the compensation, and
+            // uses no losses of before the group (§ 15 Satz 1 Nr. 1 KStG).
+            Some(GroupRole::Member { compensation }) => {
+                tax.group_income = -own_income;
+                tax.income = part(compensation, 20, 17);
+            }
+            Some(GroupRole::Parent { income, .. }) => {
+                tax.group_income = income;
+                tax.income += income;
+            }
+            None => {}
+        }
+        let losses = if matches!(facts.group, Some(GroupRole::Member { .. })) { 0 } else { facts.income_losses };
+        tax.loss_deduction = usable_losses(tax.income, losses, 70);
         tax.taxable = tax.income - tax.loss_deduction;
         if corporate && tax.taxable > 0 {
             // Fractions of a cent stay out (§ 4 Satz 3 SolZG; OPEN for corporation tax).
             tax.corporation_tax = part(tax.taxable, corporation_tax_rate(to.year()), 1000);
             tax.solidarity = part(tax.corporation_tax, 55, 1000);
         }
-        if let Some(multiplier) = facts.multiplier {
-            trade.profit = tax.income;
+        // A controlled company is an establishment of the controlling one for trade tax: its trade income is added
+        // there, and it pays none itself.
+        let member = matches!(facts.group, Some(GroupRole::Member { .. }));
+        if let (Some(multiplier), false) = (facts.multiplier, member) {
+            trade.profit = own_income;
             trade.multiplier = multiplier;
             let financing: i128 = trade.financing.values().sum();
+            // Only interest deductible counts as a charge of § 8 Nr. 1 a GewStG (BFH III R 27/21).
+            let financing =
+                financing - tax.interest_not_deductible.min(trade.financing.get(&'a').copied().unwrap_or(0));
             trade.financing_addition = part((financing - 200_000 * EURO).max(0), 1, 4);
             trade.dividends = dividends_exempt;
             trade.donations_added = tax.donations_deducted;
@@ -369,7 +486,12 @@ impl EventSet {
                 + trade.partnership_losses
                 + trade.donations_added;
             trade.donations = tax.donations.min(donation_limit(with_additions)).max(0);
-            trade.trade_income = with_additions - trade.land - trade.partnership_profits - trade.donations;
+            let group_trade = match facts.group {
+                Some(GroupRole::Parent { trade_income, .. }) => trade_income,
+                _ => 0,
+            };
+            trade.trade_income =
+                with_additions - trade.land - trade.partnership_profits - trade.donations + group_trade;
             trade.loss_deduction = usable_losses(trade.trade_income, facts.trade_losses, 60);
             let after_losses = trade.trade_income - trade.loss_deduction;
             trade.rounded = if after_losses > 0 { after_losses / (100 * EURO) * (100 * EURO) } else { 0 };
@@ -455,6 +577,12 @@ pub(crate) mod tests {
             turnover_and_wages: None,
             holding: Holding::AtLeast15,
             cash_basis: false,
+            hidden_distributions: 0,
+            hidden_contributions: 0,
+            group: None,
+            interest_carryforward: 0,
+            ebitda_carryforward: 0,
+            interest_exception: false,
         }
     }
 
@@ -571,5 +699,62 @@ pub(crate) mod tests {
         let freelancer = ProfitTaxFacts { multiplier: None, ..facts(TaxSubject::Individual) };
         let tax = set.profit_tax(&Chart::v0_1(), &party(1), from, to, &freelancer).unwrap();
         assert_eq!(tax.income_tax_lines(), ("de-anlage-s", [("100".to_owned(), 100_000 * E)].into()));
+    }
+
+    /// A hidden profit distribution adds to the income, a hidden contribution booked as income stays out of it; in a
+    /// tax group the controlled company's income goes to the controlling one.
+    #[test]
+    fn hidden_distributions_and_tax_groups() {
+        let set = books(&[("8400", -100_000 * E)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let tax = |facts: ProfitTaxFacts| set.profit_tax(&Chart::v0_1(), &party(1), from, to, &facts).unwrap();
+        let gmbh = facts(TaxSubject::Corporation);
+        let hidden =
+            tax(ProfitTaxFacts { hidden_distributions: 10_000 * E, hidden_contributions: 4_000 * E, ..gmbh.clone() });
+        assert_eq!(hidden.income, 106_000 * E);
+        assert_eq!(hidden.trade.unwrap().profit, 106_000 * E);
+        // A controlled company: 20/17 of 17,000 compensation = 20,000 taxed, no trade tax of its own.
+        let member =
+            tax(ProfitTaxFacts { group: Some(GroupRole::Member { compensation: 17_000 * E }), ..gmbh.clone() });
+        assert_eq!((member.income, member.group_income, member.trade.is_none()), (20_000 * E, -100_000 * E, true));
+        // The controlling company adds income and trade income of its controlled ones.
+        let parent = tax(ProfitTaxFacts {
+            group: Some(GroupRole::Parent { income: 50_000 * E, trade_income: 60_000 * E }),
+            ..gmbh
+        });
+        assert_eq!(parent.income, 150_000 * E);
+        assert_eq!(parent.trade.unwrap().trade_income, 160_000 * E);
+    }
+
+    /// The interest barrier: net interest of 4 million against a profit before interest of 10 million – 30 % of
+    /// EBITDA, 3 million, is deductible, 1 million carried forward; below 3 million it does not apply.
+    #[test]
+    fn the_interest_barrier() {
+        // 2100 Zinsaufwendungen (§ 8 Nr. 1 a GewStG), 2650 Zinserträge.
+        let set = books(&[("8400", -10_000_000 * E), ("2100", 4_500_000 * E), ("2650", -500_000 * E)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let tax = |facts: ProfitTaxFacts| set.profit_tax(&Chart::v0_1(), &party(1), from, to, &facts).unwrap();
+        let gmbh = facts(TaxSubject::Corporation);
+        let t = tax(gmbh.clone());
+        assert_eq!(t.net_interest, 4_000_000 * E);
+        // Result 6,000,000; EBITDA 6,000,000 + 4,000,000 = 10,000,000, 30 % = 3,000,000.
+        assert_eq!((t.interest_not_deductible, t.interest_carried), (1_000_000 * E, 1_000_000 * E));
+        assert_eq!(t.income, 7_000_000 * E);
+        // Excepted: all deductible; with EBITDA carried forward, covered.
+        assert_eq!(tax(ProfitTaxFacts { interest_exception: true, ..gmbh.clone() }).interest_not_deductible, 0);
+        let covered = tax(ProfitTaxFacts { ebitda_carryforward: 1_500_000 * E, ..gmbh.clone() });
+        assert_eq!((covered.interest_not_deductible, covered.ebitda_carried), (0, 500_000 * E));
+        // Below the limit: nothing; the interest carried forward is deductible.
+        let small = books(&[("8400", -1_000_000 * E), ("2100", 100_000 * E)]);
+        let t = small
+            .profit_tax(
+                &Chart::v0_1(),
+                &party(1),
+                from,
+                to,
+                &ProfitTaxFacts { interest_carryforward: 50_000 * E, ..gmbh },
+            )
+            .unwrap();
+        assert_eq!((t.interest_not_deductible, t.income), (0, 850_000 * E));
     }
 }

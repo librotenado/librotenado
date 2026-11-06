@@ -78,6 +78,7 @@ struct Sums {
     in_kind: i128,
     tax_free: i128,
     deduction: i128,
+    pension: i128,
 }
 
 fn sums(items: &[PayItem]) -> Result<Sums, PayrollError> {
@@ -94,6 +95,7 @@ fn sums(items: &[PayItem]) -> Result<Sums, PayrollError> {
             PayItemKind::InKind => s.in_kind += units,
             PayItemKind::TaxFree => s.tax_free += units,
             PayItemKind::Deduction => s.deduction += units,
+            PayItemKind::Pension => s.pension += units,
         }
     }
     Ok(s)
@@ -139,7 +141,7 @@ impl EventSet {
                 continue;
             }
             let earlier = sums(&payslip.items)?;
-            current += earlier.wage + earlier.in_kind;
+            current += earlier.wage + earlier.in_kind + earlier.pension;
             one_off += earlier.one_off + earlier.compensation;
             before.days_before += days(payslip.from, payslip.to).0;
             let figure = |name: &str| payslip.figures.get(name).map_or(0, Money::base_units);
@@ -187,6 +189,7 @@ impl EventSet {
             return Err(PayrollError::Group(insurance.person_group.clone()));
         }
         let minor = insurance.person_group == "109";
+        let trainee = insurance.person_group == "121";
         let short_term = insurance.person_group == "110";
         let current = s.wage + s.in_kind;
         let facts = |insurance: &super::GermanInsurance, groups: [u8; 4]| Month {
@@ -195,7 +198,12 @@ impl EventSet {
             household: insurance.household,
             short_term,
             over_four_weeks: described.end.is_none_or(|end| day_number(end) - day_number(described.start) >= 28),
-            additional: insurance.additional_rate.as_ref().map_or(0, millionths),
+            additional: if trainee {
+                rules.average_additional
+            } else {
+                insurance.additional_rate.as_ref().map_or(0, millionths)
+            },
+            trainee,
             childless: insurance.childless,
             children: insurance.children,
             saxony: insurance.saxony,
@@ -203,7 +211,8 @@ impl EventSet {
             u2: insurance.u2.as_ref().map(millionths),
             ..Month::default()
         };
-        let mut month = Month { current, one_off: s.one_off, days, ..facts(insurance, groups) }.with_before(&before);
+        let mut month = Month { current, one_off: s.one_off, days, pension: s.pension, ..facts(insurance, groups) }
+            .with_before(&before);
 
         // The Märzklausel (§ 23a Abs. 4, 5 SGB IV): a one-off payment from January to March that, with the wages of
         // the year so far, exceeds the ceiling of those months – of health where the employee is insured in it, else
@@ -316,6 +325,11 @@ impl EventSet {
                 childless: insurance.childless,
                 care_reductions: insurance.children.saturating_sub(1).min(4),
                 saxony: insurance.saxony,
+                pension_start: match &tax.pension_start {
+                    None => None,
+                    Some(start) if start.monthly.currency() != &euro() => return Err(PayrollError::Currency),
+                    Some(start) => Some((start.year, start.monthly.base_units())),
+                },
             };
             // A whole month by the monthly tables; part of one by the daily ones, the wages per day (§ 39b Abs. 2
             // Satz 6 EStG).
@@ -326,13 +340,19 @@ impl EventSet {
                 addition: (facts.addition.0, if whole { facts.addition.1 } else { facts.addition.0 / 360 }),
                 ..facts
             };
+            // The Aktivrente: a twelfth of 24,000 euros of the current wages a month free of tax (§ 3 Nr. 21 EStG).
+            let active = if tax.active_pension { current.min(200_000) } else { 0 };
+            if active > 0 {
+                figures.insert("active_pension_free", active);
+            }
             let wages = Wages {
-                current: per(current),
+                current: per(current - active + s.pension),
+                pension: per(s.pension),
                 one_off: s.one_off + s.compensation,
                 compensation: s.compensation,
                 // The wages expected for the year: those paid, the current ones for the rest of it, and the one-off
                 // payments before (§ 39b Abs. 3 EStG).
-                expected_year: current_before + current * i128::from(13 - to.month()) + one_off_before,
+                expected_year: current_before + (current + s.pension) * i128::from(13 - to.month()) + one_off_before,
             };
             let result = wage_tax(year, period, &wages, &facts)?;
             let wage_tax = result.tax * factor + result.one_off_tax;
@@ -354,7 +374,7 @@ impl EventSet {
         }
 
         // Gross, net and what is paid out.
-        let gross = current + s.one_off + s.compensation + s.tax_free;
+        let gross = current + s.one_off + s.compensation + s.tax_free + s.pension;
         let withheld: i128 = ["wage_tax", "solidarity", "church"]
             .iter()
             .chain(&[
@@ -363,6 +383,8 @@ impl EventSet {
                 "care_employee",
                 "pension_employee",
                 "unemployment_employee",
+                "pension_health",
+                "pension_care",
             ])
             .map(|name| figures.get(name).copied().unwrap_or(0))
             .sum();
@@ -445,6 +467,8 @@ pub(crate) mod tests {
                     addition: None,
                     flat: person == "109",
                     short_term: false,
+                    pension_start: None,
+                    active_pension: false,
                 },
                 insurance: GermanInsurance {
                     insurer: "01234567".into(),
@@ -522,7 +546,7 @@ pub(crate) mod tests {
         let bonus = wage_tax(
             2026,
             PayPeriod::Month,
-            &Wages { current: 400_000, one_off: 1_000_000, compensation: 0, expected_year: 400_000 * 12 },
+            &Wages { current: 400_000, one_off: 1_000_000, expected_year: 400_000 * 12, ..Wages::default() },
             &facts,
         )
         .unwrap();
@@ -749,5 +773,76 @@ pub(crate) mod tests {
         stray.replaces = Some("01a18406-0000-7000-8000-0000000000ff".parse().unwrap());
         add(&mut set, Payload::PayslipRecorded { payslip: stray });
         assert!(set.review_payroll().iter().any(|p| matches!(p, crate::payroll::PayrollProblem::Correction { .. })));
+    }
+
+    /// A pension paid by the employer bears less wage tax than wages of the same amount (the allowance for pensions)
+    /// and no contributions.
+    #[test]
+    fn a_pension() {
+        let mut set = employer();
+        let mut retired = employment("0000", "101");
+        let de = retired.de.as_mut().unwrap();
+        de.tax.pension_start = Some(crate::payroll::PensionStart { year: 2020, monthly: eur(150_000) });
+        add(&mut set, Payload::EmploymentDescribed { employment: Box::new(retired) });
+        let (from, to) = ("2026-05-01".parse().unwrap(), "2026-05-31".parse().unwrap());
+        let pension = set.payslip_figures(&employment_id(), from, to, &[item(PayItemKind::Pension, 300_000)]).unwrap();
+        let wages = set.payslip_figures(&employment_id(), from, to, &[item(PayItemKind::Wage, 300_000)]).unwrap();
+        assert!(get(&pension, "wage_tax") < get(&wages, "wage_tax"), "{pension:?} {wages:?}");
+        assert_eq!(get(&pension, "health_base"), 0);
+        assert_eq!(get(&pension, "gross"), 300_000);
+        // The pensioner in the statutory insurance pays health – 14.6 % and the additional 2.9 % on 3,000 less
+        // 197.75 – and care in full, 3.6 % and 0.6 % without children.
+        let mut insured = employment("1000", "101");
+        insured.de.as_mut().unwrap().tax.pension_start =
+            Some(crate::payroll::PensionStart { year: 2020, monthly: eur(150_000) });
+        add(&mut set, Payload::EmploymentDescribed { employment: Box::new(insured) });
+        let f = set.payslip_figures(&employment_id(), from, to, &[item(PayItemKind::Pension, 300_000)]).unwrap();
+        assert_eq!(get(&f, "pension_health"), ((300_000 - 19_775) * 175 + 500) / 1000);
+        assert_eq!(get(&f, "pension_care"), 300_000 * 42 / 1000);
+        assert_eq!(get(&f, "health_employee"), 0);
+    }
+
+    /// A trainee with 300 euros: the employer pays all; with a bonus of 100 the employee pays half of the 75 above.
+    #[test]
+    fn a_trainee_with_low_pay() {
+        let mut set = employer();
+        add(&mut set, Payload::EmploymentDescribed { employment: Box::new(employment("1111", "121")) });
+        let (from, to) = ("2026-06-01".parse().unwrap(), "2026-06-30".parse().unwrap());
+        let f = set.payslip_figures(&employment_id(), from, to, &[item(PayItemKind::Wage, 30_000)]).unwrap();
+        assert!(!f.keys().any(|k| k.ends_with("_employee")), "{f:?}");
+        // Health 14.6 % of 300 = 43.80, all the employer's; the additional rate is the average 2.9 %.
+        assert_eq!(get(&f, "health_employer"), 4_380);
+        assert_eq!(get(&f, "health_additional_employer"), 870);
+        let f = set
+            .payslip_figures(
+                &employment_id(),
+                from,
+                to,
+                &[item(PayItemKind::Wage, 30_000), item(PayItemKind::OneOff, 10_000)],
+            )
+            .unwrap();
+        // Pension: 9.3 % of 75 = 6.98 the employee's.
+        assert_eq!(get(&f, "pension_employee"), 698);
+    }
+
+    /// After the standard retirement age, 2,000 euros a month are free of tax; contributions stay.
+    #[test]
+    fn the_aktivrente() {
+        let mut set = employer();
+        let mut older = employment("1311", "101");
+        older.de.as_mut().unwrap().tax.active_pension = true;
+        add(&mut set, Payload::EmploymentDescribed { employment: Box::new(older) });
+        let (from, to) = ("2026-06-01".parse().unwrap(), "2026-06-30".parse().unwrap());
+        let f = set.payslip_figures(&employment_id(), from, to, &[item(PayItemKind::Wage, 250_000)]).unwrap();
+        assert_eq!(get(&f, "active_pension_free"), 200_000);
+        let facts = WageTaxFacts {
+            church: true,
+            childless: true,
+            health: HealthCover::Statutory { additional_rate: 290 },
+            ..WageTaxFacts::default()
+        };
+        let tax = wage_tax(2026, PayPeriod::Month, &Wages { current: 50_000, ..Wages::default() }, &facts).unwrap();
+        assert_eq!(get(&f, "wage_tax"), tax.tax);
+        assert_eq!(get(&f, "health_base"), 250_000);
     }
 }

@@ -21,7 +21,30 @@ pub struct IncomeTaxFacts {
     /// The rate of church tax in percent where the person belongs to a church that levies it – 8 in Bavaria and
     /// Baden-Württemberg, 9 elsewhere (the church tax laws of the states).
     pub church_rate: Option<u8>,
+    /// The allowances for children in tenths (§ 32 Abs. 6 EStG): 10 for a child whose allowances – for the child and
+    /// for care, education and training – are the person's in full, or the spouses' together; 5 for half of them.
+    pub child_allowances: u32,
+    /// The child benefit (Kindergeld) for the year for those children, in base units (§ 31 EStG).
+    pub child_benefit: i128,
+    /// Extraordinary income contained in the other income or the profit – compensation, pay for work of several
+    /// years – taxed by the fifth (§ 34 Abs. 1, 2 Nr. 2 and 4 EStG), in base units.
+    pub extraordinary: i128,
+    /// Shares of profits of partnerships (Mitunternehmer, § 15 Abs. 1 Satz 1 Nr. 2 EStG), as their separate
+    /// determination states them, in base units; part of the business income.
+    pub partnership_income: i128,
+    /// The person's shares of the trade tax base amounts and of the trade tax of those partnerships (§ 35 Abs. 2 EStG),
+    /// in base units.
+    pub partnership_trade: (i128, i128),
+    /// Capital income not yet taxed at source (§ 20 EStG), before the saver's allowance, in base units: taxed
+    /// separately at 25 % (§ 32d Abs. 1 EStG).
+    pub capital_income: i128,
+    /// The number of children for which a single parent gets the relief (§ 24b EStG); none otherwise.
+    pub single_parent_children: u8,
 }
+
+/// The allowances for one child, both parents together, in 2026: twice 3,414 euros for the child and twice 1,464
+/// euros for care, education and training (§ 32 Abs. 6 EStG; the PAP 2026 uses 9,756).
+const CHILD_ALLOWANCE_2026: i128 = 9_756 * 100;
 
 /// The income tax of a person for a calendar year, in base units of the euro.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -36,8 +59,18 @@ pub struct IncomeTax {
     pub deductions: i128,
     /// The taxable income, rounded down to full euros (§ 32a Abs. 1 Satz 1 EStG).
     pub taxable: i128,
-    /// The tariff tax (§ 32a EStG), in full euros.
+    /// The allowances for children deducted where the child benefit is worth less (§ 31 EStG).
+    pub child_allowances: i128,
+    /// The tariff tax (§ 32a EStG, with § 34 for extraordinary income), in full euros.
     pub tariff: i128,
+    /// The child benefit added to the tax where the allowances were deducted (§ 2 Abs. 6 Satz 3 EStG).
+    pub child_benefit_added: i128,
+    /// The relief for single parents deducted (§ 24b EStG).
+    pub single_parent_relief: i128,
+    /// Capital income after the saver's allowance (§ 20 Abs. 9 EStG).
+    pub capital_income: i128,
+    /// The tax on it at 25 %, less a quarter of the church tax on it (§ 32d Abs. 1 EStG).
+    pub capital_tax: i128,
     /// The reduction for trade tax (§ 35 EStG).
     pub trade_tax_credit: i128,
     /// The income tax assessed: the tariff tax less the reduction.
@@ -85,6 +118,19 @@ fn tariff(year: u16, taxable: i128, joint: bool) -> Option<i128> {
     Some(tax * EURO)
 }
 
+/// The tariff for a taxable income with extraordinary income in it taxed by the fifth (§ 34 Abs. 1 EStG): the tax on
+/// the rest plus five times the tax on a fifth of the extraordinary income added to it; where the rest is negative,
+/// five times the tax on a fifth of the whole; in base units.
+fn fifth(year: u16, taxable: i128, extraordinary: i128, joint: bool) -> Option<i128> {
+    let x = extraordinary.min(taxable);
+    if x <= 0 {
+        return tariff(year, taxable, joint);
+    }
+    let rest = taxable - x;
+    let base = tariff(year, rest, joint)?;
+    Some(base + 5 * (tariff(year, rest + x / 5, joint)? - base))
+}
+
 /// The solidarity surcharge on an income tax assessed (§ 3 Abs. 3, § 4 SolZG): none up to the exemption limit of
 /// 20,350 euros, or 40,700 euros for spouses; 5.5 %, but no more than 11.9 % of what exceeds the limit; fractions of a
 /// cent left out.
@@ -117,7 +163,7 @@ impl EventSet {
             &ProfitTaxFacts { subject: TaxSubject::Individual, ..profit.clone() },
         )?;
         let mut tax = IncomeTax {
-            business: business.income,
+            business: business.income + facts.partnership_income,
             other_income: facts.other_income,
             deductions: facts.deductions,
             ..IncomeTax::default()
@@ -129,19 +175,56 @@ impl EventSet {
             let limit = if total <= threshold { total } else { threshold + (total - threshold) * 70 / 100 };
             tax.loss_deduction = facts.losses.min(limit);
         }
-        tax.taxable = (total - tax.loss_deduction - tax.deductions).max(0) / EURO * EURO;
-        let Some(tariff) = tariff(to.year(), tax.taxable, facts.joint) else { return Ok(None) };
-        tax.tariff = tariff;
+        // The relief for single parents: 4,260 euros and 240 for each further child (§ 24b Abs. 2 EStG).
+        if facts.single_parent_children > 0 {
+            tax.single_parent_relief = (4_260 + 240 * i128::from(facts.single_parent_children - 1)) * EURO;
+        }
+        let before_children = (total - tax.loss_deduction - tax.deductions - tax.single_parent_relief).max(0);
+        let year = to.year();
+        let allowances = if year >= 2026 { CHILD_ALLOWANCE_2026 * i128::from(facts.child_allowances) / 10 } else { 0 };
+        let with = (before_children - allowances).max(0) / EURO * EURO;
+        let without = before_children / EURO * EURO;
+        let extraordinary = facts.extraordinary.max(0);
+        let Some(tax_with) = fifth(year, with, extraordinary, facts.joint) else { return Ok(None) };
+        let Some(tax_without) = fifth(year, without, extraordinary, facts.joint) else { return Ok(None) };
+        // The allowances only where they save more than the child benefit; then the benefit is added (§ 31 EStG).
+        if allowances > 0 && tax_without - tax_with > facts.child_benefit {
+            tax.child_allowances = allowances;
+            tax.taxable = with;
+            tax.tariff = tax_with;
+            tax.child_benefit_added = facts.child_benefit;
+        } else {
+            tax.taxable = without;
+            tax.tariff = tax_without;
+        }
+        // Solidarity surcharge and church tax always as if the allowances were deducted (§ 3 Abs. 2 SolZG, § 51a
+        // Abs. 2 EStG).
+        let base_tariff = tax_with;
         // Trade tax: four times the base amount, no more than the trade tax, nor than the share of the tariff tax that
         // falls on the profit of the business among the positive income (§ 35 Abs. 1 EStG).
-        if let Some(trade) = &business.trade {
-            let positive = tax.business.max(0) + tax.other_income.max(0);
-            let share = if positive > 0 { tax.tariff * tax.business.max(0) / positive } else { 0 };
-            tax.trade_tax_credit = (4 * trade.base).min(trade.tax).min(share).max(0);
+        let (partner_base, partner_tax) = facts.partnership_trade;
+        let (own_base, own_tax) = business.trade.as_ref().map_or((0, 0), |t| (t.base, t.tax));
+        let (base, paid) = (own_base + partner_base, own_tax + partner_tax);
+        let positive = tax.business.max(0) + tax.other_income.max(0);
+        let credit = |tariff: i128| {
+            let share = if positive > 0 { tariff * tax.business.max(0) / positive } else { 0 };
+            (4 * base).min(paid).min(share).max(0)
+        };
+        if base > 0 {
+            tax.trade_tax_credit = credit(tax.tariff);
         }
-        tax.assessed = tax.tariff - tax.trade_tax_credit;
-        tax.solidarity = solidarity_surcharge(tax.assessed, facts.joint);
-        tax.church = facts.church_rate.map_or(0, |rate| tax.tariff * i128::from(rate) / 100);
+        // Capital income: after the saver's allowance of 1,000 euros, 2,000 for spouses (§ 20 Abs. 9 EStG), 25 %; with
+        // church tax (e − 4q) / (4 + k), q the foreign tax credited, here none (§ 32d Abs. 1 Satz 3 to 5 EStG).
+        let allowance = if facts.joint { 2_000 * EURO } else { 1_000 * EURO };
+        tax.capital_income = (facts.capital_income - allowance).max(0);
+        let k = facts.church_rate.map_or(0, i128::from);
+        tax.capital_tax = tax.capital_income * 100 / (400 + k);
+        tax.assessed = tax.tariff - tax.trade_tax_credit + tax.child_benefit_added + tax.capital_tax;
+        // The solidarity surcharge: the exemption limit tested without the tax on capital income, which bears 5.5 %
+        // in any case (§ 3 Abs. 3, § 4 Satz 4 SolZG).
+        let surcharge_base = base_tariff - if base > 0 { credit(base_tariff) } else { 0 };
+        tax.solidarity = solidarity_surcharge(surcharge_base, facts.joint) + tax.capital_tax * 55 / 1000;
+        tax.church = facts.church_rate.map_or(0, |rate| (base_tariff + tax.capital_tax) * i128::from(rate) / 100);
         let quarter = tax.assessed / 4;
         tax.advance_payment = if tax.assessed >= 400 * EURO && quarter >= 100 * EURO { quarter } else { 0 };
         Ok(Some(tax))
@@ -157,7 +240,12 @@ impl IncomeTax {
             ("loss_deduction", self.loss_deduction),
             ("deductions", self.deductions),
             ("taxable", self.taxable),
+            ("child_allowances", self.child_allowances),
             ("tariff", self.tariff),
+            ("child_benefit_added", self.child_benefit_added),
+            ("single_parent_relief", self.single_parent_relief),
+            ("capital_income", self.capital_income),
+            ("capital_tax", self.capital_tax),
             ("trade_tax_credit", self.trade_tax_credit),
             ("assessed", self.assessed),
             ("solidarity", self.solidarity),
@@ -235,5 +323,89 @@ mod tests {
         let freelancer = ProfitTaxFacts { multiplier: None, ..tests::facts(TaxSubject::Individual) };
         let tax = set.income_tax(&Chart::v0_1(), &party(1), from, to, &freelancer, &facts).unwrap().unwrap();
         assert_eq!((tax.trade_tax_credit, tax.assessed), (0, tariff));
+    }
+
+    /// Children: the allowances only where they save more than the child benefit, which is then added; solidarity
+    /// surcharge and church tax always with them. Extraordinary income by the fifth.
+    #[test]
+    fn children_and_the_fifth() {
+        use crate::{Chart, party::tests::party, profit_tax::tests};
+        let e = 100;
+        let set = tests::books(&[("8400", -150_000 * e)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let freelancer = ProfitTaxFacts { multiplier: None, ..tests::facts(TaxSubject::Individual) };
+        let run = |facts: IncomeTaxFacts| {
+            set.income_tax(&Chart::v0_1(), &party(1), from, to, &freelancer, &facts).unwrap().unwrap()
+        };
+        let none = run(IncomeTaxFacts { church_rate: Some(9), ..Default::default() });
+        // 150,000: the allowances of 9,756 save about 42 % of them, more than a child benefit of 3,108.
+        let child = run(IncomeTaxFacts {
+            church_rate: Some(9),
+            child_allowances: 10,
+            child_benefit: 3_108 * e,
+            ..Default::default()
+        });
+        assert_eq!(child.child_allowances, 9_756 * e);
+        assert_eq!(child.taxable, 150_000 * e - 9_756 * e);
+        assert_eq!(child.assessed, child.tariff + 3_108 * e);
+        assert!(child.church < none.church);
+        // 20,000: the allowances save less than the benefit – not deducted; church tax still with them.
+        let set = tests::books(&[("8400", -20_000 * e)]);
+        let small = set
+            .income_tax(
+                &Chart::v0_1(),
+                &party(1),
+                from,
+                to,
+                &freelancer,
+                &IncomeTaxFacts {
+                    church_rate: Some(9),
+                    child_allowances: 10,
+                    child_benefit: 3_108 * e,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!((small.child_allowances, small.child_benefit_added), (0, 0));
+        assert_eq!(small.church, 0, "church tax on 10,244 after the allowances: nothing");
+        // § 34: 40,000 of which 30,000 extraordinary: T(10,000) + 5 × (T(16,000) − T(10,000)).
+        let set = tests::books(&[("8400", -40_000 * e)]);
+        let fifth = set
+            .income_tax(
+                &Chart::v0_1(),
+                &party(1),
+                from,
+                to,
+                &freelancer,
+                &IncomeTaxFacts { extraordinary: 30_000 * e, ..Default::default() },
+            )
+            .unwrap()
+            .unwrap();
+        let t = |x| income_tax_tariff(2026, x).unwrap() * e;
+        assert_eq!(fifth.tariff, t(10_000) + 5 * (t(16_000) - t(10_000)));
+    }
+
+    /// Capital income at 25 % after the saver's allowance, with church tax by the formula; the relief for single
+    /// parents.
+    #[test]
+    fn capital_income_and_single_parents() {
+        use crate::{Chart, party::tests::party, profit_tax::tests};
+        let e = 100;
+        let set = tests::books(&[("8400", -50_000 * e)]);
+        let (from, to) = ("2026-01-01".parse().unwrap(), "2026-12-31".parse().unwrap());
+        let freelancer = ProfitTaxFacts { multiplier: None, ..tests::facts(TaxSubject::Individual) };
+        let run = |facts: IncomeTaxFacts| {
+            set.income_tax(&Chart::v0_1(), &party(1), from, to, &freelancer, &facts).unwrap().unwrap()
+        };
+        let plain = run(IncomeTaxFacts::default());
+        let capital = run(IncomeTaxFacts { capital_income: 5_090 * e, church_rate: Some(9), ..Default::default() });
+        // 4,090 × 100 / 409 = 1,000; church 9 % of it on top, solidarity 5.5 %.
+        assert_eq!((capital.capital_income, capital.capital_tax), (4_090 * e, 1_000 * e));
+        assert_eq!(capital.assessed, plain.assessed + 1_000 * e);
+        assert_eq!(capital.solidarity, 55 * e);
+        let single = run(IncomeTaxFacts { single_parent_children: 2, ..Default::default() });
+        assert_eq!(single.single_parent_relief, 4_500 * e);
+        assert_eq!(single.taxable, 45_500 * e);
     }
 }

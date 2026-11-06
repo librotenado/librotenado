@@ -41,8 +41,15 @@ const EMPLOYER: [&str; 11] = [
 ];
 
 /// What the employee pays to the insurers out of the wages.
-const EMPLOYEE: [&str; 5] =
-    ["health_employee", "health_additional_employee", "care_employee", "pension_employee", "unemployment_employee"];
+const EMPLOYEE: [&str; 7] = [
+    "health_employee",
+    "health_additional_employee",
+    "care_employee",
+    "pension_employee",
+    "unemployment_employee",
+    "pension_health",
+    "pension_care",
+];
 
 impl Payslip {
     /// The postings of a German payslip of `owner` (spec part 0013): the wages – of a minor employment if `minor` – and

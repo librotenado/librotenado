@@ -21,6 +21,12 @@ pub(super) struct Year {
     pub pension: i128,
     pub unemployment: i128,
     pub insolvency: i128,
+    /// The average additional rate of health insurance (§ 242a SGB V), and the monthly limit of trainees whose
+    /// contributions the employer bears alone (§ 20 Abs. 3 Satz 1 Nr. 1 SGB IV), in cents; a twentieth of the monthly
+    /// reference value, below which pensions bear no contributions (§ 226 Abs. 2 SGB V), in cents.
+    pub average_additional: i128,
+    pub trainee_limit: i128,
+    pub pension_threshold: i128,
     /// Minor employment: the limit per month in cents; the employer's flat rates for health and pension; the levies of
     /// the Minijob-Zentrale; the minimum base of the pension insurance in cents.
     pub minor_limit: i128,
@@ -52,6 +58,9 @@ pub(super) const Y2026: Year = Year {
     pension: 186_000,
     unemployment: 26_000,
     insolvency: 1_500,
+    average_additional: 29_000,
+    trainee_limit: 32_500,
+    pension_threshold: 19_775,
     minor_limit: 60_300,
     minor_health: 130_000,
     minor_pension: 150_000,
@@ -107,6 +116,10 @@ pub(super) struct Month {
     /// The insurer's additional rate; the employee pays the surcharge without children; children the care insurance
     /// counts; works in Saxony; the rates of U1 and U2.
     pub additional: i128,
+    /// A trainee with low pay (person group 121); pensions paid in the month (Versorgungsbezüge), whose
+    /// contributions the pensioner bears alone.
+    pub trainee: bool,
+    pub pension: i128,
     pub childless: bool,
     pub children: u8,
     pub saxony: bool,
@@ -240,6 +253,44 @@ pub(super) fn contributions(y: &Year, m: &Month) -> BTreeMap<&'static str, i128>
         out.insert("u2", share(levy_base, 1, rate));
     }
     out.insert("u3", share(pension_base, 1, y.insolvency));
+    // A trainee with pay up to the limit: the employer bears every contribution, health with the average additional
+    // rate (§ 20 Abs. 3 SGB IV, § 242 Abs. 3 Nr. 6 SGB V); above it, by a one-off payment, the employee bears half of
+    // the part above the limit (§ 20 Abs. 3 Satz 2).
+    if m.trainee && !transition {
+        let above = (wages - y.trainee_limit).max(0);
+        for name in ["health", "health_additional", "care", "pension", "unemployment"] {
+            let employee = employee_key(name);
+            let Some(paid) = out.remove(employee) else { continue };
+            let rate = match name {
+                "health" => {
+                    if health == 3 {
+                        y.health_reduced
+                    } else {
+                        y.health
+                    }
+                }
+                "health_additional" => m.additional,
+                "care" => y.care,
+                "pension" => y.pension,
+                _ => y.unemployment,
+            };
+            let stays = share(above, 1, rate / 2).min(paid);
+            if stays != 0 {
+                out.insert(employee, stays);
+            }
+            *out.entry(employer_key(name)).or_insert(0) += paid - stays;
+        }
+    }
+    // Pensions: health at the general rate with the additional one and care in full, borne by the pensioner and
+    // withheld by the employer as paying agency (§§ 248, 250, 256 SGB V, § 59 SGB XI); nothing up to a twentieth of
+    // the reference value, and for health that twentieth is deducted from company pensions (§ 226 Abs. 2 SGB V).
+    if m.pension > y.pension_threshold && matches!(health, 1 | 3) {
+        let base = m.pension.min(y.health_ceiling / 12);
+        out.insert("pension_health", share(base - y.pension_threshold, 1, y.health + m.additional));
+        let care_rate = y.care + if m.childless { y.childless } else { 0 }
+            - if m.children >= 2 { i128::from(m.children.min(5) - 1) * y.per_child } else { 0 };
+        out.insert("pension_care", share(base, 1, care_rate));
+    }
     out.retain(|_, v| *v != 0);
     out
 }

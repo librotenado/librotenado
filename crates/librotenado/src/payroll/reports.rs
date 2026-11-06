@@ -80,10 +80,13 @@ impl EventSet {
             let items = |kinds: &[super::PayItemKind]| -> i128 {
                 payslip.items.iter().filter(|i| kinds.contains(&i.kind)).map(|i| i.amount.base_units()).sum()
             };
-            use super::PayItemKind::{Compensation, InKind, OneOff, Wage};
+            use super::PayItemKind::{Compensation, InKind, OneOff, Pension, Wage};
             let mut add = |line: &'static str, units: i128| *lines.entry(line).or_insert(0) += units;
             // 3: wages with benefits in kind, without those of line 10; 10: compensation (§ 34 EStG).
-            add("3", items(&[Wage, InKind, OneOff]));
+            // Wages free of tax as Aktivrente are not part of it.
+            add("3", items(&[Wage, InKind, OneOff, Pension]) - figure("active_pension_free"));
+            // 8: pensions, contained in 3.
+            add("8", items(&[Pension]));
             add("10", items(&[Compensation]));
             add("4", figure("wage_tax"));
             add("5", figure("solidarity"));
@@ -174,5 +177,9 @@ impl EventSet {
         add("u1", figure("u1"));
         add("u2", figure("u2"));
         add("pauschsteuer", figure("flat_tax"));
+        // Contributions on pensions, which the employer as paying agency transmits in the procedure of paying
+        // agencies (§ 256 SGB V).
+        add("zahlstelle_kv", figure("pension_health"));
+        add("zahlstelle_pv", figure("pension_care"));
     }
 }

@@ -1,6 +1,6 @@
 # 0013 Payroll
 
-Version 0.21, draft. Implemented in the reference library (module `payroll`: `Employment`, `Payslip`, event kinds
+Version 0.22, draft. Implemented in the reference library (module `payroll`: `Employment`, `Payslip`, event kinds
 `employment_described` and `payslip_recorded`; `EventSet::employments`, `EventSet::payslips`,
 `EventSet::recorded_payslips`, `EventSet::review_payroll`, `EventSet::payslip_figures`,
 `EventSet::contribution_statement`, `EventSet::wage_tax_certificate`, `payroll::wage_tax`).
@@ -55,6 +55,7 @@ The kinds of items:
 | `in_kind` | a benefit in kind | taxed and insured like wages, not paid out |
 | `tax_free` | paid free of tax and contributions – a reimbursement of expenses | |
 | `deduction` | deducted from the net pay – an advance, an attachment | |
+| `pension` | a pension paid by the employer – a Werkspension | taxed as current wages with the allowance for pensions (§ 19 Abs. 2 EStG); its health and care contributions the pensioner bears (below) |
 
 A payslip records the figures as they were computed and is never changed. A **correction** (Rückrechnung) is a payslip
 of the same employment and period that `replaces` the one that applied: from then on it applies in its place – in the
@@ -93,6 +94,8 @@ An implementation MUST report, and MUST NOT silently resolve:
 | `addition` | the addition (Hinzurechnungsbetrag), `year` and `month`; absent when none |
 | `flat` | `true` where the wages of a minor employment are taxed at the flat rate of 2 % instead ([§ 40a Abs. 2 EStG](https://www.gesetze-im-internet.de/estg/__40a.html)) |
 | `short_term` | `true` where the wages of a short-term employment are taxed at the flat rate of 25 % instead (§ 40a Abs. 1 EStG) |
+| `pension_start` | for pensions paid by the employer: `year`, the year they began, and `monthly`, the pension of the first whole month – the base of the allowance for pensions ([§ 19 Abs. 2 EStG](https://www.gesetze-im-internet.de/estg/__19.html)) |
+| `active_pension` | `true` for work after the month the employee reached the standard retirement age, for which the employer pays pension contributions: 2,000 euros a month free of tax ([§ 3 Nr. 21 EStG](https://www.gesetze-im-internet.de/estg/__3.html), Aktivrente; its first year under § 52 EStG is OPEN, applied from 2026) |
 
 `insurance` – how the employee is insured, as the employer reports it:
 
@@ -112,7 +115,10 @@ An implementation MUST report, and MUST NOT silently resolve:
 The person group decides the kind of employment: `109` a minor employment, `110` a short-term one (§ 8 Abs. 1 Nr. 1, 2
 SGB IV; Geringfügigkeits-Richtlinien of 5 January 2026,
 [Minijob-Zentrale](https://www.minijob-zentrale.de/SharedDocs/Downloads/DE/Rundschreiben/Geringfuegigkeitsrichtlinien-2026.pdf?__blob=publicationFile)),
-any other one subject to insurance by its contribution groups.
+`121` a trainee with pay up to 325 euros a month, any other one subject to insurance by its contribution groups – an
+employee past the standard retirement age with a full pension, for instance, by the employer's half alone in pension
+(`3`) and unemployment (`2`) insurance ([§ 172 Abs. 1 SGB VI](https://www.gesetze-im-internet.de/sgb_6/__172.html),
+[§ 346 Abs. 3 SGB III](https://www.gesetze-im-internet.de/sgb_3/__346.html)).
 
 ### The wage tax
 
@@ -195,7 +201,18 @@ insurance the total of 18.6 % on at least 175 € less the employer's 15 % is th
 and U2 and no insolvency levy; the Minijob-Zentrale collects them by the Haushaltsscheck (§ 28a Abs. 7 SGB IV). A
 **short-term employment** (person group 110, contribution groups 0000) bears no contributions; at the Minijob-Zentrale
 U1 only where it lasts more than four weeks, U2 and the insolvency levy always (Geringfügigkeits-Richtlinien 2026,
-section G).
+section G). For a **trainee with low pay** (person group 121) the employer bears every contribution while the pay
+of the month stays within 325 euros, health with the average additional rate of 2.9 %; of what a one-off payment adds
+above it the employee bears half ([§ 20 Abs. 3 SGB IV](https://www.gesetze-im-internet.de/sgb_4/__20.html), [§ 242
+Abs. 3 Nr. 6 SGB V](https://www.gesetze-im-internet.de/sgb_5/__242.html)); that the employer also bears the surcharge
+without children is the reading of the commentaries (OPEN). **Pensions** paid by the employer are not wages of the
+social insurance: the pensioner bears health – the general rate with the insurer's additional rate – and care in full,
+which the employer withholds as paying agency (`pension_health`, `pension_care`;
+[§§ 248, 250, 256 SGB V](https://www.gesetze-im-internet.de/sgb_5/__256.html), § 59 SGB XI); nothing is due up to a
+twentieth of the reference value, 197.75 euros in 2026, and for health that twentieth is deducted from company
+pensions ([§ 226 Abs. 2 SGB V](https://www.gesetze-im-internet.de/sgb_5/__226.html)). They are paid in the procedure of
+paying agencies, by the 15th of the following month; the Beitragsnachweis shows them as `zahlstelle_kv`,
+`zahlstelle_pv`.
 
 The levies U1 and U2 are on the current wages up to the pension ceiling, U3 on the base of the pension insurance
 ([§ 7 AAG](https://www.gesetze-im-internet.de/aag/__7.html), [§ 358 SGB III](https://www.gesetze-im-internet.de/sgb_3/__358.html);
@@ -220,6 +237,8 @@ A German payslip names its figures – in euros, each absent when zero:
 | `health_flat`, `pension_flat` | the employer's flat rates of a minor employment |
 | `u1`, `u2`, `u3` | the levies |
 | `accident` | the accident insurance of a private household |
+| `pension_health`, `pension_care` | the contributions on pensions, the pensioner's |
+| `active_pension_free` | the wages free of tax as Aktivrente |
 | `private_subsidy` | the employer's subsidy to a private insurance |
 | `net` | `gross` less the taxes and the employee's shares withheld, plus `private_subsidy` |
 | `payout` | `net` less `in_kind` and `deduction` |
@@ -256,8 +275,8 @@ an implementation that is not approved has its users enter it in the SV-Meldepor
 
 **Lohnsteuerbescheinigung** ([§ 41b EStG](https://www.gesetze-im-internet.de/estg/__41b.html); the form of 2026, BMF
 letter of 29 August 2025, IV C 5 - S 2533/00123/007/007): `EventSet::wage_tax_certificate` gives per employment and
-calendar year the lines from the payslips that apply for periods ending in it – 3 (wages with benefits in kind,
-without those of line 10), 4, 5, 6 (wage tax, solidarity surcharge, the employee's church tax), 10 (compensation), 22a
+calendar year the lines from the payslips that apply for periods ending in it – 3 (wages with benefits in kind and
+pensions, without those of line 10 and the Aktivrente), 8 (the pensions in it), 4, 5, 6 (wage tax, solidarity surcharge, the employee's church tax), 10 (compensation), 22a
 and 23a (pension, employer and employee), 24b (the subsidy to a private insurance), 25, 26, 27 (the employee's health,
 care and unemployment contributions); names `de-lstb/<line>`. Wages taxed at a flat rate have none (§ 41b Abs. 6). It
 is transmitted to the tax authority by the last day of February of the year after; the letters of line 2, the church
@@ -278,7 +297,7 @@ settled. The flat taxes go to the pauschale Steuer, that of 25 % against the tax
 - Corrections after the certificate of the year was transmitted (§ 41c Abs. 3 EStG); back pay for earlier periods.
 - The notifications to the social insurance (DEÜV), the records of the electronic Lohnkonto (§ 41 EStG, LStDV) and
   their transmission; the approval of the GKV-Spitzenverband.
-- Apprentices with low pay, employees above the age limit of the pension insurance, Kurzarbeit, Altersteilzeit, the
-  accident insurance of businesses.
+- Kurzarbeit, Altersteilzeit, the accident insurance of businesses; pensions as one-off payments (Sterbegeld,
+  capital payments) and the pensions of the transition range.
 - Pensions paid by the employer (Versorgungsbezüge), the Faktorverfahren beyond the factor itself.
 - Other countries.

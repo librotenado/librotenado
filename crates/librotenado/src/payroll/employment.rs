@@ -122,6 +122,24 @@ pub struct GermanTax {
     /// otherwise.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub short_term: bool,
+    /// For pensions paid: the year they began and the pension of the first whole month (§ 19 Abs. 2 Satz 3, 4
+    /// EStG); left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::present")]
+    pub pension_start: Option<PensionStart>,
+    /// Wages for work after the month the employee reached the standard retirement age, for which the employer pays
+    /// pension contributions: up to 2,000 euros a month free of tax (Aktivrente, § 3 Nr. 21 EStG); left out
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub active_pension: bool,
+}
+
+/// When pensions began, for the allowance for pensions.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PensionStart {
+    /// The year the first pension was paid.
+    pub year: u16,
+    /// The pension of the first whole month.
+    pub monthly: Money,
 }
 
 /// An amount per year and per month.
@@ -246,4 +264,7 @@ pub enum PayItemKind {
     TaxFree,
     /// Deducted from the net pay – an advance, an attachment.
     Deduction,
+    /// A pension paid by the employer (Versorgungsbezug, § 19 Abs. 2 EStG): taxed as current wages with the
+    /// allowance for pensions; not wages of the social insurance.
+    Pension,
 }

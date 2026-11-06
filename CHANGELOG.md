@@ -2,6 +2,29 @@
 
 Specification and library share one version. Until 1.0, any version may change what an earlier one specified.
 
+## 0.22.0 – 2026-11-06
+
+The gaps of German law that need neither ERiC nor a tax adviser.
+
+- [0012 Taxes on profit](spec/0012-taxes-on-profit.md): the interest barrier (§ 4h EStG, § 8a KStG) with interest
+  and EBITDA carried forward, its exceptions, and only the deductible interest added for trade tax – attribute
+  `interest` `income`; hidden profit distributions and contributions (§ 8 Abs. 3 KStG); tax groups (Organschaft,
+  §§ 14 to 19 KStG, § 2 Abs. 2 GewStG). Income tax: children with the allowances, the test against the child benefit
+  and surcharges always with them; single parents (§ 24b); extraordinary income by the fifth (§ 34); shares of
+  partnerships with their trade tax for § 35; capital income at 25 % (§ 32d).
+- [0013 Payroll](spec/0013-payroll.md): pensions paid by the employer (item `pension`, `pension_start`) with the
+  allowance for pensions in the PAP and the pensioner's health and care contributions as paying agency; trainees with
+  pay up to 325 euros (person group 121); the Aktivrente (§ 3 Nr. 21 EStG, `active_pension`); line 8 of the
+  certificate.
+- [0009 Reports](spec/0009-reports.md): the capital accounts of partners for the E-Bilanz (Kapitalkontenentwicklung,
+  taxonomy 6.10) – `EventSet::capital_accounts`, `capital_account_fields`, attributes `partner`, `liability`,
+  `capital`.
+- Library: `ProfitTaxFacts` with `hidden_distributions`, `hidden_contributions`, `group` (`GroupRole`),
+  `interest_carryforward`, `ebitda_carryforward`, `interest_exception`; `IncomeTaxFacts` with `child_allowances`,
+  `child_benefit`, `extraordinary`, `partnership_income`, `partnership_trade`, `capital_income`,
+  `single_parent_children`; `PayItemKind::Pension`, `PensionStart`, `GermanTax::active_pension`; `Liability`,
+  `CapitalAccount`.
+
 ## 0.21.0 – 2026-11-06
 
 Payroll completed; trade tax by the law of 2025; the lines of the income tax forms.

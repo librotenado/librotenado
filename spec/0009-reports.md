@@ -222,6 +222,22 @@ where the books cannot tell, an amount goes to a **catch-all position** ("nicht 
   the books do not hold – the industry (`business`), the classification of income, the status and kind of the report,
   its elements – whoever files states.
 
+- **Capital accounts of partners** (Kapitalkontenentwicklung, mandatory for partnerships – `legalFormPG` – in HGB
+  taxonomy 6.10 of 1 April 2026, BMF letter of 8 June 2026, IV C 6 - S 2133-b/00067/002/023, for financial years from
+  2027, accepted for 2026): an account opened in the books for a partner carries the attributes `partner` (the
+  partner's identity, which is the Gesellschafterschlüssel of `genInfo.company.id.shareholder.id`), `liability`
+  (`unlimited` – Vollhafter – or `limited` – Teilhafter) and `capital`, its kind as the taxonomy names it below
+  `table.kke.allKindsOfEquityAccounts.unlimitedPartners` or `.limitedPartners`: `FK` fixed capital, `VK` variable
+  capital, `VVK` losses carried, `DaEK` loans with the character of equity, `VkE`, `nVgV`, `nVgE`, … .
+  `EventSet::capital_accounts` gives per partner and account, in the tax balance sheet, the elements below
+  `table.kke.sumEquityAccounts.sumYearEnd`: `begin`, `deposits`, `withdrawals`, `incomeShare`, `capitalMovements`
+  and `sumYearEnd` (`capital_account_fields`: `<partner>/<branch>.<kind>/<element>`). A booking only between capital
+  accounts moves capital; any other credit is a deposit, any other debit a withdrawal. Each partner's share of the
+  result – of the year, and of the years before for the beginning – goes to the variable capital, by the shares
+  whoever files states (the profit division key, `ProfitDivideKey` of the GCD). The ends add up to the equity, as the
+  taxonomy checks. The commercial values and the differences (`dim_comBal`, `dim_diffComToTaxBal`), the accounts of
+  debt capital (`table.kke.debtCreditAccounts`) and `capAdjust6bRes` and `capitalAdjustmentOther` are OPEN.
+
 Two members of a report mapping serve the E-Bilanz:
 
 | Member | Content |
@@ -267,8 +283,8 @@ number its other member state gave it and the sum of the assessment bases (Abs. 
   tax and social security liabilities), and remaining terms of balances on accounts without a term.
 - The Anlage EÜR: business entertainment is split into its deductible and non-deductible part on two accounts by
   whoever books (§ 4 Abs. 5 Satz 1 Nr. 2 EStG); filing the Anlage AVEÜR (part 0011) together with it.
-- The E-Bilanz: partnerships' capital accounts per partner (the module of the capital accounts), the elements of the
-  reconciliation, the split of reductions of sales by VAT, the other modules of the taxonomy (notes,
+- The E-Bilanz: the commercial values of the capital accounts per partner and their debt capital, the elements of the
+  reconciliation (tuples `hbst.transfer`, which carry no reason), the split of reductions of sales by VAT, the other modules of the taxonomy (notes,
   appropriation of profits), and writing the XBRL instance – which ERiC transmits (part 0007). Names of the
   positions stay with the taxonomy until the conditions for reusing it (© XBRL Deutschland e.V.) are clarified.
 - The recapitulative statement: whether `L`, `S` and `D` are the codes of the official data set (OPEN – the

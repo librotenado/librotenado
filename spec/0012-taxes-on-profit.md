@@ -1,6 +1,6 @@
 # 0012 Taxes on profit
 
-Version 0.21, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
+Version 0.22, draft. Implemented in the reference library (`EventSet::profit_tax`, `ProfitTax`, `TradeTax`,
 `ProfitTaxFacts`, `EventSet::income_tax`, `IncomeTax`, `IncomeTaxFacts`, `ProfitTax::income_tax_lines`).
 
 The taxes a business pays on its profit follow from its books: the result of the financial year in the tax balance
@@ -27,6 +27,7 @@ earlier years, the size of holdings – is given with them.
 | | `partnership-loss` | is a share of the loss of a partnership (§ 8 Nr. 8) |
 | | `partnership-share` | is a share of the profit of a partnership (§ 9 Nr. 2) |
 | | `land-tax` | is land tax on business land, which reduces the trade income (§ 9 Nr. 1 Satz 1) |
+| `interest` | `income` | is interest income of the interest barrier (§ 4h Abs. 3 Satz 3 EStG) – on SKR 03 2650, 2659, 2680, 2683 to 2686, 2689, 8650, 8660 and their SKR 04 accounts |
 
 The chart of version 0.1 carries them on the accounts of SKR 03 and SKR 04 that DATEV marks for the programs of
 corporation tax and trade tax (`K`, `G`; DATEV, Kontenrahmen SKR 03 and SKR 04 valid for 2026), by the provision
@@ -102,10 +103,54 @@ special expenses, extraordinary burdens, allowances –, losses carried forward,
    below 400 euros a year or 100 euros a payment
    ([§ 37 Abs. 1 and 5 EStG](https://www.gesetze-im-internet.de/estg/__37.html)).
 
-Children's allowances and their effect on the solidarity surcharge and church tax (§ 32 Abs. 6 EStG, § 3 Abs. 2
-SolZG), income taxed at a flat rate (§ 32d EStG), income under special tariffs (§§ 32b, 34 EStG), partners'
-shares of a partnership's profit and the reduction of § 35 for them, and the exemption limits of the solidarity
-surcharge for years other than 2026 are not part of this version (OPEN).
+Beside it, as the person states them:
+
+- **Children** ([§ 31](https://www.gesetze-im-internet.de/estg/__31.html),
+  [§ 32 Abs. 6 EStG](https://www.gesetze-im-internet.de/estg/__32.html)): the allowances of 3,414 euros for the child
+  and 1,464 euros for care, education and training per parent, twice that for spouses – 9,756 euros, as the PAP 2026
+  uses them – in tenths of a child; they are deducted only where they save more tax than the child benefit received,
+  which is then added to the tax ([§ 2 Abs. 6 Satz 3 EStG](https://www.gesetze-im-internet.de/estg/__2.html)). The
+  solidarity surcharge and church tax are always computed as if they were deducted (§ 3 Abs. 2 SolZG, § 51a Abs. 2
+  EStG). That the allowances in force are those of 2026 (§ 52 EStG) is OPEN.
+- **Single parents** ([§ 24b EStG](https://www.gesetze-im-internet.de/estg/__24b.html)): 4,260 euros and 240 for each
+  further child deducted from the income, for a whole year (a twelfth less for each month without, OPEN).
+- **Extraordinary income** – compensation, pay for work of several years – by the fifth
+  ([§ 34 Abs. 1, 2 Nr. 2, 4 EStG](https://www.gesetze-im-internet.de/estg/__34.html)): the tax on the rest of the
+  income, plus five times the difference the fifth of it makes; where the rest is negative, five times the tax on a
+  fifth of the whole.
+- **Shares of partnerships** (§ 15 Abs. 1 Satz 1 Nr. 2 EStG), as their separate determination states them: part of
+  the business income, with the shares of their base amounts and trade tax for the reduction of § 35 (Abs. 2).
+- **Capital income** not taxed at source ([§ 32d EStG](https://www.gesetze-im-internet.de/estg/__32d.html)): after the
+  saver's allowance of 1,000 euros, 2,000 for spouses (§ 20 Abs. 9), 25 %; with church tax (e − 4q) / (4 + k), q the
+  foreign tax credited (none here); the solidarity surcharge 5.5 % of it, outside its exemption limit (§ 3 Abs. 3, § 4
+  Satz 4 SolZG). The test whether the tariff is cheaper (Abs. 6) is OPEN.
+
+The tariffs of earlier years, other special tariffs (§ 32b EStG), the sale of a business at 56 % (§ 34 Abs. 3) and
+the exemption limits of the solidarity surcharge for years other than 2026 are not part of this version (OPEN).
+
+## Interest barrier, hidden distributions, tax groups
+
+- **Interest barrier** ([§ 4h EStG](https://www.gesetze-im-internet.de/estg/__4h.html),
+  [§ 8a KStG](https://www.gesetze-im-internet.de/kstg_1977/__8a.html)): interest expense – the balances of the
+  accounts `trade_tax` `interest`, with the interest carried forward – is deductible up to the interest income – the
+  balances of the accounts with the attribute `interest` `income` – and beyond it up to 30 % of the EBITDA: the income
+  before the barrier, losses and donations, with the net interest of the year and the depreciation of the register
+  of fixed assets (part 0011) added; then up to the EBITDA carried forward. What remains is not deductible and carried
+  forward as interest; EBITDA beyond the net interest is carried forward. It does not apply where the net interest
+  expense stays below 3 million euros or an exception of Abs. 2 applies, as stated. For trade tax only the interest
+  deductible counts as a charge of § 8 Nr. 1 a GewStG (BFH, 16 November 2023, III R 27/21). The five years of the
+  EBITDA carried forward, its loss with the business (Abs. 5) and the interest by its definition in Abs. 3 rather than
+  by the accounts are OPEN.
+- **Hidden profit distributions** add to the income, **hidden contributions** booked as income leave it
+  ([§ 8 Abs. 3 KStG](https://www.gesetze-im-internet.de/kstg_1977/__8.html)), as stated; trade tax follows (§ 7
+  GewStG).
+- **Tax groups** (Organschaft, [§§ 14](https://www.gesetze-im-internet.de/kstg_1977/__14.html) to 19 KStG): a
+  controlled company's income goes to the controlling one, which adds it to its own; the controlled company taxes 20/17
+  of the compensation paid to outside shareholders ([§ 16](https://www.gesetze-im-internet.de/kstg_1977/__16.html))
+  and uses no losses of before. For trade tax it is an establishment of the controlling one
+  ([§ 2 Abs. 2 Satz 2 GewStG](https://www.gesetze-im-internet.de/gewstg/__2.html)): its trade income is added there.
+  Whether the conditions of § 14 are met – the financial integration, the profit transfer agreement of five years –
+  whoever files states.
 
 ## The figures
 
@@ -116,7 +161,9 @@ The figures are the fields of two reports, named in the translation data under `
 `partnership_losses`, `donations_added`, `land`, `partnership_profits`, `donations`, `trade_income`,
 `loss_deduction`, `rounded`, `allowance`, `base`, `tax`; and for income tax, under `de-est/<field>`: `business`,
 `other_income`, `loss_deduction`, `deductions`, `taxable`, `tariff`, `trade_tax_credit`, `assessed`, `solidarity`,
-`church`, `advance_payment`. Fields without an amount are left out. They are the
+`church`, `advance_payment`, `child_allowances`, `child_benefit_added`, `single_parent_relief`, `capital_income`,
+`capital_tax`; de-kst also `net_interest`, `interest_not_deductible`, `interest_carried`, `ebitda_carried`,
+`hidden_distributions`, `hidden_contributions`, `group_income`. Fields without an amount are left out. They are the
 computation, not the forms (OPEN, below).
 
 ## What is given
@@ -130,6 +177,9 @@ computation, not the forms (OPEN, below).
 | turnover and wages | for the limit of 4 per mille of donations |
 | holding | at least 15 %, at least 10 %, below 10 % – one for all holdings |
 | cash basis | whether profit is determined by receipts and payments |
+| hidden distributions and contributions | § 8 Abs. 3 KStG |
+| tax group | controlled company with its compensation, or controlling one with the income and trade income attributed |
+| interest barrier | interest and EBITDA carried forward; whether an exception applies |
 
 ## The forms
 
@@ -149,8 +199,7 @@ states offer them only in ELSTER – and are OPEN.
 ## Open points
 
 - The size of each holding, rather than one for all; holdings in partnerships of corporations.
-- The interest barrier (§ 4h EStG, § 8a KStG), hidden profit distributions and contributions (§ 8 Abs. 3 KStG),
-  the minimum taxation of losses carried back (§ 10d Abs. 1 EStG), groups (Organschaft, §§ 14 ff. KStG).
+- Losses carried back (§ 10d Abs. 1 EStG); the losses of a tax group (§ 15 KStG) beyond those of before it.
 - Whether corporation tax is rounded to full euros; the trade tax of a year that is not the calendar year
   (§ 10 Abs. 2 GewStG).
 - The forms KSt 1 and GewSt 1 A and their fields; the forms of 2026; the extended reduction for land (§ 9 Nr. 1

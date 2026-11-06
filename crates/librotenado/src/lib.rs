@@ -86,6 +86,7 @@ mod booking;
 mod books;
 pub mod camt;
 mod canonical;
+mod capital;
 mod chart;
 mod clock;
 mod date;
@@ -116,6 +117,7 @@ pub use books::{
     BooksId, BooksProblem, Closing, ClosingProblem, Transaction, TransactionId, TransactionProblem, review_transactions,
 };
 pub use canonical::{CanonicalError, MAX_SAFE_INTEGER, canonicalize, to_canonical_vec};
+pub use capital::{CapitalAccount, CapitalAccounts, Liability, capital_account_fields};
 pub use chart::{Account, AccountKind, Chart, ChartError, ChartTranslation, TranslationError};
 pub use clock::{Clock, DeviceId, Hlc};
 pub use date::Date;
@@ -148,7 +150,9 @@ pub use party::{
     BankAccount, Configuration, Contact, Country, Invoicing, Organisation, PartyId, Person, RegimeCode, Region,
     Registration, Relation, RelationKind, ReturnPeriod, Role, RoleKind, Series, Shares, TaxId, VatBasis, VatScheme,
 };
-pub use profit_tax::{Holding, ProfitTax, ProfitTaxError, ProfitTaxFacts, TaxSubject, TradeTax, corporation_tax_rate};
+pub use profit_tax::{
+    GroupRole, Holding, ProfitTax, ProfitTaxError, ProfitTaxFacts, TaxSubject, TradeTax, corporation_tax_rate,
+};
 pub use report::{
     CustomerProblem, HgbSize, MappingStatus, ReportMapping, TaxRule, Terms, VatAccounts, VatSettlement, hgb_shortened,
 };
